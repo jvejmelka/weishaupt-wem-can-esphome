@@ -12,6 +12,7 @@
 #   Kessel (Knoten 2): Vorlauf-Soll, Volumenstrom, Druck                         alle 60 s
 #   WEM (Knoten 1):    Vorlauf Heizkreis, Vorlaufsoll-Anforderung                alle 60 s
 #   WEM (Knoten 1):    Heizkreis-Betriebsart, Raumsoll                           alle 5 min
+# Schalter AUS: nur die Heizkreis- (und Warmwasser-)Betriebsart, alle 15 min.
 # Die Statusbits (0x274D) werden nicht abgefragt - der WEM sendet sie bei jeder
 # Aenderung selbst (PDO 0x1C1).
 #
@@ -143,6 +144,17 @@ interval:
             - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: [0x40, 0x33, 0x29, 0x02, 0, 0, 0, 0] }  # Heizkreis-Betriebsart
             - delay: 150ms
             - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: [0x40, 0x58, 0x29, 0x02, 0, 0, 0, 0] }  # Raumsoll aktuell
+
+  # Schalter AUS: nur die Heizkreis-Betriebsart, alle 15 min. Sie liegt im WEM und kommt
+  # sonst nie ueber den Bus - ohne diese eine Anfrage bliebe eine Umstellung am Kesseldisplay
+  # oder im Portal unbemerkt. (Die Statusbits Standby/Zeitprogramm kommen ohnehin per PDO.)
+  - interval: 900s
+    then:
+      - if:
+          condition:
+            lambda: 'return !id(can_anfragen).state && millis() - id(letzter_frame) < 30000 && id(bus_seit) != 0 && millis() - id(bus_seit) > ${anlaufpause_min} * 60000UL;'
+          then:
+            - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: [0x40, 0x33, 0x29, 0x02, 0, 0, 0, 0] }  # Heizkreis-Betriebsart
 
 canbus:
   - platform: esp32_can
@@ -310,7 +322,7 @@ text_sensor:
     update_interval: 30s
     web_server: { sorting_group_id: g_diag, sorting_weight: 4 }
     lambda: |-
-      if (!id(can_anfragen).state) return {"aus - nur mithoeren (Schalter)"};
+      if (!id(can_anfragen).state) return {"aus - nur mithoeren, Betriebsarten alle 15 min"};
       if (id(bus_seit) == 0 || millis() - id(letzter_frame) >= 30000) return {"aus - Bus schweigt"};
       uint32_t pause = ${anlaufpause_min} * 60000UL, seit = millis() - id(bus_seit);
       if (seit <= pause) return {"Anlaufpause, noch " + to_string((pause - seit) / 60000 + 1) + " min nur mithoeren"};
@@ -424,10 +436,9 @@ switch:
       - lambda: |-
           for (auto *s : {id(wem_kessel), id(wem_abgas), id(wem_vorlauf), id(wem_leistung), id(wem_drehzahl),
                           id(wem_brenner), id(wem_vorlauf_soll), id(wem_volumenstrom), id(wem_druck),
-                          id(hk_vorlauf), id(wem_ww_vlsoll), id(hk_betriebsart_code), id(hk_raumsoll_akt)})
+                          id(hk_vorlauf), id(wem_ww_vlsoll), id(hk_raumsoll_akt)})
             s->publish_state(NAN);
           id(wem_brenner_text).publish_state("unbekannt");
-          id(hk_betriebsart).publish_state("unbekannt");
           id(brenner_vorher) = -1;
 
 number:

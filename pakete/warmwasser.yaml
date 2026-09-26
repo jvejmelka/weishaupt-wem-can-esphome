@@ -17,6 +17,16 @@ interval:
             - delay: 150ms
             - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: [0x40, 0x39, 0x2A, 0x02, 0, 0, 0, 0] }  # WW-Soll normal
 
+  # Schalter AUS: nur die Warmwasser-Betriebsart, alle 15 min (liegt im WEM)
+  - interval: 900s
+    then:
+      - if:
+          condition:
+            lambda: 'return !id(can_anfragen).state && millis() - id(letzter_frame) < 30000 && id(bus_seit) != 0 && millis() - id(bus_seit) > ${anlaufpause_min} * 60000UL;'
+          then:
+            - delay: 2s
+            - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: [0x40, 0x20, 0x2A, 0x02, 0, 0, 0, 0] }  # WW-Betriebsart
+
 canbus:
   - id: !extend my_can_bus
     on_frame:
@@ -52,8 +62,7 @@ switch:
   - id: !extend can_anfragen
     on_turn_off:
       - lambda: |-
-          for (auto *s : {id(ww_betriebsart_code), id(ww_soll_akt), id(ww_soll_normal)}) s->publish_state(NAN);
-          id(ww_betriebsart).publish_state("unbekannt");
+          for (auto *s : {id(ww_soll_akt), id(ww_soll_normal)}) s->publish_state(NAN);
 
 text_sensor:
   - platform: template

@@ -1,6 +1,9 @@
 # Changelog – ESP-CAN-Brücke Weishaupt (WeAct CAN485, ESPHome)
 
 
+## v16 – 2026-09-27
+- Auch bei ausgeschaltetem Schalter „Eigene CAN-Anfragen“ fragt das Board **Heizkreis- und Warmwasser-Betriebsart alle 15 min** ab (2 Anfragen je Viertelstunde an den WEM). Beide liegen im WEM und kämen sonst nie über den Bus – eine Umstellung am Kesseldisplay oder im Portal bliebe unbemerkt. Sie gehen beim Abschalten deshalb nicht mehr auf „unbekannt“.
+
 ## v15 – 2026-09-27
 - **Schalter „Eigene CAN-Anfragen“** (Einstellungen, bleibt über Neustarts erhalten). Startzustand in der Hauptdatei über `can_anfragen_start`, Vorgabe **aus** (nur mithören). Aus = nur mithören: ausgewertet wird, was ohnehin auf dem Bus liegt (PDOs des Kessels, Antworten auf Fragen des WEM). Schalten von Heizkreis-Betriebsart und Warmwasser bleibt auch dann erlaubt, samt der einen Kontroll-Leseanfrage; ebenso der Lesebefehl von Hand.
 - Beim Abschalten werden alle Werte, die nur durch eigene Abfragen aktuell blieben, auf „unbekannt“ gesetzt – kein veralteter Wert, der aktuell aussieht. Fragt der WEM einen davon selbst ab, kommt er über das Mithören zurück.
