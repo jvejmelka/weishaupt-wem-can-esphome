@@ -94,7 +94,8 @@ das WEM-Portal lässt für seinen Datenlogger höchstens alle 40 s je Wert abfra
 | Kessel: Vorlauf-Soll, Volumenstrom, Druck; WEM: Vorlauf Heizkreis, Vorlaufsoll-Anforderung | 60 s |
 | WEM: Raumsoll | 5 min |
 | WEM: Betriebsarten, Warmwasser-Sollwerte | nur bei Anlass: nach dem Start, bei geänderten Statusbits, nach Schaltbefehlen |
-| nach Board-Start oder Stromzyklus der Heizung | 10 min nur mithören |
+| nach Board-Start | 1 min nur mithören |
+| nach Stromzyklus der Heizung (Bus war weg) | 10 min nur mithören |
 
 Mit dem Schalter **„Eigene CAN-Anfragen“** (Einstellungen) lassen sich die eigenen Abfragen ganz
 abschalten; das Board hört dann nur mit. Die Betriebsarten werden weiterhin bei Anlass gelesen

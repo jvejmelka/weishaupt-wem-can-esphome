@@ -1,6 +1,9 @@
 # Changelog – ESP-CAN-Brücke Weishaupt (WeAct CAN485, ESPHome)
 
 
+## v19 – 2026-09-27
+- **Anlaufpause unterscheidet zwei Fälle:** nach einem Neustart des Boards (Flashen, Stromausfall am Board) 1 min – der Bus lief ja weiter; kommt der Bus dagegen nach einem Ausfall wieder (Heizung war stromlos, WEM fährt hoch), bleibt es bei 10 min (`anlaufpause_min`).
+
 ## v18 – 2026-09-27
 - **Betriebsarten werden nicht mehr periodisch gelesen**, sondern nur bei Anlass: einmal nach der Anlaufpause, wenn sich die Statusbits ändern (PDO 0x1C1 – etwa bei Umstellung am Display, in der Weishaupt-App oder im Portal) und nach eigenen Schaltbefehlen. Heizkreis-Betriebsart höchstens alle 2 min. Warmwasser-Betriebsart und -Sollwerte hängen sich an denselben Anlass und werden nach einem Warmwasser-Schaltbefehl nachgelesen.
 - Lücke, bewusst in Kauf genommen: ein Wechsel zwischen zwei Zeitprogrammen am Display ändert die Statusbits nicht und bleibt bis zum nächsten Anlass unbemerkt.
