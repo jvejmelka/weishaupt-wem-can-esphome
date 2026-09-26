@@ -7,9 +7,15 @@ das am CAN-Bus einer Weishaupt-Brennwertheizung mit **WEM-Systemgerät** (z. B. 
   Außentemperatur, Druck, Leistung, Brennerstatus mit Startzähler, Betriebsarten, Wärmemengen.
 - **Schalten über die JSON-Schnittstelle des WEM**, mit Kontrolle am Bus:
   Heizkreis-Betriebsart (Standby, Zeitprogramm 1–3, Sommer, Komfort, Normal, Absenk)
-  und Warmwasser Ein/Aus. Höchstens ein Befehl pro Minute.
-- **Weboberfläche** mit Passwort, Lesefeld für beliebige Objekte, Schreibfeld für Experten.
-- **MQTT** für Messwerte, Lese- und Scanbefehle.
+  und Warmwasser Ein/Aus – über Weboberfläche, Home Assistant oder MQTT.
+  Höchstens ein Befehl pro Minute; was in der Sperrminute kommt, wird vorgemerkt
+  (der neueste Wunsch gewinnt) und danach gesendet.
+- **Schaltprotokoll** der letzten zehn Befehle mit Quelle und Ergebnis am Bus.
+- **Lebenszeichen des WEM** alle sechs Stunden (± 30 min Zufall) und Zähler für
+  Fehler und CM=05-Ablehnungen – ein toter WEM fällt auf, bevor man schalten will.
+- **Weboberfläche** mit Passwort, Lesefeld für beliebige Objekte, Schreibfeld für Experten,
+  WLAN-Wechsel ohne neues Flashen.
+- **MQTT** für Messwerte, Lese-, Scan- und Schaltbefehle; wahlweise native Home-Assistant-API.
 
 ## Sicherheitsregeln – bitte lesen
 
@@ -33,6 +39,21 @@ H und L aus **demselben verdrillten Paar** nehmen. − und + bleiben frei.
 Busgeschwindigkeit 50 kbit/s. Am WEM muss die **JSON-Schnittstelle** eingeschaltet sein
 (Parameter 10.8.1, Fachmann-Ebene).
 
+## Pakete
+
+`weishaupt-wem-can.yaml` wählt nur aus; die Funktionen stehen in `pakete/`.
+Nicht benötigte Zeilen unter `packages:` auskommentieren.
+
+| Paket | Inhalt | Pflicht |
+|---|---|---|
+| `kessel.yaml` | Kesselwerte, Heizkreis-Zustand, Diagnose, Lesefeld, Bus-Wächter, WLAN-Wechsel | ja |
+| `warmwasser.yaml` | Warmwasserwerte (nur mit Speicher am WTC) | nein |
+| `mqtt.yaml` | MQTT-Broker, `cmd/lesen`, `cmd/scan`, `cmd/stop`, Rohmitschnitt | nein |
+| `homeassistant-api.yaml` | native ESPHome-API (verschlüsselt) | nein |
+| `wem-schalten.yaml` | Heizkreis schalten, Warteschlange, Lebenszeichen, Protokoll | nein |
+| `warmwasser-schalten.yaml` | Warmwasser Ein/Aus (braucht `wem-schalten` und `warmwasser`) | nein |
+| `feste-ip.yaml` | feste IP statt DHCP | nein |
+
 ## Einrichten
 
 ```
@@ -40,8 +61,32 @@ cp secrets.yaml.example secrets.yaml     # Werte eintragen
 esphome run weishaupt-wem-can.yaml       # erstes Mal per USB, danach per OTA
 ```
 
-Netz: DHCP und im Router eine feste Zuordnung für das Board. Kommt das WLAN nicht zustande,
-öffnet das Board einen Notfall-Hotspot.
+**Netz:** am besten DHCP und im Router eine feste Zuordnung (Reservierung) für das Board.
+Nur wenn das nicht geht, das Paket `feste-ip.yaml` einschalten. Findet OTA das Board nicht
+per mDNS: `esphome upload weishaupt-wem-can.yaml --device <IP>`.
+
+**WLAN wechseln** ohne Flashen: in der Weboberfläche unter *Einstellungen* Name und Passwort
+eintragen, dann *WLAN übernehmen*. Klappt die Verbindung binnen 30 s, wird gespeichert; sonst
+bleibt das bisherige WLAN. Letzter Rückweg ist der Notfall-Hotspot mit Captive Portal.
+
+## MQTT-Befehle
+
+| Topic | Inhalt | Wirkung |
+|---|---|---|
+| `<gerät>/cmd/heizkreis` | `1`–`8` oder Name, z. B. `Zeitprogramm 1` | Heizkreis-Betriebsart (Warteschlange) |
+| `<gerät>/cmd/warmwasser` | `Ein` / `Aus` | Warmwasser (Warteschlange) |
+| `<gerät>/cmd/lesen` | `01 2933 02` (Knoten Index Sub, hex) | ein Objekt lesen |
+| `<gerät>/cmd/scan` | `01 2A00 2AFF 3` | Bereich lesen, Antworten in `<gerät>/canraw` |
+| `<gerät>/cmd/stop` | beliebig | Scan abbrechen |
+| `<gerät>/schaltprotokoll` | (retained, vom Board) | letzte zehn Befehle, einer je Zeile |
+
+Codes Heizkreis: 1 Standby, 2–4 Zeitprogramm 1–3, 5 Sommer, 6 Komfort, 7 Normal, 8 Absenk.
+
+## Überwachung
+
+Der Sensor **„Letzter CAN-Frame vor"** (Sekunden) eignet sich für eine Warnung: bleibt er
+länger als 300 s darüber, schweigt der Bus (Heizung aus, Kabel ab, Controller im Bus-off).
+Der Bus-Wächter startet das Board nach einstellbarer Zeit ohne Frame selbst neu.
 
 ## Zuordnung JSON-Objekt → CAN-Objekt (gemessen)
 
@@ -55,11 +100,29 @@ Netz: DHCP und im Router eine feste Zuordnung für das Board. Kommt das WLAN nic
 Beispiele: Heizkreis-Betriebsart JSON `02 00 2533 02` = CAN Knoten 1 `0x2933/2`;
 Warmwasser-Betriebsart JSON `03 00 2520 02` (1 = Ein, 2 = Aus) = CAN Knoten 1 `0x2A20/2`.
 
-## Geplant
+## Quellen – was bei der Entwicklung geholfen hat
 
-- Pakete: MQTT, WEM-Schalten und Warmwasser wahlweise abschaltbar
-- WLAN-Zugangsdaten im Web änderbar, Warteschlange für Befehle, Schalten per MQTT
-- Lebenszeichen des WEM alle sechs Stunden, Schaltprotokoll der letzten zehn Befehle
+- [MenkeC/Weishaupt-C3supermini](https://github.com/MenkeC/Weishaupt-C3supermini) – ESPHome am
+  Weishaupt-CAN-Bus (ESP32-C3 + SN65HVD230), Ausgangspunkt dieser Firmware: 50 kbit/s,
+  Kessel = CANopen-Knoten 2, SDO `0x602`/`0x582`, PDOs `0x201`/`0x241`.
+- [geronet1/wem-python](https://github.com/geronet1/wem-python) – Python-Zugriff auf den WEM
+  per CAN; Objektbedeutungen (u. a. Systembetriebsart `0x28BE`). In
+  [Issue #2](https://github.com/geronet1/wem-python/issues/2) entstand der Hinweis auf den ESP-Weg.
+- [BorgNumberOne/Weishaupt_CanApiJson](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) –
+  Registertabelle der WEM-JSON-Schnittstelle (`/ajax/CanApiJson.json`) mit MI/MX/OX/OS,
+  Faktoren und Aktualisierungsklassen (Datenpunktliste des Weishaupt-Gateways WEM-Modbus).
+- [kraiz/hassio-weishaupt](https://github.com/kraiz/hassio-weishaupt) – Home-Assistant-Integration
+  über die JSON-Schnittstelle. Die Issues erklären, warum der WEM so vorsichtig behandelt werden muss:
+  - [#15](https://github.com/kraiz/hassio-weishaupt/issues/15) – zehn Anfragen an nicht vorhandene
+    Objekte (CM=05) sperren die Schnittstelle bis zum Stromlos-Machen
+  - [#13](https://github.com/kraiz/hassio-weishaupt/issues/13) – lokale JSON-Schnittstelle erst
+    nutzbar, wenn das WEM-Portal aus ist
+  - [#9](https://github.com/kraiz/hassio-weishaupt/issues/9) – zwei Clients gleichzeitig führen zur Sperre
+- ESPHome-Dokumentation: [CAN-Bus / esp32_can](https://esphome.io/components/canbus/esp32/),
+  [Pakete](https://esphome.io/components/packages/),
+  [WLAN inkl. `wifi.configure`](https://esphome.io/components/wifi/),
+  [HTTP Request](https://esphome.io/components/http_request/),
+  [MQTT](https://esphome.io/components/mqtt/), [Web Server](https://esphome.io/components/web_server/).
 
 ## Herkunft
 

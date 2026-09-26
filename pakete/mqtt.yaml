@@ -1,0 +1,94 @@
+# Paket MQTT: alle Werte unter ${geraet}/..., dazu Befehle (nur LESEN auf dem Bus):
+#   ${geraet}/cmd/lesen  "KNOTEN INDEX SUB"          hex, z.B. "01 2933 02" -> Antwort in "Lesebefehl Antwort"
+#   ${geraet}/cmd/scan   "KNOTEN START ENDE MAXSUB"  hex, z.B. "01 2A00 2AFF 3" -> Antworten in ${geraet}/canraw
+#   ${geraet}/cmd/stop   (beliebig)                   bricht den Scan ab
+# Schaltbefehle (cmd/heizkreis, cmd/warmwasser) kommen aus den Schalten-Paketen.
+# Die Befehle koennen nur LESEN: das Kommandobyte ist fest 0x40 (SDO-Upload).
+
+mqtt:
+  broker: !secret mqtt_broker
+  port: 1883                 # unverschluesselt, nur im LAN
+  username: !secret mqtt_user
+  password: !secret mqtt_password
+  on_message:
+    - topic: ${geraet}/cmd/lesen
+      then:
+        - lambda: |-
+            unsigned kn = 0, idx = 0, sub = 0;
+            if (sscanf(x.c_str(), "%x %x %x", &kn, &idx, &sub) != 3 || kn < 1 || kn > 127 || idx > 0xFFFF || sub > 0xFF) {
+              id(lese_antwort).publish_state("ungueltig - Format: 01 2933 02"); return;
+            }
+            if (millis() - id(letzter_frame) > 30000) { id(lese_antwort).publish_state("Bus tot - nicht gesendet"); return; }
+            id(cmd_kn) = kn; id(cmd_idx) = idx; id(cmd_sub) = sub; id(cmd_aktiv) = true;
+            id(lese_antwort).publish_state("gesendet, warte ...");
+            std::vector<uint8_t> d = {0x40, (uint8_t)(idx & 0xFF), (uint8_t)(idx >> 8), (uint8_t)sub, 0, 0, 0, 0};
+            id(my_can_bus)->send_data(0x600 + kn, false, d);
+    - topic: ${geraet}/cmd/scan
+      then:
+        - lambda: |-
+            unsigned kn = 0, a = 0, e = 0, ms = 0;
+            if (sscanf(x.c_str(), "%x %x %x %x", &kn, &a, &e, &ms) != 4 || kn < 1 || kn > 127 || a > e || e > 0xFFFF || ms > 10) {
+              ESP_LOGW("scan", "ungueltig '%s'", x.c_str()); return;
+            }
+            id(scan_knoten) = kn; id(scan_idx) = a; id(scan_ende) = e; id(scan_maxsub) = ms; id(scan_sub) = 0; id(scan_aktiv) = true;
+            ESP_LOGI("scan", "Objektscan Knoten %02X %04X-%04X Sub 0-%u", kn, a, e, ms);
+    - topic: ${geraet}/cmd/stop
+      then:
+        - lambda: 'id(scan_aktiv) = false; ESP_LOGI("scan", "Objektscan abgebrochen");'
+
+globals:
+  - id: scan_aktiv
+    type: bool
+    initial_value: 'false'
+  - id: scan_knoten
+    type: int
+    initial_value: '1'
+  - id: scan_idx
+    type: int
+    initial_value: '0'
+  - id: scan_ende
+    type: int
+    initial_value: '0'
+  - id: scan_sub
+    type: int
+    initial_value: '0'
+  - id: scan_maxsub
+    type: int
+    initial_value: '0'
+
+interval:
+  # Objektscan: eine Leseanfrage alle 25 ms, nur bei lebendem Bus
+  - interval: 25ms
+    then:
+      - lambda: |-
+          if (!id(scan_aktiv) || millis() - id(letzter_frame) > 30000) return;
+          int idx = id(scan_idx), sub = id(scan_sub);
+          std::vector<uint8_t> d = {0x40, (uint8_t)(idx & 0xFF), (uint8_t)(idx >> 8), (uint8_t)sub, 0, 0, 0, 0};
+          id(my_can_bus)->send_data(0x600 + id(scan_knoten), false, d);
+          if (++sub > id(scan_maxsub)) { sub = 0; idx++; }
+          if (idx > id(scan_ende)) { id(scan_aktiv) = false; ESP_LOGI("scan", "Objektscan fertig"); }
+          id(scan_idx) = idx; id(scan_sub) = sub;
+
+switch:
+  # Rohmitschnitt: jeder Frame als "ID:DATEN" nach ${geraet}/canraw (~10 Frames/s).
+  # Waehrend eines Scans wird immer mitgeschnitten.
+  - platform: template
+    name: "CAN-Rohmitschnitt nach MQTT"
+    id: canraw_an
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    web_server: { sorting_group_id: g_einst, sorting_weight: 30 }
+
+canbus:
+  - id: !extend my_can_bus
+    on_frame:
+      - can_id: 0x000
+        can_id_mask: 0x000
+        then:
+          - lambda: |-
+              if (!id(canraw_an).state && !id(scan_aktiv)) return;
+              char buf[48];
+              int n = snprintf(buf, sizeof(buf), "%03X:", (unsigned) can_id);
+              for (size_t i = 0; i < x.size() && n < (int) sizeof(buf) - 3; i++)
+                n += snprintf(buf + n, sizeof(buf) - n, "%02X", x[i]);
+              mqtt::global_mqtt_client->publish("${geraet}/canraw", buf);

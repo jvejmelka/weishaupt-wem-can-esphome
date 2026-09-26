@@ -1,0 +1,94 @@
+# Paket WARMWASSER: Werte des Warmwasser-Moduls (WW0 im Systemgeraet, Knoten 1)
+# und der Warmwasserbetrieb des Kessels. Nur lesen. Braucht das Paket kessel.
+#   JSON MI03 entspricht auf dem Bus Knoten 1, Index JSON-OX + 0x500.
+
+interval:
+  - interval: 60s
+    then:
+      - if:
+          condition:
+            lambda: 'return millis() - id(letzter_frame) < 30000;'
+          then:
+            - delay: 1s     # nicht gleichzeitig mit den Heizkreis-Abfragen
+            - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: [0x40, 0x20, 0x2A, 0x02, 0, 0, 0, 0] }  # WW-Betriebsart
+            - delay: 150ms
+            - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: [0x40, 0x2C, 0x2A, 0x02, 0, 0, 0, 0] }  # WW-Soll aktuell
+            - delay: 150ms
+            - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: [0x40, 0x39, 0x2A, 0x02, 0, 0, 0, 0] }  # WW-Soll normal
+
+canbus:
+  - id: !extend my_can_bus
+    on_frame:
+      # PDO 0x241, Bytes 6-7: Warmwassertemperatur
+      - can_id: 0x241
+        then:
+          - lambda: 'id(wem_warmwasser).publish_state((int16_t(x[7] << 8 | x[6])) * 0.1f);'
+      # PDO 0x182: Kesselstatus 15 = Warmwasserbetrieb
+      - can_id: 0x182
+        then:
+          - lambda: |-
+              bool an = x[0] == 15;
+              id(wem_ww_aktiv).publish_state(an ? "Ein" : "Aus");
+              id(wem_ww_aktiv_num).publish_state(an ? 1.0f : 0.0f);
+      - can_id: 0x581
+        then:
+          - lambda: |-
+              if ((x[0] & 0xF0) != 0x40 || x[3] != 2) return;
+              uint16_t idx = (x[2] << 8) | x[1];
+              if (idx == 0x2A20) {
+                // Warmwasser-Betriebsart (JSON MI03 0x2520/02): 1 = Ein, 2 = Aus
+                uint8_t b = x[4];
+                id(ww_betriebsart_code).publish_state((float) b);
+                id(ww_betriebsart).publish_state(b == 1 ? "Ein" : (b == 2 ? "Aus" : "unbekannt"));
+              } else if (idx == 0x2A2C || idx == 0x2A39) {
+                int16_t v = (int16_t)((x[5] << 8) | x[4]);
+                if (v == (int16_t) 0x8000) return;
+                if (idx == 0x2A2C) id(ww_soll_akt).publish_state(v * 0.1f);
+                else id(ww_soll_normal).publish_state(v * 0.1f);
+              }
+
+text_sensor:
+  - platform: template
+    name: "Warmwasser Betriebsart"
+    id: ww_betriebsart
+    web_server: { sorting_group_id: g_betrieb, sorting_weight: 6 }
+  - platform: template
+    name: "Warmwasser aktiv"          # Ein = Kessel ist im Warmwasserbetrieb
+    id: wem_ww_aktiv
+    web_server: { sorting_group_id: g_betrieb, sorting_weight: 7 }
+
+sensor:
+  - platform: template
+    name: "Warmwasser"
+    id: wem_warmwasser
+    unit_of_measurement: "°C"
+    device_class: temperature
+    accuracy_decimals: 1
+    update_interval: never
+    web_server: { sorting_group_id: g_betrieb, sorting_weight: 8 }
+  - platform: template
+    name: "Warmwasser Soll aktuell"
+    id: ww_soll_akt
+    unit_of_measurement: "°C"
+    device_class: temperature
+    accuracy_decimals: 1
+    update_interval: never
+    web_server: { sorting_group_id: g_betrieb, sorting_weight: 9 }
+  - platform: template
+    name: "Warmwasser Soll normal"
+    id: ww_soll_normal
+    unit_of_measurement: "°C"
+    device_class: temperature
+    accuracy_decimals: 1
+    update_interval: never
+    web_server: { sorting_group_id: g_betrieb, sorting_weight: 10 }
+  - platform: template
+    name: "Warmwasser aktiv Zahl"
+    id: wem_ww_aktiv_num
+    update_interval: never
+    web_server: { sorting_group_id: g_codes, sorting_weight: 5 }
+  - platform: template
+    name: "Warmwasser Betriebsart Code"
+    id: ww_betriebsart_code
+    update_interval: never
+    web_server: { sorting_group_id: g_codes, sorting_weight: 7 }

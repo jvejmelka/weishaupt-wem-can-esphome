@@ -1,0 +1,5 @@
+# Paket HOME-ASSISTANT-API: native ESPHome-API (verschluesselt).
+# Schluessel erzeugen: https://esphome.io/components/api  (32 Byte, base64) -> secrets.yaml
+api:
+  encryption:
+    key: !secret api_key

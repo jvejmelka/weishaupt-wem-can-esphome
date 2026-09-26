@@ -1,0 +1,51 @@
+# Paket WARMWASSER-SCHALTEN: Warmwasser Ein/Aus ueber den WEM.
+# Braucht die Pakete wem-schalten und warmwasser.
+#   JSON MI03 / MX00 / OX 0x2520 / OS02: 1 = Ein, 2 = Aus (Bus: Knoten 1, 0x2A20/2)
+#   MQTT: ${geraet}/cmd/warmwasser  "Ein" | "Aus" | "1" | "2"
+
+esphome:
+  on_boot:
+    priority: -100
+    then:
+      - lambda: |-
+          #ifdef USE_MQTT
+          mqtt::global_mqtt_client->subscribe("${geraet}/cmd/warmwasser", [](const std::string &t, const std::string &p) {
+            int w = (p == "Ein" || p == "ein" || p == "1" || p == "ON" || p == "on") ? 1 :
+                    (p == "Aus" || p == "aus" || p == "2" || p == "OFF" || p == "off") ? 2 : 0;
+            if (w == 0) { id(schalt_status).publish_state("MQTT: Warmwasser nur 'Ein' oder 'Aus', nicht '" + p + "'"); return; }
+            id(wunsch_ww) = w; id(wunsch_ww_quelle) = "MQTT";
+            id(schalt_status).publish_state(std::string("vorgemerkt (MQTT): Warmwasser ") + (w == 1 ? "Ein" : "Aus"));
+          });
+          #endif
+
+canbus:
+  - id: !extend my_can_bus
+    on_frame:
+      - can_id: 0x581
+        then:
+          - lambda: |-
+              if ((x[0] & 0xF0) != 0x40 || x[3] != 2 || ((x[2] << 8) | x[1]) != 0x2A20) return;
+              uint8_t b = x[4];
+              if (b == 1 || b == 2) id(ww_setzen).publish_state(b == 1 ? "Ein" : "Aus");
+              if (id(schalt_ziel) != 2 || !id(pruefen)) return;
+              std::string zeit = id(uhr).now().is_valid() ? id(uhr).now().strftime("%H:%M:%S ") : std::string("");
+              bool ok = b == id(schalt_wert);
+              std::string ist = b == 1 ? "Ein" : (b == 2 ? "Aus" : "?");
+              id(schalt_status).publish_state(zeit + (ok ? "OK: Warmwasser " + ist : "NICHT uebernommen, Warmwasser " + ist));
+              id(protokoll_eintrag)->execute(std::string("Warmwasser -> ") + (id(schalt_wert) == 1 ? "Ein" : "Aus") + " (" + id(schalt_quelle) + "): " + (ok ? "ok" : "NICHT uebernommen, steht auf " + ist));
+              id(schalt_ziel) = 0; id(pruefen) = false;
+
+select:
+  - platform: template
+    name: "Warmwasser setzen"
+    id: ww_setzen
+    options: ["Ein", "Aus"]
+    optimistic: false
+    web_server: { sorting_group_id: g_schalten, sorting_weight: 2 }
+    set_action:
+      - lambda: |-
+          id(wunsch_ww) = (x == "Ein") ? 1 : 2; id(wunsch_ww_quelle) = "Web/HA";
+          uint32_t seit = millis() - id(letzter_befehl);
+          if (id(wem_senden).is_running() || id(wunsch_hk) || (id(letzter_befehl) != 0 && seit < 60000))
+            id(schalt_status).publish_state("vorgemerkt: Warmwasser " + x + " (hoechstens ein Befehl pro Minute)");
+      - script.execute: befehl_pruefen

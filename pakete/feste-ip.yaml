@@ -1,0 +1,10 @@
+# Paket FESTE IP: nur wenn keine Router-Reservierung moeglich ist.
+# Empfohlen ist DHCP mit fester Zuordnung im Router - dann bleibt das Board
+# auch nach einem Netzumbau erreichbar. Werte in secrets.yaml.
+wifi:
+  manual_ip:
+    static_ip: !secret feste_ip
+    gateway: !secret feste_ip_gateway
+    subnet: !secret feste_ip_netzmaske
+    dns1: !secret feste_ip_dns
+  use_address: !secret feste_ip

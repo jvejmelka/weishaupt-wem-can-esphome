@@ -1,0 +1,430 @@
+# Paket WEM-SCHALTEN: Heizkreis-Betriebsart ueber die WEM-JSON-Schnittstelle
+# (http://<WEM>/ajax/CanApiJson.json), Kontrolle danach am CAN-Bus.
+# Braucht das Paket kessel. Geschrieben wird NIE auf den Bus, nur ueber den WEM.
+#
+# Warum so vorsichtig: die JSON-Schnittstelle des WEM ist empfindlich. Regelmaessiges
+# Abfragen hat sie mehrfach dauerhaft lahmgelegt (nur Stromlos-Machen half), und jede
+# Anfrage an ein Objekt, das die Anlage nicht hat (Antwort CM=05), verbraucht einen von
+# nur zehn Plaetzen bis zum naechsten Neustart der Heizung. Deshalb:
+#   - hoechstens ein Befehl pro Minute (Warteschlange: der NEUESTE Wunsch je Ziel gewinnt)
+#   - geschrieben wird nur MI 01/02/03 (Systemgeraet), nie der Kessel
+#   - ein Lebenszeichen alle ${wem_lebenszeichen_stunden} h (+/- 30 min Zufall), 0 = aus
+#   - jede CM=05-Antwort wird gezaehlt und gemeldet
+#
+# Schalten per MQTT (braucht Paket mqtt):
+#   ${geraet}/cmd/heizkreis   "1".."8" oder der Name, z.B. "Zeitprogramm 1", "Standby"
+#   ${geraet}/schaltprotokoll (retained) die letzten 10 Befehle, einer je Zeile
+
+substitutions:
+  wem_lebenszeichen_stunden: "6"
+
+web_server:
+  sorting_groups:
+    - id: g_schalten
+      name: "Schalten (ueber WEM, Kontrolle am Bus)"
+      sorting_weight: 5
+    - id: g_schreiben
+      name: "Schreibbefehl ueber WEM (Experten)"
+      sorting_weight: 45
+
+http_request:
+  timeout: 10s
+  verify_ssl: false
+
+globals:
+  - id: letzter_befehl          # millis() des letzten WEM-Aufrufs (Sperrminute)
+    type: uint32_t
+    initial_value: '0'
+  - id: schalt_ziel             # laufender Aufruf: 0 keiner, 1 Heizkreis, 2 Warmwasser, 3 Schreibbefehl, 4 Lebenszeichen
+    type: int
+    initial_value: '0'
+  - id: schalt_wert
+    type: int
+    initial_value: '0'
+  - id: schalt_quelle
+    type: std::string
+  - id: schalt_vg
+    type: std::string
+  - id: senden
+    type: bool
+    initial_value: 'false'
+  - id: pruefen                 # true, sobald die Kontroll-Leseanfrage am Bus raus ist
+    type: bool
+    initial_value: 'false'
+  - id: wunsch_hk               # Warteschlange: 0 = nichts vorgemerkt
+    type: int
+    initial_value: '0'
+  - id: wunsch_hk_quelle
+    type: std::string
+  - id: wunsch_ww
+    type: int
+    initial_value: '0'
+  - id: wunsch_ww_quelle
+    type: std::string
+  - id: wem_fehler
+    type: int
+    restore_value: yes
+    initial_value: '0'
+  - id: wem_cm05
+    type: int
+    restore_value: yes
+    initial_value: '0'
+  - id: protokoll
+    type: std::vector<std::string>
+  - id: lz_faellig
+    type: uint32_t
+    initial_value: '0'
+  - id: lz_jetzt
+    type: bool
+    initial_value: 'false'
+
+esphome:
+  on_boot:
+    priority: -100
+    then:
+      - lambda: |-
+          #ifdef USE_MQTT
+          mqtt::global_mqtt_client->subscribe("${geraet}/cmd/heizkreis", [](const std::string &t, const std::string &p) {
+            const auto &opts = id(hk_setzen).traits.get_options();
+            int code = atoi(p.c_str());
+            if (code < 1 || code > 8) {
+              code = 0;
+              for (size_t i = 0; i < opts.size(); i++) if (p == opts[i]) code = i + 1;
+            }
+            if (code == 0) { id(schalt_status).publish_state("MQTT: unbekannte Heizkreis-Betriebsart '" + p + "'"); return; }
+            id(wunsch_hk) = code; id(wunsch_hk_quelle) = "MQTT";
+            id(schalt_status).publish_state(std::string("vorgemerkt (MQTT): Heizkreis ") + opts[code - 1]);
+          });
+          #endif
+
+script:
+  # Eintrag ins Schaltprotokoll (neueste zuerst, 10 Eintraege, seit dem letzten Neustart)
+  - id: protokoll_eintrag
+    mode: queued
+    parameters:
+      text: string
+    then:
+      - lambda: |-
+          std::string z = id(uhr).now().is_valid() ? id(uhr).now().strftime("%d.%m. %H:%M ") : std::string("");
+          auto &p = id(protokoll);
+          p.insert(p.begin(), z + text);
+          if (p.size() > 10) p.resize(10);
+          std::string kurz, lang;
+          for (auto &e : p) {
+            if (kurz.size() + e.size() + 3 <= 250) { if (!kurz.empty()) kurz += " | "; kurz += e; }
+            if (!lang.empty()) lang += "\n";
+            lang += e;
+          }
+          id(schalt_protokoll).publish_state(kurz);
+          #ifdef USE_MQTT
+          mqtt::global_mqtt_client->publish("${geraet}/schaltprotokoll", lang, 0, true);
+          #endif
+
+  # Warteschlange abarbeiten: laeuft jede Sekunde, sendet hoechstens einen Befehl pro Minute
+  - id: befehl_pruefen
+    mode: single
+    then:
+      - lambda: |-
+          id(senden) = false;
+          if (id(wem_senden).is_running()) return;
+          if (id(letzter_befehl) != 0 && millis() - id(letzter_befehl) < 60000) return;
+          int ziel = 0, wert = 0; std::string q;
+          if (id(wunsch_hk)) { ziel = 1; wert = id(wunsch_hk); q = id(wunsch_hk_quelle); id(wunsch_hk) = 0; }
+          else if (id(wunsch_ww)) { ziel = 2; wert = id(wunsch_ww); q = id(wunsch_ww_quelle); id(wunsch_ww) = 0; }
+          else return;
+          char b[24];
+          if (ziel == 1) snprintf(b, sizeof(b), "0302002533020001%02X", wert);   // MI02 HZK0 Betriebsart
+          else           snprintf(b, sizeof(b), "0303002520020001%02X", wert);   // MI03 WW0 Betriebsart
+          id(schalt_ziel) = ziel; id(schalt_wert) = wert; id(schalt_quelle) = q; id(schalt_vg) = b;
+          id(letzter_befehl) = millis() | 1;
+          id(senden) = true;
+      - if:
+          condition:
+            lambda: 'return id(senden);'
+          then:
+            - script.execute:
+                id: wem_senden
+                vg: !lambda 'return id(schalt_vg);'
+
+  - id: wem_senden
+    mode: single
+    parameters:
+      vg: string
+    then:
+      - lambda: |-
+          id(pruefen) = false;
+          if (id(schalt_ziel) == 1 || id(schalt_ziel) == 2) id(schalt_status).publish_state("sende an WEM ...");
+      - http_request.post:
+          url: !lambda 'return "http://" + id(wem_ip).state + "/ajax/CanApiJson.json";'
+          request_headers:
+            Authorization: !lambda |-
+              static std::string h;
+              std::string up = id(wem_user).state + ":" + id(wem_pass).state;
+              h = "Basic " + esphome::base64_encode((const uint8_t *) up.data(), up.size());
+              return h.c_str();
+            Referer: !lambda |-
+              static std::string r;
+              r = "http://" + id(wem_ip).state + "/";
+              return r.c_str();
+            Content-Type: "application/json"
+          body: !lambda |-
+            return std::string("{\"ID\":\"") + to_string(millis() % 100000000) +
+                   "\",\"SRC\":\"DDC\",\"CAPI\":{\"NN\":1,\"N01\":{\"VG\":\"" + vg + "\"}}}";
+          capture_response: true
+          max_response_buffer_size: 512
+          on_response:
+            then:
+              - lambda: |-
+                  size_t p = body.find("\"VG\":\"");
+                  std::string rvg = p == std::string::npos ? std::string("") : body.substr(p + 6, body.find('"', p + 6) - p - 6);
+                  std::string cm = rvg.size() >= 2 ? rvg.substr(0, 2) : std::string("--");
+                  bool ok = response->status_code == 200 && (cm == "04" || cm == "02");
+                  if (cm == "05") { id(wem_cm05) += 1; id(wem_cm05_sensor).publish_state(id(wem_cm05)); }
+                  if (!ok) { id(wem_fehler) += 1; id(wem_fehler_sensor).publish_state(id(wem_fehler)); }
+                  std::string zeit = id(uhr).now().is_valid() ? id(uhr).now().strftime("%H:%M ") : std::string("");
+                  int ziel = id(schalt_ziel);
+                  if (ziel == 3) {
+                    std::string t = cm == "04" ? "OK, WEM bestaetigt (VG " + rvg + ")" :
+                                    cm == "05" ? "abgelehnt (CM=05): Objekt unbekannt oder nicht schreibbar - VG " + rvg :
+                                    "unklare Antwort, HTTP " + to_string(response->status_code) + (rvg.empty() ? "" : ", VG " + rvg);
+                    id(schreib_antwort).publish_state(t);
+                    id(protokoll_eintrag)->execute("Schreibbefehl " + id(schalt_vg) + ": " + t);
+                    id(schalt_ziel) = 0;
+                  } else if (ziel == 4) {
+                    std::string t;
+                    if (cm == "02" && rvg.size() >= 2) {
+                      int w = strtol(rvg.substr(rvg.size() - 2).c_str(), nullptr, 16);
+                      float bus = id(hk_betriebsart_code).state;
+                      t = zeit + "OK - WEM meldet Heizkreis-Betriebsart " + to_string(w) +
+                          (isnan(bus) ? std::string("") : (w == (int) bus ? ", Bus stimmt ueberein" : ", Bus meldet " + to_string((int) bus)));
+                    } else if (cm == "05") {
+                      t = zeit + "CM=05 - der WEM lehnt ab (Uebersetzer gesperrt? Heizung stromlos machen)";
+                    } else {
+                      t = zeit + "keine gueltige Antwort (HTTP " + to_string(response->status_code) + ")";
+                    }
+                    id(lz_status).publish_state(t);
+                    if (!ok) id(protokoll_eintrag)->execute("Lebenszeichen WEM: " + t);
+                    id(schalt_ziel) = 0;
+                  } else if (ziel == 1 || ziel == 2) {
+                    if (cm == "05") {
+                      id(schalt_status).publish_state(zeit + "abgelehnt (CM=05) - VG " + rvg);
+                      id(protokoll_eintrag)->execute(std::string(ziel == 1 ? "Heizkreis" : "Warmwasser") + " (" + id(schalt_quelle) + "): abgelehnt, CM=05");
+                      id(schalt_ziel) = 0;
+                    } else {
+                      id(schalt_status).publish_state(ok ? "WEM hat bestaetigt, pruefe am Bus ..." :
+                                                           "WEM-Antwort unklar (HTTP " + to_string(response->status_code) + "), pruefe am Bus ...");
+                    }
+                  }
+          on_error:
+            then:
+              - lambda: |-
+                  id(wem_fehler) += 1; id(wem_fehler_sensor).publish_state(id(wem_fehler));
+                  std::string zeit = id(uhr).now().is_valid() ? id(uhr).now().strftime("%H:%M ") : std::string("");
+                  int ziel = id(schalt_ziel);
+                  if (ziel == 3) {
+                    id(schreib_antwort).publish_state("WEM nicht erreichbar");
+                    id(protokoll_eintrag)->execute("Schreibbefehl " + id(schalt_vg) + ": WEM nicht erreichbar");
+                    id(schalt_ziel) = 0;
+                  } else if (ziel == 4) {
+                    id(lz_status).publish_state(zeit + "WEM nicht erreichbar");
+                    id(protokoll_eintrag)->execute(std::string("Lebenszeichen WEM: nicht erreichbar"));
+                    id(schalt_ziel) = 0;
+                  } else if (ziel == 1 || ziel == 2) {
+                    id(schalt_status).publish_state("WEM nicht erreichbar, pruefe trotzdem am Bus ...");
+                  }
+      # Der Bus entscheidet, nicht die WEM-Antwort (auch nach einer leeren Antwort
+      # wurde schon geschaltet). Nach 3 s das Zielobjekt am Bus lesen.
+      - delay: 3s
+      - lambda: |-
+          if (id(schalt_ziel) != 1 && id(schalt_ziel) != 2) return;
+          uint16_t idx = id(schalt_ziel) == 1 ? 0x2933 : 0x2A20;
+          id(pruefen) = true;
+          std::vector<uint8_t> d = {0x40, (uint8_t)(idx & 0xFF), (uint8_t)(idx >> 8), 0x02, 0, 0, 0, 0};
+          id(my_can_bus)->send_data(0x601, false, d);
+      - delay: 10s
+      - lambda: |-
+          if (id(schalt_ziel) != 1 && id(schalt_ziel) != 2) return;
+          id(schalt_status).publish_state("keine Rueckmeldung vom Bus - Ergebnis unbekannt");
+          id(protokoll_eintrag)->execute(std::string(id(schalt_ziel) == 1 ? "Heizkreis" : "Warmwasser") + " (" + id(schalt_quelle) + "): keine Rueckmeldung vom Bus");
+          id(schalt_ziel) = 0; id(pruefen) = false;
+
+interval:
+  - interval: 1s
+    then:
+      - script.execute: befehl_pruefen
+  # Lebenszeichen: eine harmlose Leseanfrage (Heizkreis-Betriebsart, am WEM belegt)
+  # alle N Stunden +/- 30 min Zufall - nie in einem festen Raster.
+  - interval: 60s
+    then:
+      - lambda: |-
+          id(lz_jetzt) = false;
+          const uint32_t std_ms = ${wem_lebenszeichen_stunden} * 3600000UL;
+          if (std_ms == 0) return;
+          uint32_t jetzt = millis();
+          uint32_t abstand = std_ms - 1800000UL + (random_uint32() % 3600000UL);
+          if (id(lz_faellig) == 0) { id(lz_faellig) = (jetzt + abstand) | 1; return; }
+          if ((int32_t)(jetzt - id(lz_faellig)) < 0) return;
+          if (id(wem_senden).is_running() || id(wunsch_hk) || id(wunsch_ww)) return;
+          if (id(letzter_befehl) != 0 && jetzt - id(letzter_befehl) < 60000) return;
+          id(lz_faellig) = (jetzt + abstand) | 1;
+          id(schalt_ziel) = 4; id(letzter_befehl) = jetzt | 1;
+          id(lz_jetzt) = true;
+      - if:
+          condition:
+            lambda: 'return id(lz_jetzt);'
+          then:
+            - script.execute:
+                id: wem_senden
+                vg: "010200253302000100"
+
+canbus:
+  - id: !extend my_can_bus
+    on_frame:
+      - can_id: 0x581
+        then:
+          - lambda: |-
+              if ((x[0] & 0xF0) != 0x40 || x[3] != 2 || ((x[2] << 8) | x[1]) != 0x2933) return;
+              uint8_t b = x[4];
+              static const char* n[] = {"?", "Standby", "Zeitprogramm 1", "Zeitprogramm 2", "Zeitprogramm 3", "Sommer", "Komfort", "Normal", "Absenk"};
+              if (b >= 1 && b <= 8) id(hk_setzen).publish_state(n[b]);
+              if (id(schalt_ziel) != 1 || !id(pruefen)) return;
+              std::string zeit = id(uhr).now().is_valid() ? id(uhr).now().strftime("%H:%M:%S ") : std::string("");
+              bool ok = b == id(schalt_wert);
+              std::string ist = b <= 8 ? n[b] : "?";
+              id(schalt_status).publish_state(zeit + (ok ? "OK: Heizkreis steht auf " + ist : "NICHT uebernommen, Heizkreis steht auf " + ist));
+              id(protokoll_eintrag)->execute("Heizkreis -> " + std::string(n[id(schalt_wert)]) + " (" + id(schalt_quelle) + "): " + (ok ? "ok" : "NICHT uebernommen, steht auf " + ist));
+              id(schalt_ziel) = 0; id(pruefen) = false;
+
+select:
+  - platform: template
+    name: "Heizkreis Betriebsart setzen"
+    id: hk_setzen
+    options: ["Standby", "Zeitprogramm 1", "Zeitprogramm 2", "Zeitprogramm 3", "Sommer", "Komfort", "Normal", "Absenk"]
+    optimistic: false
+    web_server: { sorting_group_id: g_schalten, sorting_weight: 1 }
+    set_action:
+      - lambda: |-
+          const auto &opts = id(hk_setzen).traits.get_options();
+          int code = 0;
+          for (size_t i = 0; i < opts.size(); i++) if (x == opts[i]) code = i + 1;
+          if (code == 0) return;
+          id(wunsch_hk) = code; id(wunsch_hk_quelle) = "Web/HA";
+          uint32_t seit = millis() - id(letzter_befehl);
+          if (id(wem_senden).is_running() || (id(letzter_befehl) != 0 && seit < 60000))
+            id(schalt_status).publish_state("vorgemerkt: Heizkreis " + x + ", wird in " +
+              to_string(id(wem_senden).is_running() ? 60 : (int)((60000 - seit) / 1000) + 1) + " s gesendet");
+      - script.execute: befehl_pruefen
+
+button:
+  - platform: template
+    name: "Schreiben"
+    web_server: { sorting_group_id: g_schreiben, sorting_weight: 2 }
+    on_press:
+      - lambda: |-
+          id(senden) = false;
+          if (id(wem_senden).is_running() || (id(letzter_befehl) != 0 && millis() - id(letzter_befehl) < 60000)) {
+            id(schreib_antwort).publish_state("bitte warten - hoechstens ein Befehl pro Minute"); return;
+          }
+          // Format: MI MX OX OS WERT (hex), z.B. "03 00 2520 02 02" = Warmwasser Aus
+          unsigned mi = 0, mx = 0, ox = 0, os = 0; char w[12] = {0};
+          if (sscanf(id(schreib_eingabe).state.c_str(), "%x %x %x %x %10s", &mi, &mx, &ox, &os, w) != 5 ||
+              mx > 0xFF || ox > 0xFFFF || os > 0xFF) {
+            id(schreib_antwort).publish_state("ungueltig - Format: MI MX OX OS WERT, z.B. 03 00 2520 02 02"); return;
+          }
+          if (mi != 1 && mi != 2 && mi != 3) {   // nur Systemgeraet: SYSTEM0, HZK0, WW0 - nie der Kessel
+            id(schreib_antwort).publish_state("gesperrt: nur MI 01, 02, 03 erlaubt - der Kessel wird nie beschrieben"); return;
+          }
+          std::string v = w;
+          if (v.empty() || v.size() > 4 || v.find_first_not_of("0123456789abcdefABCDEF") != std::string::npos) {
+            id(schreib_antwort).publish_state("Wert: 1-4 Hexziffern"); return;
+          }
+          if (v.size() % 2) v = "0" + v;
+          char b[40];
+          snprintf(b, sizeof(b), "03%02X%02X%04X%02X%04X%s", mi, mx, ox, os, (unsigned) (v.size() / 2), v.c_str());
+          id(schalt_vg) = b; id(schalt_ziel) = 3; id(schalt_quelle) = "Web";
+          id(letzter_befehl) = millis() | 1; id(senden) = true;
+          id(schreib_antwort).publish_state(std::string("sende VG ") + b + " ...");
+      - if:
+          condition:
+            lambda: 'return id(senden);'
+          then:
+            - script.execute:
+                id: wem_senden
+                vg: !lambda 'return id(schalt_vg);'
+  - platform: template
+    name: "WEM-Lebenszeichen jetzt pruefen"
+    web_server: { sorting_group_id: g_schalten, sorting_weight: 7 }
+    on_press:
+      - lambda: |-
+          id(lz_faellig) = millis() | 1;
+          id(lz_status).publish_state("vorgemerkt, spaetestens in 1 min (Sperrminute beachtet)");
+
+text:
+  - platform: template
+    name: "Heizung: IP-Adresse"
+    id: wem_ip
+    optimistic: true
+    restore_value: true
+    initial_value: !secret wem_ip
+    mode: text
+    max_length: 40
+    web_server: { sorting_group_id: g_einst, sorting_weight: 1 }
+  - platform: template
+    name: "WEM-Benutzer"
+    id: wem_user
+    optimistic: true
+    internal: true           # Weishaupt ab Werk, laut Anleitung nicht aenderbar
+    initial_value: !secret wem_user
+    mode: text
+    max_length: 32
+  - platform: template
+    name: "WEM-Passwort"
+    id: wem_pass
+    optimistic: true
+    internal: true
+    initial_value: !secret wem_pass
+    mode: password
+    max_length: 32
+  - platform: template
+    name: "Schreibbefehl (MI MX OX OS WERT hex)"
+    id: schreib_eingabe
+    optimistic: true
+    mode: text
+    max_length: 32
+    web_server: { sorting_group_id: g_schreiben, sorting_weight: 1 }
+
+text_sensor:
+  - platform: template
+    name: "Ergebnis letzter Schaltbefehl"
+    id: schalt_status
+    web_server: { sorting_group_id: g_schalten, sorting_weight: 3 }
+  - platform: template
+    name: "Schaltprotokoll"
+    id: schalt_protokoll
+    web_server: { sorting_group_id: g_schalten, sorting_weight: 4 }
+  - platform: template
+    name: "WEM-Lebenszeichen"
+    id: lz_status
+    web_server: { sorting_group_id: g_schalten, sorting_weight: 6 }
+  - platform: template
+    name: "Schreibbefehl Antwort"
+    id: schreib_antwort
+    web_server: { sorting_group_id: g_schreiben, sorting_weight: 3 }
+
+sensor:
+  - platform: template
+    name: "WEM-JSON Fehler (Zaehler)"
+    id: wem_fehler_sensor
+    accuracy_decimals: 0
+    state_class: total_increasing
+    update_interval: 600s
+    lambda: 'return id(wem_fehler);'
+    web_server: { sorting_group_id: g_schalten, sorting_weight: 8 }
+  - platform: template
+    name: "WEM CM=05 Ablehnungen (Zaehler)"
+    id: wem_cm05_sensor
+    accuracy_decimals: 0
+    state_class: total_increasing
+    update_interval: 600s
+    lambda: 'return id(wem_cm05);'
+    web_server: { sorting_group_id: g_schalten, sorting_weight: 9 }

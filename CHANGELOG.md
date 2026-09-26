@@ -1,6 +1,18 @@
 # Changelog – ESP-CAN-Brücke Weishaupt (WeAct CAN485, ESPHome)
 
 
+## v10 – 2026-09-27
+- **Pakete**: Kessel (Pflicht), Warmwasser, MQTT, Home-Assistant-API, WEM-Schalten, Warmwasser-Schalten, feste IP – einzeln abschaltbar.
+- **Warteschlange**: ein Schaltwunsch in der Sperrminute wird vorgemerkt (neuester je Ziel gewinnt) und danach gesendet.
+- **Schalten per MQTT**: `cmd/heizkreis` (1–8 oder Name), `cmd/warmwasser` (Ein/Aus).
+- **Schaltprotokoll** der letzten zehn Befehle (Web und `schaltprotokoll` retained), mit Quelle und Ergebnis am Bus; Kontrolle erst nach der eigenen Leseanfrage (kein Fehlurteil durch eine zufällige Abfrage).
+- **WEM-Lebenszeichen** alle 6 h ± 30 min Zufall, Vergleich mit dem Bus; Knopf zum sofortigen Prüfen.
+- **CM=05-Erkennung** mit eigenem Zähler.
+- **WLAN wechseln** im Web (Name, Passwort, „WLAN übernehmen"; bei Fehlschlag bleibt das alte WLAN).
+- „Warmwasser aktiv" und „Brenner Status" als Text Ein/Aus; die Zahlen stehen unter Zahlencodes.
+- Rohmitschnitt `canraw` abschaltbar (Vorgabe aus, beim Scan immer an).
+- Text-Topics jetzt ESPHome-Standard (`text_sensor/...`), Zahlen-Topics unverändert (`sensor/...`).
+
 ## v9 – 2026-09-26
 - **Schreibfeld über WEM** (Experten): „MI MX OX OS WERT" in hex plus Knopf „Schreiben". Nur MI 01/02/03 erlaubt, Kessel gesperrt. Antwort des WEM wird ausgewertet (CM=04 bestätigt, CM=05 abgelehnt).
 - **Netzdiagnose**: Gateway, Netzmaske, DNS-Server, BSSID und MAC-Adresse.

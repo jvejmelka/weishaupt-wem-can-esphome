@@ -1,0 +1,582 @@
+# Paket KESSEL (Pflicht): Kesselwerte vom CAN-Bus, Heizkreis-Zustand, Diagnose,
+# Lesebefehl, Bus-Waechter, WLAN-Wechsel ueber die Weboberflaeche.
+#
+# Was dieses Paket auf den Bus schickt, sind ausschliesslich LESE-Anfragen
+# (SDO-Upload, Kommandobyte 0x40). Es wird nie etwas auf den Kessel geschrieben.
+#   Knoten 2 (Kessel)      alle 20 s, 150 ms Abstand je Anfrage
+#   Knoten 1 (Systemgeraet) alle 20 s bzw. 60 s
+# Gesendet wird nur, wenn der Bus lebt (letzter Frame < 30 s) - sonst gehen die
+# Anfragen bei ausgeschalteter Heizung ins Leere und der Controller in Bus-off.
+
+web_server:
+  sorting_groups:
+    - id: g_kessel
+      name: "Kessel"
+      sorting_weight: 10
+    - id: g_betrieb
+      name: "Betriebsarten und Sollwerte"
+      sorting_weight: 20
+    - id: g_energie
+      name: "Energie"
+      sorting_weight: 30
+    - id: g_lesen
+      name: "Lesebefehl (nur lesen)"
+      sorting_weight: 40
+    - id: g_codes
+      name: "Zahlencodes (fuer Grafana/InfluxDB)"
+      sorting_weight: 80
+    - id: g_diag
+      name: "Diagnose"
+      sorting_weight: 90
+    - id: g_einst
+      name: "Einstellungen"
+      sorting_weight: 95
+    - id: g_fw
+      name: "Firmware"
+      sorting_weight: 100
+
+globals:
+  # Zeitpunkt des letzten empfangenen CAN-Frames (Bus-Waechter, Sendesperre)
+  - id: letzter_frame
+    type: uint32_t
+    initial_value: '0'
+  # offener Lesebefehl (Antwort wird in "Lesebefehl Antwort" zugeordnet)
+  - id: cmd_aktiv
+    type: bool
+    initial_value: 'false'
+  - id: cmd_kn
+    type: int
+    initial_value: '0'
+  - id: cmd_idx
+    type: int
+    initial_value: '0'
+  - id: cmd_sub
+    type: int
+    initial_value: '0'
+  # Brenner-Flankenerkennung; brenner_starts zaehlt ab Inbetriebnahme des Boards
+  - id: brenner_vorher
+    type: int
+    initial_value: '-1'
+  - id: brenner_starts
+    type: int
+    restore_value: yes
+    initial_value: '0'
+
+interval:
+  # Bus-Waechter: kommt N Minuten kein einziger Frame, Neustart (Bus-off-Falle).
+  - interval: 60s
+    then:
+      - lambda: |-
+          float m = id(waechter_min).state;
+          if (isnan(m) || m <= 0) return;
+          uint32_t grenze = (uint32_t) (m * 60000.0f);
+          uint32_t jetzt = millis();
+          if (jetzt > grenze && jetzt - id(letzter_frame) > grenze) {
+            ESP_LOGW("waechter", "%.0f min kein CAN-Frame - Neustart", m);
+            App.safe_reboot();
+          }
+  # Knoten 1: Heizkreis-Betriebsart, Raumsoll aktuell, Vorlauf Heizkreis (nur lesen)
+  - interval: 60s
+    then:
+      - if:
+          condition:
+            lambda: 'return millis() - id(letzter_frame) < 30000;'
+          then:
+            - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: [0x40, 0x33, 0x29, 0x02, 0, 0, 0, 0] }
+            - delay: 150ms
+            - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: [0x40, 0x58, 0x29, 0x02, 0, 0, 0, 0] }
+            - delay: 150ms
+            - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: [0x40, 0x07, 0x29, 0x02, 0, 0, 0, 0] }
+  # Knoten 2 (Kessel) und zwei Statusobjekte von Knoten 1, alle 20 s (nur lesen)
+  - interval: 20s
+    then:
+      - if:
+          condition:
+            lambda: 'return millis() - id(letzter_frame) < 30000;'
+          then:
+            - canbus.send: { canbus_id: my_can_bus, can_id: 0x602, data: [0x40, 0x32, 0x25, 0x00, 0, 0, 0, 0] }  # Kesseltemperatur
+            - delay: 150ms
+            - canbus.send: { canbus_id: my_can_bus, can_id: 0x602, data: [0x40, 0x37, 0x25, 0x00, 0, 0, 0, 0] }  # Abgastemperatur
+            - delay: 150ms
+            - canbus.send: { canbus_id: my_can_bus, can_id: 0x602, data: [0x40, 0x34, 0x25, 0x00, 0, 0, 0, 0] }  # Leistung
+            - delay: 150ms
+            - canbus.send: { canbus_id: my_can_bus, can_id: 0x602, data: [0x40, 0x40, 0x25, 0x00, 0, 0, 0, 0] }  # Drehzahl
+            - delay: 150ms
+            - canbus.send: { canbus_id: my_can_bus, can_id: 0x602, data: [0x40, 0x45, 0x25, 0x00, 0, 0, 0, 0] }  # Vorlauf Soll
+            - delay: 150ms
+            - canbus.send: { canbus_id: my_can_bus, can_id: 0x602, data: [0x40, 0x41, 0x25, 0x00, 0, 0, 0, 0] }  # Brenner
+            - delay: 150ms
+            - canbus.send: { canbus_id: my_can_bus, can_id: 0x602, data: [0x40, 0x13, 0x27, 0x02, 0, 0, 0, 0] }  # Volumenstrom
+            - delay: 150ms
+            - canbus.send: { canbus_id: my_can_bus, can_id: 0x602, data: [0x40, 0x14, 0x27, 0x02, 0, 0, 0, 0] }  # Anlagendruck
+            - delay: 150ms
+            - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: [0x40, 0x4D, 0x27, 0x00, 0, 0, 0, 0] }  # Statusbits
+            - delay: 150ms
+            - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: [0x40, 0x40, 0x26, 0x03, 0, 0, 0, 0] }  # Vorlaufsoll-Anforderung
+
+canbus:
+  - platform: esp32_can
+    id: my_can_bus
+    can_id: 0x602
+    tx_pin: GPIO27
+    rx_pin: GPIO26
+    bit_rate: 50kbps
+    on_frame:
+      # jeder Frame: Lebenszeichen des Busses + Antwort auf einen offenen Lesebefehl
+      - can_id: 0x000
+        can_id_mask: 0x000
+        then:
+          - lambda: |-
+              id(letzter_frame) = millis();
+              if (!id(cmd_aktiv) || can_id != (uint32_t)(0x580 + id(cmd_kn)) || x.size() < 8) return;
+              if (((x[2] << 8) | x[1]) != id(cmd_idx) || x[3] != id(cmd_sub)) return;
+              char t[80];
+              if (x[0] == 0x80) {
+                snprintf(t, sizeof(t), "%02X %04X/%02X: Abbruch %02X%02X%02X%02X (Objekt fehlt?)",
+                         id(cmd_kn), id(cmd_idx), id(cmd_sub), x[7], x[6], x[5], x[4]);
+              } else {
+                int n = (x[0] == 0x4F) ? 1 : (x[0] == 0x4B) ? 2 : (x[0] == 0x47) ? 3 : 4;
+                uint32_t u = 0;
+                for (int i = n - 1; i >= 0; i--) u = (u << 8) | x[4 + i];
+                long v = (n == 2) ? (long)(int16_t) u : (n == 1) ? (long) u : (long)(int32_t) u;
+                snprintf(t, sizeof(t), "%02X %04X/%02X = %ld (0x%0*lX, %d Byte)",
+                         id(cmd_kn), id(cmd_idx), id(cmd_sub), v, n * 2, (unsigned long) u, n);
+              }
+              id(lese_antwort).publish_state(t);
+              id(cmd_aktiv) = false;
+
+      # PDO 0x201: Aussentemperatur + Systembetriebsart (Kessel sendet von selbst)
+      - can_id: 0x201
+        then:
+          - lambda: |-
+              id(wem_aussentemp).publish_state((int16_t(x[2] << 8 | x[1])) * 0.1f);
+              int sb = x[0];
+              id(wem_systembetriebsart_code).publish_state((float) sb);
+              static const char* n[] = {"Aus", "Standby", "Sommer", "Automatik"};
+              id(wem_systembetriebsart).publish_state(sb <= 3 ? n[sb] : "unbekannt");
+
+      # PDO 0x241: Heizanforderung (Bytes 0-1); Bytes 6-7 = Warmwasser (Paket warmwasser)
+      - can_id: 0x241
+        then:
+          - lambda: 'id(wem_heizanforderung).publish_state((int16_t(x[1] << 8 | x[0])) * 0.1f);'
+
+      # PDO 0x182: Kesselstatus (Objekt 0x2530)
+      - can_id: 0x182
+        then:
+          - lambda: |-
+              uint8_t st = x[0];
+              const char* s = "unbekannt";
+              switch (st) {
+                case 0:   s = "Standby"; break;
+                case 1:   s = "Aus"; break;
+                case 10:  s = "Heizbetrieb"; break;
+                case 15:  s = "Warmwasserbetrieb"; break;
+                case 101: s = "Kaminfeger"; break;
+                case 104: s = "Wartung"; break;
+              }
+              id(wem_kesselstatus).publish_state(s);
+              id(wem_kesselstatus_code).publish_state((float) st);
+
+      # PDO 0x1C1: Statusbits Knoten 1 (Objekt 0x274D) - 0x1000 Heizkreis Standby, 0x0010 WW-Ladung
+      - can_id: 0x1C1
+        then:
+          - lambda: |-
+              uint16_t m = (x[3] << 8) | x[2];
+              std::string s = (m & 0x1000) ? "Standby" : "Zeitprogramm";
+              if (m & 0x0010) s += " + WW-Ladung";
+              uint16_t rest = m & ~0x1010;
+              if (rest) { char b[12]; snprintf(b, sizeof(b), " (0x%04X)", rest); s += b; }
+              id(wem_betriebsart_hk).publish_state(s);
+              id(wem_betriebsart_hk_code).publish_state((float) m);
+
+      # SDO-Antworten Knoten 1 (Systemgeraet)
+      - can_id: 0x581
+        then:
+          - lambda: |-
+              if ((x[0] & 0xF0) != 0x40) return;
+              uint16_t idx = (x[2] << 8) | x[1];
+              uint8_t sub = x[3];
+              if (idx == 0x274D && sub == 0) {
+                uint16_t m = (x[5] << 8) | x[4];
+                std::string s = (m & 0x1000) ? "Standby" : "Zeitprogramm";
+                if (m & 0x0010) s += " + WW-Ladung";
+                uint16_t rest = m & ~0x1010;
+                if (rest) { char b[12]; snprintf(b, sizeof(b), " (0x%04X)", rest); s += b; }
+                id(wem_betriebsart_hk_code).publish_state((float) m);
+                id(wem_betriebsart_hk).publish_state(s);
+              } else if (idx == 0x2640 && sub == 3) {
+                id(wem_ww_vlsoll).publish_state((int16_t)((x[5] << 8) | x[4]) * 0.1f);
+              } else if (idx == 0x2933 && sub == 2) {
+                // Heizkreis-Betriebsart (JSON MI02 0x2533/02)
+                uint8_t b = x[4];
+                static const char* n[] = {"?", "Standby", "Zeitprogramm 1", "Zeitprogramm 2", "Zeitprogramm 3", "Sommer", "Komfort", "Normal", "Absenk"};
+                id(hk_betriebsart_code).publish_state((float) b);
+                id(hk_betriebsart).publish_state(b <= 8 ? n[b] : "unbekannt");
+              } else if (sub == 2 && (idx == 0x2958 || idx == 0x2907)) {
+                int16_t v = (int16_t)((x[5] << 8) | x[4]);
+                if (v == (int16_t) 0x8000) return;
+                if (idx == 0x2958) id(hk_raumsoll_akt).publish_state(v * 0.1f);
+                else id(hk_vorlauf).publish_state(v * 0.1f);
+              }
+
+      # SDO-Antworten Knoten 2 (Kessel)
+      - can_id: 0x582
+        then:
+          - lambda: |-
+              if ((x[0] & 0xF0) != 0x40) return;
+              uint16_t idx = (x[2] << 8) | x[1];
+              uint8_t sub = x[3];
+              int32_t v = (int32_t)((uint32_t)x[7] << 24 | (uint32_t)x[6] << 16 | (uint32_t)x[5] << 8 | (uint32_t)x[4]);
+              if (idx == 0x2714 && sub == 2) id(wem_druck).publish_state(v * 0.01f);
+              else if (idx == 0x2534 && sub == 0) id(wem_leistung).publish_state(v * 0.01f);
+              else if (idx == 0x2540 && sub == 0) id(wem_drehzahl).publish_state((float) v);
+              else if (idx == 0x2536 && sub == 0) id(wem_vorlauf).publish_state(v * 0.1f);
+              else if (idx == 0x2537 && sub == 0) id(wem_abgas).publish_state(v * 0.1f);
+              else if (idx == 0x2532 && sub == 0) id(wem_kessel).publish_state(v * 0.1f);
+              else if (idx == 0x2545 && sub == 0) id(wem_vorlauf_soll).publish_state(v * 0.1f);
+              else if (idx == 0x2541 && sub == 0) {
+                int b = (v != 0) ? 1 : 0;
+                id(wem_brenner).publish_state((float) b);
+                id(wem_brenner_text).publish_state(b ? "Ein" : "Aus");
+                if (b == 1 && id(brenner_vorher) == 0) {
+                  id(brenner_starts) += 1;
+                  id(wem_brennerstarts).publish_state((float) id(brenner_starts));
+                }
+                id(brenner_vorher) = b;
+              }
+              else if (idx == 0x2713 && sub == 2) id(wem_volumenstrom).publish_state((float) v);
+              else if (idx == 0x2726 && sub == 2) id(wem_wm_heizung).publish_state(v * 0.01f);
+              else if (idx == 0x2727 && sub == 2) id(wem_wm_ww).publish_state(v * 0.01f);
+              else if (idx == 0x2728 && sub == 2) id(wem_wm_gesamt).publish_state(v * 0.01f);
+
+text_sensor:
+  - platform: template
+    name: "Kesselstatus"
+    id: wem_kesselstatus
+    web_server: { sorting_group_id: g_kessel, sorting_weight: 1 }
+  - platform: template
+    name: "Brenner Status"
+    id: wem_brenner_text
+    web_server: { sorting_group_id: g_kessel, sorting_weight: 2 }
+  - platform: template
+    name: "Systembetriebsart"
+    id: wem_systembetriebsart
+    web_server: { sorting_group_id: g_betrieb, sorting_weight: 1 }
+  - platform: template
+    name: "Heizkreis Betriebsart"
+    id: hk_betriebsart
+    web_server: { sorting_group_id: g_betrieb, sorting_weight: 2 }
+  - platform: template
+    name: "Heizkreis Status"
+    id: wem_betriebsart_hk
+    web_server: { sorting_group_id: g_betrieb, sorting_weight: 3 }
+  - platform: template
+    name: "Lesebefehl Antwort"
+    id: lese_antwort
+    web_server: { sorting_group_id: g_lesen, sorting_weight: 3 }
+  - platform: template
+    name: "WLAN-Wechsel"
+    id: wlan_ergebnis
+    web_server: { sorting_group_id: g_einst, sorting_weight: 23 }
+  - platform: template
+    name: "Firmware"
+    id: fw_stand
+    lambda: 'return {"${firmware}"};'
+    update_interval: 3600s
+    web_server: { sorting_group_id: g_fw, sorting_weight: 1 }
+  - platform: version
+    name: "ESPHome-Version"
+    hide_timestamp: false
+    web_server: { sorting_group_id: g_fw, sorting_weight: 2 }
+  - platform: wifi_info
+    ip_address:
+      name: "IP-Adresse"
+      web_server: { sorting_group_id: g_diag, sorting_weight: 5 }
+    ssid:
+      name: "WLAN"
+      web_server: { sorting_group_id: g_diag, sorting_weight: 6 }
+    dns_address:
+      name: "DNS-Server"
+      web_server: { sorting_group_id: g_diag, sorting_weight: 9 }
+    bssid:
+      name: "WLAN-Zugangspunkt (BSSID)"
+      web_server: { sorting_group_id: g_diag, sorting_weight: 11 }
+    mac_address:
+      name: "MAC-Adresse"
+      web_server: { sorting_group_id: g_diag, sorting_weight: 12 }
+  - platform: template
+    name: "Gateway"
+    update_interval: 60s
+    web_server: { sorting_group_id: g_diag, sorting_weight: 7 }
+    lambda: |-
+      esp_netif_t *n = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+      esp_netif_ip_info_t ip;
+      if (n == nullptr || esp_netif_get_ip_info(n, &ip) != ESP_OK) return {"-"};
+      char b[20]; snprintf(b, sizeof(b), IPSTR, IP2STR(&ip.gw));
+      return {b};
+  - platform: template
+    name: "Netzmaske"
+    update_interval: 60s
+    web_server: { sorting_group_id: g_diag, sorting_weight: 8 }
+    lambda: |-
+      esp_netif_t *n = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+      esp_netif_ip_info_t ip;
+      if (n == nullptr || esp_netif_get_ip_info(n, &ip) != ESP_OK) return {"-"};
+      char b[20]; snprintf(b, sizeof(b), IPSTR, IP2STR(&ip.netmask));
+      return {b};
+
+button:
+  - platform: restart
+    name: "Neustart ESP"
+    web_server: { sorting_group_id: g_diag, sorting_weight: 10 }
+  - platform: template
+    name: "Lesen"
+    web_server: { sorting_group_id: g_lesen, sorting_weight: 2 }
+    on_press:
+      - lambda: |-
+          unsigned kn = 0, idx = 0, sub = 0;
+          if (sscanf(id(lese_eingabe).state.c_str(), "%x %x %x", &kn, &idx, &sub) != 3 || kn < 1 || kn > 127 || idx > 0xFFFF || sub > 0xFF) {
+            id(lese_antwort).publish_state("ungueltig - Format: 01 2933 02"); return;
+          }
+          if (millis() - id(letzter_frame) > 30000) { id(lese_antwort).publish_state("Bus tot - nicht gesendet"); return; }
+          id(cmd_kn) = kn; id(cmd_idx) = idx; id(cmd_sub) = sub; id(cmd_aktiv) = true;
+          id(lese_antwort).publish_state("gesendet, warte ...");
+          std::vector<uint8_t> d = {0x40, (uint8_t)(idx & 0xFF), (uint8_t)(idx >> 8), (uint8_t)sub, 0, 0, 0, 0};
+          id(my_can_bus)->send_data(0x600 + kn, false, d);
+  # WLAN wechseln: neue Daten eintragen, dann diesen Knopf. Klappt die Verbindung
+  # binnen 30 s, werden die Daten gespeichert; sonst bleibt das bisherige WLAN.
+  # Letzter Rueckweg ist der Notfall-Hotspot (ap) mit Captive Portal.
+  - platform: template
+    name: "WLAN uebernehmen"
+    web_server: { sorting_group_id: g_einst, sorting_weight: 22 }
+    on_press:
+      - if:
+          condition:
+            lambda: 'return id(wlan_neu_ssid).state.empty();'
+          then:
+            - lambda: 'id(wlan_ergebnis).publish_state("bitte zuerst den WLAN-Namen eintragen");'
+          else:
+            - lambda: 'id(wlan_ergebnis).publish_state("verbinde mit " + id(wlan_neu_ssid).state + " ...");'
+            - wifi.configure:
+                ssid: !lambda 'return id(wlan_neu_ssid).state;'
+                password: !lambda 'return id(wlan_neu_pass).state;'
+                save: true
+                timeout: 30s
+                on_connect:
+                  - lambda: 'id(wlan_ergebnis).publish_state("verbunden und gespeichert: " + id(wlan_neu_ssid).state);'
+                on_error:
+                  - lambda: 'id(wlan_ergebnis).publish_state("keine Verbindung zu " + id(wlan_neu_ssid).state + " - bisheriges WLAN bleibt");'
+
+number:
+  - platform: template
+    name: "Waechter: Neustart nach Minuten ohne Bus (0 = aus)"
+    id: waechter_min
+    optimistic: true
+    restore_value: true
+    initial_value: 5
+    min_value: 0
+    max_value: 120
+    step: 1
+    mode: box
+    web_server: { sorting_group_id: g_einst, sorting_weight: 10 }
+
+text:
+  # Lesebefehl "KNOTEN INDEX SUB" hex, z.B. "01 2933 02". NUR LESEN (Kommandobyte 0x40).
+  - platform: template
+    name: "Lesebefehl (KN IDX SUB hex)"
+    id: lese_eingabe
+    optimistic: true
+    mode: text
+    max_length: 24
+    web_server: { sorting_group_id: g_lesen, sorting_weight: 1 }
+  - platform: template
+    name: "WLAN-Name (neu)"
+    id: wlan_neu_ssid
+    optimistic: true
+    mode: text
+    max_length: 32
+    web_server: { sorting_group_id: g_einst, sorting_weight: 20 }
+  - platform: template
+    name: "WLAN-Passwort (neu)"
+    id: wlan_neu_pass
+    optimistic: true
+    mode: password
+    max_length: 64
+    web_server: { sorting_group_id: g_einst, sorting_weight: 21 }
+
+sensor:
+  # --- Kessel ---
+  - platform: template
+    name: "Kesseltemperatur"
+    id: wem_kessel
+    unit_of_measurement: "°C"
+    device_class: temperature
+    accuracy_decimals: 1
+    update_interval: never
+    web_server: { sorting_group_id: g_kessel, sorting_weight: 4 }
+  - platform: template
+    name: "Vorlauf"
+    id: wem_vorlauf
+    unit_of_measurement: "°C"
+    device_class: temperature
+    accuracy_decimals: 1
+    update_interval: never
+    web_server: { sorting_group_id: g_kessel, sorting_weight: 5 }
+  - platform: template
+    name: "Vorlauf Soll"
+    id: wem_vorlauf_soll
+    unit_of_measurement: "°C"
+    device_class: temperature
+    accuracy_decimals: 1
+    update_interval: never
+    web_server: { sorting_group_id: g_kessel, sorting_weight: 6 }
+  - platform: template
+    name: "Abgastemperatur"          # Objekt 0x2537 (in manchen Vorlagen faelschlich "Ruecklauf")
+    id: wem_abgas
+    unit_of_measurement: "°C"
+    device_class: temperature
+    accuracy_decimals: 1
+    update_interval: never
+    web_server: { sorting_group_id: g_kessel, sorting_weight: 7 }
+  - platform: template
+    name: "Leistung"
+    id: wem_leistung
+    unit_of_measurement: "%"
+    device_class: power_factor
+    update_interval: never
+    web_server: { sorting_group_id: g_kessel, sorting_weight: 8 }
+  - platform: template
+    name: "Drehzahl"
+    id: wem_drehzahl
+    unit_of_measurement: "U/min"
+    update_interval: never
+    web_server: { sorting_group_id: g_kessel, sorting_weight: 9 }
+  - platform: template
+    name: "Anlagendruck"
+    id: wem_druck
+    unit_of_measurement: "bar"
+    device_class: pressure
+    accuracy_decimals: 2
+    update_interval: never
+    web_server: { sorting_group_id: g_kessel, sorting_weight: 10 }
+  - platform: template
+    name: "Volumenstrom"
+    id: wem_volumenstrom
+    unit_of_measurement: "l/h"
+    update_interval: never
+    web_server: { sorting_group_id: g_kessel, sorting_weight: 11 }
+  - platform: template
+    name: "Heizanforderung"
+    id: wem_heizanforderung
+    unit_of_measurement: "°C"
+    device_class: temperature
+    accuracy_decimals: 1
+    update_interval: never
+    web_server: { sorting_group_id: g_kessel, sorting_weight: 12 }
+  - platform: template
+    name: "Aussentemperatur"
+    id: wem_aussentemp
+    unit_of_measurement: "°C"
+    device_class: temperature
+    accuracy_decimals: 1
+    update_interval: never
+    web_server: { sorting_group_id: g_kessel, sorting_weight: 13 }
+  - platform: template
+    name: "Brennerstarts"
+    id: wem_brennerstarts
+    accuracy_decimals: 0
+    state_class: total_increasing
+    update_interval: never
+    web_server: { sorting_group_id: g_kessel, sorting_weight: 3 }
+  # --- Heizkreis ---
+  - platform: template
+    name: "Raumsoll aktuell"
+    id: hk_raumsoll_akt
+    unit_of_measurement: "°C"
+    device_class: temperature
+    accuracy_decimals: 1
+    update_interval: never
+    web_server: { sorting_group_id: g_betrieb, sorting_weight: 4 }
+  - platform: template
+    name: "Vorlauf Heizkreis"
+    id: hk_vorlauf
+    unit_of_measurement: "°C"
+    device_class: temperature
+    accuracy_decimals: 1
+    update_interval: never
+    web_server: { sorting_group_id: g_betrieb, sorting_weight: 5 }
+  - platform: template
+    name: "Vorlaufsoll Anforderung"
+    id: wem_ww_vlsoll
+    unit_of_measurement: "°C"
+    device_class: temperature
+    accuracy_decimals: 1
+    update_interval: never
+    web_server: { sorting_group_id: g_betrieb, sorting_weight: 11 }
+  # --- Energie (Vortageswerte, der Kessel liefert sie nur, wenn der WEM sie abfragt) ---
+  - platform: template
+    name: "Wärmemenge Vortag Heizung"
+    id: wem_wm_heizung
+    unit_of_measurement: "kWh"
+    device_class: energy
+    state_class: total_increasing
+    update_interval: never
+    web_server: { sorting_group_id: g_energie, sorting_weight: 1 }
+  - platform: template
+    name: "Wärmemenge Vortag WW"
+    id: wem_wm_ww
+    unit_of_measurement: "kWh"
+    device_class: energy
+    state_class: total_increasing
+    update_interval: never
+    web_server: { sorting_group_id: g_energie, sorting_weight: 2 }
+  - platform: template
+    name: "Wärmemenge Vortag Gesamt"
+    id: wem_wm_gesamt
+    unit_of_measurement: "kWh"
+    device_class: energy
+    state_class: total_increasing
+    update_interval: never
+    web_server: { sorting_group_id: g_energie, sorting_weight: 3 }
+  # --- Zahlencodes (Text steht jeweils daneben; Zahlen fuer Grafana/InfluxDB) ---
+  - platform: template
+    name: "Brenner"                  # 0 = aus, 1 = an; aus den Flanken rechnet Grafana die Taktung
+    id: wem_brenner
+    update_interval: never
+    web_server: { sorting_group_id: g_codes, sorting_weight: 1 }
+  - platform: template
+    name: "Kesselstatus Code"
+    id: wem_kesselstatus_code
+    update_interval: never
+    web_server: { sorting_group_id: g_codes, sorting_weight: 2 }
+  - platform: template
+    name: "Heizkreis Status Code"
+    id: wem_betriebsart_hk_code
+    update_interval: never
+    web_server: { sorting_group_id: g_codes, sorting_weight: 3 }
+  - platform: template
+    name: "Heizkreis Betriebsart Code"
+    id: hk_betriebsart_code
+    update_interval: never
+    web_server: { sorting_group_id: g_codes, sorting_weight: 4 }
+  - platform: template
+    name: "Systembetriebsart Code"
+    id: wem_systembetriebsart_code
+    update_interval: never
+    web_server: { sorting_group_id: g_codes, sorting_weight: 6 }
+  # --- Diagnose ---
+  - platform: wifi_signal
+    name: "WLAN-Signal"
+    update_interval: 60s
+    web_server: { sorting_group_id: g_diag, sorting_weight: 1 }
+  - platform: uptime
+    name: "Laufzeit"
+    update_interval: 60s
+    web_server: { sorting_group_id: g_diag, sorting_weight: 3 }
+  - platform: template
+    name: "Letzter CAN-Frame vor"    # Grafana-Warnung, wenn dauerhaft > 300 s
+    unit_of_measurement: "s"
+    accuracy_decimals: 0
+    update_interval: 30s
+    lambda: 'return (millis() - id(letzter_frame)) / 1000.0f;'
+    web_server: { sorting_group_id: g_diag, sorting_weight: 4 }
