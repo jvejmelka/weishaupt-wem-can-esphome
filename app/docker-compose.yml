@@ -1,0 +1,18 @@
+services:
+  heizungsapp:
+    build: .
+    container_name: heizungsapp
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      PORT: 4000
+      MQTT_URL: ${MQTT_URL}
+      MQTT_USER: ${MQTT_USER}
+      MQTT_PASS: ${MQTT_PASS}
+      MQTT_GERAET: ${MQTT_GERAET:-weact-can485-weishaupt}
+      APP_USERNAME: ${APP_USERNAME}
+      APP_PASSWORD: ${APP_PASSWORD}
+    volumes:
+      - ./data:/data        # Anmelde-Tokens ueberleben einen Neubau
+    mem_limit: 256m

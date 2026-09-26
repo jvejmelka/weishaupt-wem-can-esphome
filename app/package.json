@@ -1,0 +1,14 @@
+{
+  "name": "weishaupt-heizungsapp",
+  "version": "0.1.0",
+  "description": "Heizungs-App: liest das CAN-Board ueber MQTT, schaltet ueber das Board",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "mqtt": "^5.10.1"
+  }
+}

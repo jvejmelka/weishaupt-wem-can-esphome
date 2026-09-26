@@ -55,6 +55,8 @@ Nicht benötigte Zeilen unter `packages:` auskommentieren.
 | `warmwasser-schalten.yaml` | Warmwasser Ein/Aus (braucht `wem-schalten` und `warmwasser`) | nein |
 | `feste-ip.yaml` | feste IP statt DHCP | nein |
 
+Dazu optional die Handy-App im Ordner `app/` (siehe unten).
+
 ## Einrichten
 
 ```
@@ -118,6 +120,27 @@ Der Bus-Wächter startet das Board nach einstellbarer Zeit ohne Frame selbst neu
 
 Beispiele: Heizkreis-Betriebsart JSON `02 00 2533 02` = CAN Knoten 1 `0x2933/2`;
 Warmwasser-Betriebsart JSON `03 00 2520 02` (1 = Ein, 2 = Aus) = CAN Knoten 1 `0x2A20/2`.
+
+## Handy-App (optional, Ordner `app/`)
+
+Eine schlanke Web-App (PWA) fürs Handy: Brenner, Heizkreis-Betriebsart mit Vorgabe und Ist,
+Warmwasser mit Vorgabe und Ist, Außentemperatur, Kessel, Rücklauf, Vorlauf. Umschalten per Knopf.
+
+- **Liest nur MQTT** vom Board und spricht **nie mit dem WEM**. Schaltbefehle gehen an
+  `<gerät>/cmd/heizkreis` bzw. `cmd/warmwasser`; das Board setzt sie mit Sperrminute,
+  Warteschlange und Kontrolle am Bus um.
+- **Eigenes Broker-Konto** empfohlen, das nur lesen und die zwei Schaltbefehle senden darf:
+  ```
+  user heizungsapp
+  topic read  weact-can485-weishaupt/#
+  topic write weact-can485-weishaupt/cmd/heizkreis
+  topic write weact-can485-weishaupt/cmd/warmwasser
+  ```
+- Start: `cp .env.example .env`, Werte eintragen, `docker compose up -d --build`,
+  dann `http://<Host>:4000`. Anmeldung mit `APP_USERNAME`/`APP_PASSWORD`.
+- Die Oberfläche ist für eine Handybreite von 360 px gebaut und passt ohne Scrollen.
+- Eine frühere Fassung der App fragte die JSON-Schnittstelle des WEM direkt ab – genau das,
+  was die Schnittstelle nicht verträgt.
 
 ## Was belegt ist und was nicht
 

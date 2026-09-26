@@ -1,6 +1,9 @@
 # Changelog – ESP-CAN-Brücke Weishaupt (WeAct CAN485, ESPHome)
 
 
+## Handy-App – 2026-09-27
+- Die Web-App liegt jetzt im Ordner `app/`. Ihre frühere Fassung fragte den WEM direkt über JSON ab und hat ihn damit mehrfach gesperrt; jetzt liest sie nur noch MQTT vom Board und schaltet über dessen `cmd`-Topics – kein Zugriff mehr auf den WEM. Neu: Warmwasser mit Vorgabe/Ist und Ein/Aus, Betriebsarten vierspaltig, echter Rücklauf, Datum statt Build-Nummer.
+
 ## v19 – 2026-09-27
 - **Anlaufpause unterscheidet zwei Fälle:** nach einem Neustart des Boards (Flashen, Stromausfall am Board) 1 min – der Bus lief ja weiter; kommt der Bus dagegen nach einem Ausfall wieder (Heizung war stromlos, WEM fährt hoch), bleibt es bei 10 min (`anlaufpause_min`).
 
