@@ -77,6 +77,11 @@ globals:
   - id: lz_jetzt
     type: bool
     initial_value: 'false'
+  - id: letzter_gesehen         # fuer die Anzeige: wann die Sperrminute endet
+    type: uint32_t
+    initial_value: '0'
+  - id: frei_ab
+    type: std::string
 
 esphome:
   on_boot:
@@ -125,6 +130,26 @@ script:
     mode: single
     then:
       - lambda: |-
+          // Anzeige der Warteschlange (nur bei Aenderung veroeffentlichen)
+          if (id(letzter_befehl) != id(letzter_gesehen)) {
+            id(letzter_gesehen) = id(letzter_befehl);
+            auto t = id(uhr).now();
+            if (t.is_valid()) { t = ESPTime::from_epoch_local(t.timestamp + 60); id(frei_ab) = t.strftime("%H:%M:%S"); }
+            else id(frei_ab) = "";
+          }
+          {
+            static const char* n[] = {"?", "Standby", "Zeitprogramm 1", "Zeitprogramm 2", "Zeitprogramm 3", "Sommer", "Komfort", "Normal", "Absenk"};
+            std::string w;
+            if (id(wunsch_hk)) w = std::string("1. Heizkreis -> ") + n[id(wunsch_hk)] + " (" + id(wunsch_hk_quelle) + ")";
+            if (id(wunsch_ww)) {
+              if (!w.empty()) w += " | 2. "; else w = "1. ";
+              w += std::string("Warmwasser -> ") + (id(wunsch_ww) == 1 ? "Ein" : "Aus") + " (" + id(wunsch_ww_quelle) + ")";
+            }
+            bool gesperrt = id(wem_senden).is_running() || (id(letzter_befehl) != 0 && millis() - id(letzter_befehl) < 60000);
+            if (w.empty()) w = "leer";
+            else if (gesperrt) w += id(frei_ab).empty() ? " - wartet auf die Sperrminute" : " - naechster Befehl ab " + id(frei_ab);
+            if (id(warteschlange).state != w) id(warteschlange).publish_state(w);
+          }
           id(senden) = false;
           if (id(wem_senden).is_running()) return;
           if (id(letzter_befehl) != 0 && millis() - id(letzter_befehl) < 60000) return;
@@ -352,8 +377,17 @@ button:
                 id: wem_senden
                 vg: !lambda 'return id(schalt_vg);'
   - platform: template
+    name: "Warteschlange leeren"
+    web_server: { sorting_group_id: g_schalten, sorting_weight: 5 }
+    on_press:
+      - lambda: |-
+          if (!id(wunsch_hk) && !id(wunsch_ww)) return;
+          id(wunsch_hk) = 0; id(wunsch_ww) = 0;
+          id(schalt_status).publish_state("Warteschlange geleert");
+          id(protokoll_eintrag)->execute(std::string("Warteschlange von Hand geleert"));
+  - platform: template
     name: "WEM-Lebenszeichen jetzt pruefen"
-    web_server: { sorting_group_id: g_schalten, sorting_weight: 7 }
+    web_server: { sorting_group_id: g_schalten, sorting_weight: 8 }
     on_press:
       - lambda: |-
           id(lz_faellig) = millis() | 1;
@@ -397,15 +431,19 @@ text_sensor:
   - platform: template
     name: "Ergebnis letzter Schaltbefehl"
     id: schalt_status
+    web_server: { sorting_group_id: g_schalten, sorting_weight: 4 }
+  - platform: template
+    name: "Warteschlange"
+    id: warteschlange
     web_server: { sorting_group_id: g_schalten, sorting_weight: 3 }
   - platform: template
     name: "Schaltprotokoll"
     id: schalt_protokoll
-    web_server: { sorting_group_id: g_schalten, sorting_weight: 4 }
+    web_server: { sorting_group_id: g_schalten, sorting_weight: 6 }
   - platform: template
     name: "WEM-Lebenszeichen"
     id: lz_status
-    web_server: { sorting_group_id: g_schalten, sorting_weight: 6 }
+    web_server: { sorting_group_id: g_schalten, sorting_weight: 7 }
   - platform: template
     name: "Schreibbefehl Antwort"
     id: schreib_antwort
@@ -419,7 +457,7 @@ sensor:
     state_class: total_increasing
     update_interval: 600s
     lambda: 'return id(wem_fehler);'
-    web_server: { sorting_group_id: g_schalten, sorting_weight: 8 }
+    web_server: { sorting_group_id: g_schalten, sorting_weight: 9 }
   - platform: template
     name: "WEM CM=05 Ablehnungen (Zaehler)"
     id: wem_cm05_sensor
@@ -427,4 +465,4 @@ sensor:
     state_class: total_increasing
     update_interval: 600s
     lambda: 'return id(wem_cm05);'
-    web_server: { sorting_group_id: g_schalten, sorting_weight: 9 }
+    web_server: { sorting_group_id: g_schalten, sorting_weight: 10 }

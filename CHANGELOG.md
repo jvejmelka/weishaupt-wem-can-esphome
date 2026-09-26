@@ -1,6 +1,9 @@
 # Changelog – ESP-CAN-Brücke Weishaupt (WeAct CAN485, ESPHome)
 
 
+## v11 – 2026-09-27
+- **Warteschlange sichtbar**: eigenes Feld „Warteschlange" (Ziel, Wert, Quelle, ab wann der nächste Befehl frei ist) und Knopf „Warteschlange leeren". Höchstens zwei Einträge, einer je Ziel (Heizkreis vor Warmwasser); ein neuer Wunsch für dasselbe Ziel ersetzt den alten.
+
 ## v10 – 2026-09-27
 - **Pakete**: Kessel (Pflicht), Warmwasser, MQTT, Home-Assistant-API, WEM-Schalten, Warmwasser-Schalten, feste IP – einzeln abschaltbar.
 - **Warteschlange**: ein Schaltwunsch in der Sperrminute wird vorgemerkt (neuester je Ziel gewinnt) und danach gesendet.
