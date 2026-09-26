@@ -92,12 +92,13 @@ das WEM-Portal lässt für seinen Datenlogger höchstens alle 40 s je Wert abfra
 |---|---|
 | Kessel: Temperatur, Abgas, Vorlauf, Leistung, Drehzahl, Brenner | 40 s |
 | Kessel: Vorlauf-Soll, Volumenstrom, Druck; WEM: Vorlauf Heizkreis, Vorlaufsoll-Anforderung | 60 s |
-| WEM: Betriebsarten, Raumsoll, Warmwasser-Sollwerte | 5 min und nach jedem Schaltbefehl |
+| WEM: Raumsoll | 5 min |
+| WEM: Betriebsarten, Warmwasser-Sollwerte | nur bei Anlass: nach dem Start, bei geänderten Statusbits, nach Schaltbefehlen |
 | nach Board-Start oder Stromzyklus der Heizung | 10 min nur mithören |
 
 Mit dem Schalter **„Eigene CAN-Anfragen“** (Einstellungen) lassen sich die eigenen Abfragen ganz
-abschalten; das Board hört dann nur mit und fragt nur noch Heizkreis- und Warmwasser-Betriebsart
-alle 15 min ab (sie liegen im WEM und kommen sonst nie über den Bus). Schalten über den WEM bleibt möglich.
+abschalten; das Board hört dann nur mit. Die Betriebsarten werden weiterhin bei Anlass gelesen
+(sie liegen im WEM und kommen sonst nie über den Bus). Schalten über den WEM bleibt möglich.
 
 ## Überwachung
 
@@ -131,6 +132,7 @@ echten Anlage (WTC-GW 15-B) gegengeprüft ist.
 | Brenner, Kesselstatus | 0x2541/0, PDO 0x182 | **belegt** – Display „Heizkreise inaktiv“ |
 | Heizkreis-Betriebsart | Knoten 1 0x2933/2 | **belegt** für Standby, Zeitprogramm 1–3, Sommer. **Komfort, Normal, Absenk nie beobachtet** |
 | Warmwasser Ein/Aus | Knoten 1 0x2A20/2 | **belegt** – geschaltet und am Display gesehen |
+| Rücklauf, Vorlauf VPT, Sollleistung | passiv aus 0x6C2 (0x2699/0x2697/0x2698) | **plausibel** (Rücklauf 17,9 °C bei 18,5 °C Vorlauf, Brenner aus), Deutung laut geronet1 |
 | Abgastemperatur | 0x2537/0 | **unbestätigt** – in manchen Vorlagen „Rücklauf“ genannt |
 | Vorlauf Soll | 0x2545/0 | **unbestätigt** |
 | Vorlauf | 0x2536/0 | **unbestätigt** – antwortet, Deutung erst bei laufendem Brenner prüfbar (Vorlauf muss dann über Kessel liegen) |

@@ -11,8 +11,8 @@
 #   Kessel (Knoten 2): Temperatur, Abgas, Vorlauf, Leistung, Drehzahl, Brenner   alle 40 s
 #   Kessel (Knoten 2): Vorlauf-Soll, Volumenstrom, Druck                         alle 60 s
 #   WEM (Knoten 1):    Vorlauf Heizkreis, Vorlaufsoll-Anforderung                alle 60 s
-#   WEM (Knoten 1):    Heizkreis-Betriebsart, Raumsoll                           alle 5 min
-# Schalter AUS: nur die Heizkreis- (und Warmwasser-)Betriebsart, alle 15 min.
+#   WEM (Knoten 1):    Raumsoll                                                  alle 5 min
+# Betriebsarten: nur nach Start, bei geaenderten Statusbits und nach Schaltbefehlen.
 # Die Statusbits (0x274D) werden nicht abgefragt - der WEM sendet sie bei jeder
 # Aenderung selbst (PDO 0x1C1).
 #
@@ -63,6 +63,25 @@ globals:
   - id: bus_seit
     type: uint32_t
     initial_value: '0'
+  # Anlass zum Nachlesen der Betriebsarten (siehe interval 5s)
+  - id: anlass_ms
+    type: uint32_t
+    initial_value: '0'
+  - id: start_gelesen
+    type: bool
+    initial_value: 'false'
+  - id: hk_erledigt
+    type: uint32_t
+    initial_value: '0'
+  - id: hk_letzte_lesung
+    type: uint32_t
+    initial_value: '0'
+  - id: hk_jetzt_lesen
+    type: bool
+    initial_value: 'false'
+  - id: statusbits_vorher
+    type: int
+    initial_value: '-1'
   # offener Lesebefehl (Antwort wird in "Lesebefehl Antwort" zugeordnet)
   - id: cmd_aktiv
     type: bool
@@ -133,7 +152,7 @@ interval:
             - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: [0x40, 0x07, 0x29, 0x02, 0, 0, 0, 0] }  # Vorlauf Heizkreis
             - delay: 150ms
             - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: [0x40, 0x40, 0x26, 0x03, 0, 0, 0, 0] }  # Vorlaufsoll-Anforderung
-  # WEM, alle 5 min (aendert sich nur beim Schalten; nach jedem Schaltbefehl wird gezielt nachgelesen)
+  # WEM, alle 5 min: Raumsoll (wechselt mit dem Zeitprogramm)
   - interval: 300s
     then:
       - if:
@@ -141,18 +160,30 @@ interval:
             lambda: 'return id(can_anfragen).state && millis() - id(letzter_frame) < 30000 && id(bus_seit) != 0 && millis() - id(bus_seit) > ${anlaufpause_min} * 60000UL;'
           then:
             - delay: 13s
-            - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: [0x40, 0x33, 0x29, 0x02, 0, 0, 0, 0] }  # Heizkreis-Betriebsart
-            - delay: 150ms
             - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: [0x40, 0x58, 0x29, 0x02, 0, 0, 0, 0] }  # Raumsoll aktuell
 
-  # Schalter AUS: nur die Heizkreis-Betriebsart, alle 15 min. Sie liegt im WEM und kommt
-  # sonst nie ueber den Bus - ohne diese eine Anfrage bliebe eine Umstellung am Kesseldisplay
-  # oder im Portal unbemerkt. (Die Statusbits Standby/Zeitprogramm kommen ohnehin per PDO.)
-  - interval: 900s
+  # Betriebsarten (liegen im WEM) werden NICHT periodisch gelesen, sondern nur bei Anlass,
+  # unabhaengig vom Schalter "Eigene CAN-Anfragen":
+  #   - einmal, wenn die Anlaufpause vorbei ist (Board-Start, Bus wieder da)
+  #   - wenn sich die Statusbits aendern (PDO 0x1C1, z.B. Umstellung am Display/Portal)
+  #   - nach einem eigenen Schaltbefehl (das Schalten-Paket liest dann gezielt nach)
+  # anlass_ms = Zeitpunkt des Anlasses; gelesen wird 5 s danach, hoechstens alle 2 min.
+  # Das Warmwasser-Paket haengt sich mit eigener Merkvariable an denselben Anlass.
+  - interval: 5s
     then:
+      - lambda: |-
+          uint32_t jetzt = millis();
+          bool bus_ok = millis() - id(letzter_frame) < 30000 && id(bus_seit) != 0 && jetzt - id(bus_seit) > ${anlaufpause_min} * 60000UL;
+          if (!bus_ok) return;
+          if (!id(start_gelesen)) { id(start_gelesen) = true; id(anlass_ms) = (jetzt - 5000) | 1; }
+          id(hk_jetzt_lesen) = false;
+          if (id(anlass_ms) == 0 || id(anlass_ms) == id(hk_erledigt)) return;
+          if (jetzt - id(anlass_ms) < 5000) return;
+          if (id(hk_letzte_lesung) != 0 && jetzt - id(hk_letzte_lesung) < 120000) return;
+          id(hk_erledigt) = id(anlass_ms); id(hk_letzte_lesung) = jetzt | 1; id(hk_jetzt_lesen) = true;
       - if:
           condition:
-            lambda: 'return !id(can_anfragen).state && millis() - id(letzter_frame) < 30000 && id(bus_seit) != 0 && millis() - id(bus_seit) > ${anlaufpause_min} * 60000UL;'
+            lambda: 'return id(hk_jetzt_lesen);'
           then:
             - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: [0x40, 0x33, 0x29, 0x02, 0, 0, 0, 0] }  # Heizkreis-Betriebsart
 
@@ -169,7 +200,7 @@ canbus:
         can_id_mask: 0x000
         then:
           - lambda: |-
-              if (id(bus_seit) == 0 || millis() - id(letzter_frame) > 30000) id(bus_seit) = millis() | 1;
+              if (id(bus_seit) == 0 || millis() - id(letzter_frame) > 30000) { id(bus_seit) = millis() | 1; id(start_gelesen) = false; }
               id(letzter_frame) = millis();
               if (!id(cmd_aktiv) || can_id != (uint32_t)(0x580 + id(cmd_kn)) || x.size() < 8) return;
               if (((x[2] << 8) | x[1]) != id(cmd_idx) || x[3] != id(cmd_sub)) return;
@@ -201,7 +232,33 @@ canbus:
       # PDO 0x241: Heizanforderung (Bytes 0-1); Bytes 6-7 = Warmwasser (Paket warmwasser)
       - can_id: 0x241
         then:
-          - lambda: 'id(wem_heizanforderung).publish_state((int16_t(x[1] << 8 | x[0])) * 0.1f);'
+          - lambda: |-
+              id(wem_heizanforderung).publish_state((int16_t(x[1] << 8 | x[0])) * 0.1f);
+              // Bytes 2-3: Kesseltemperatur (gleich 0x2532) - kommt so alle paar Sekunden, ohne Anfrage
+              if (x.size() >= 4) id(wem_kessel).publish_state((int16_t(x[3] << 8 | x[2])) * 0.1f);
+
+      # PDO 0x181: Datum und Uhrzeit der Heizung (Stunde, Minute, Jahr-2000, Monat, Tag, Wochentag)
+      - can_id: 0x181
+        then:
+          - lambda: |-
+              if (x.size() < 6) return;
+              char b[24];
+              snprintf(b, sizeof(b), "%02u.%02u.%04u %02u:%02u", x[4], x[3], 2000 + x[2], x[0], x[1]);
+              id(heizung_uhr).publish_state(b);
+
+      # SDO-Download an Knoten 0x42 (0x6C2): der Kessel meldet alle ~5 s Werte weiter.
+      # Rein passiv mitgelesen. Objekte laut geronet1/wem-python, Werte an der Anlage plausibel.
+      - can_id: 0x6C2
+        then:
+          - lambda: |-
+              if (x.size() < 6 || (x[0] != 0x2B && x[0] != 0x2F && x[0] != 0x23)) return;
+              uint16_t idx = (x[2] << 8) | x[1];
+              uint8_t sub = x[3];
+              int16_t v = (int16_t)((x[5] << 8) | x[4]);
+              if (sub != 1) return;
+              if (idx == 0x2699) id(wem_ruecklauf).publish_state(v * 0.1f);        // Ruecklauftemperatur VPT
+              else if (idx == 0x2697) id(wem_vorlauf_vpt).publish_state(v * 0.1f); // Vorlauftemperatur VPT
+              else if (idx == 0x2698) id(wem_sollleistung).publish_state(v * 0.01f); // Sollleistung
 
       # PDO 0x182: Kesselstatus (Objekt 0x2530)
       - can_id: 0x182
@@ -225,6 +282,9 @@ canbus:
         then:
           - lambda: |-
               uint16_t m = (x[3] << 8) | x[2];
+              int kern = m & ~0x0050;
+              if (id(statusbits_vorher) >= 0 && kern != id(statusbits_vorher)) id(anlass_ms) = millis() | 1;
+              id(statusbits_vorher) = kern;
               std::string s = (m & 0x1000) ? "Standby" : "Zeitprogramm";
               if (m & 0x0010) s += " + WW-Ladung";
               uint16_t rest = m & ~0x1010;
@@ -298,6 +358,10 @@ text_sensor:
     id: wem_kesselstatus
     web_server: { sorting_group_id: g_kessel, sorting_weight: 1 }
   - platform: template
+    name: "Uhrzeit Heizung"          # aus PDO 0x181 - geht die Heizungsuhr falsch, laufen Zeitprogramme falsch
+    id: heizung_uhr
+    web_server: { sorting_group_id: g_diag, sorting_weight: 13 }
+  - platform: template
     name: "Brenner Status"
     id: wem_brenner_text
     web_server: { sorting_group_id: g_kessel, sorting_weight: 2 }
@@ -322,7 +386,7 @@ text_sensor:
     update_interval: 30s
     web_server: { sorting_group_id: g_diag, sorting_weight: 4 }
     lambda: |-
-      if (!id(can_anfragen).state) return {"aus - nur mithoeren, Betriebsarten alle 15 min"};
+      if (!id(can_anfragen).state) return {"aus - nur mithoeren (Betriebsarten bei Anlass)"};
       if (id(bus_seit) == 0 || millis() - id(letzter_frame) >= 30000) return {"aus - Bus schweigt"};
       uint32_t pause = ${anlaufpause_min} * 60000UL, seit = millis() - id(bus_seit);
       if (seit <= pause) return {"Anlaufpause, noch " + to_string((pause - seit) / 60000 + 1) + " min nur mithoeren"};
@@ -496,6 +560,29 @@ sensor:
     accuracy_decimals: 1
     update_interval: never
     web_server: { sorting_group_id: g_kessel, sorting_weight: 5 }
+  - platform: template
+    name: "Ruecklauf"                # 0x2699 VPT, passiv aus 0x6C2 (am 27.09. 17,9 bei 18,5 Vorlauf)
+    id: wem_ruecklauf
+    unit_of_measurement: "°C"
+    device_class: temperature
+    accuracy_decimals: 1
+    update_interval: never
+    web_server: { sorting_group_id: g_kessel, sorting_weight: 5 }
+  - platform: template
+    name: "Vorlauf VPT"              # 0x2697 VPT, passiv aus 0x6C2
+    id: wem_vorlauf_vpt
+    unit_of_measurement: "°C"
+    device_class: temperature
+    accuracy_decimals: 1
+    update_interval: never
+    web_server: { sorting_group_id: g_kessel, sorting_weight: 5 }
+  - platform: template
+    name: "Sollleistung"             # 0x2698, passiv aus 0x6C2
+    id: wem_sollleistung
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    update_interval: never
+    web_server: { sorting_group_id: g_kessel, sorting_weight: 8 }
   - platform: template
     name: "Vorlauf Soll"
     id: wem_vorlauf_soll

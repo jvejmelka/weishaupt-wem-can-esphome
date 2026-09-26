@@ -1,6 +1,17 @@
 # Changelog – ESP-CAN-Brücke Weishaupt (WeAct CAN485, ESPHome)
 
 
+## v18 – 2026-09-27
+- **Betriebsarten werden nicht mehr periodisch gelesen**, sondern nur bei Anlass: einmal nach der Anlaufpause, wenn sich die Statusbits ändern (PDO 0x1C1 – etwa bei Umstellung am Display, in der Weishaupt-App oder im Portal) und nach eigenen Schaltbefehlen. Heizkreis-Betriebsart höchstens alle 2 min. Warmwasser-Betriebsart und -Sollwerte hängen sich an denselben Anlass und werden nach einem Warmwasser-Schaltbefehl nachgelesen.
+- Lücke, bewusst in Kauf genommen: ein Wechsel zwischen zwei Zeitprogrammen am Display ändert die Statusbits nicht und bleibt bis zum nächsten Anlass unbemerkt.
+- Entfällt: 15-min-Abfrage aus v16, 5-min-Abfrage der Betriebsarten.
+
+## v17 – 2026-09-27
+- **Mehr Werte rein passiv**, ohne eine einzige Anfrage:
+  - **Rücklauf** (Rücklauftemperatur VPT, 0x2699), **Vorlauf VPT** (0x2697) und **Sollleistung** (0x2698) aus den SDO-Telegrammen, die der Kessel alle ~5 s an Knoten 0x42 schickt (0x6C2).
+  - **Kesseltemperatur** zusätzlich aus PDO 0x241 (Bytes 2–3) – alle paar Sekunden statt nur, wenn jemand fragt.
+  - **Uhrzeit der Heizung** aus PDO 0x181 (Diagnose).
+
 ## v16 – 2026-09-27
 - Auch bei ausgeschaltetem Schalter „Eigene CAN-Anfragen“ fragt das Board **Heizkreis- und Warmwasser-Betriebsart alle 15 min** ab (2 Anfragen je Viertelstunde an den WEM). Beide liegen im WEM und kämen sonst nie über den Bus – eine Umstellung am Kesseldisplay oder im Portal bliebe unbemerkt. Sie gehen beim Abschalten deshalb nicht mehr auf „unbekannt“.
 

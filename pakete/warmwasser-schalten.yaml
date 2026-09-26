@@ -33,7 +33,7 @@ canbus:
               std::string ist = b == 1 ? "Ein" : (b == 2 ? "Aus" : "?");
               id(schalt_status).publish_state(zeit + (ok ? "OK: Warmwasser " + ist : "NICHT uebernommen, Warmwasser " + ist));
               id(protokoll_eintrag)->execute(std::string("Warmwasser -> ") + (id(schalt_wert) == 1 ? "Ein" : "Aus") + " (" + id(schalt_quelle) + "): " + (ok ? "ok" : "NICHT uebernommen, steht auf " + ist));
-              id(schalt_ziel) = 0; id(pruefen) = false;
+              id(schalt_ziel) = 0; id(pruefen) = false; id(anlass_ms) = millis() | 1;
 
 select:
   - platform: template

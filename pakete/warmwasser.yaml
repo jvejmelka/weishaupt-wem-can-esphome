@@ -2,30 +2,34 @@
 # und der Warmwasserbetrieb des Kessels. Nur lesen. Braucht das Paket kessel.
 #   JSON MI03 entspricht auf dem Bus Knoten 1, Index JSON-OX + 0x500.
 
+globals:
+  - id: ww_erledigt
+    type: uint32_t
+    initial_value: '0'
+  - id: ww_jetzt_lesen
+    type: bool
+    initial_value: 'false'
+
 interval:
-  # Warmwasser-Einstellungen, alle 5 min (aendern sich nur beim Schalten)
-  - interval: 300s
+  # Warmwasser-Betriebsart und -Sollwerte liegen im WEM: gelesen nur bei Anlass (siehe
+  # Paket kessel: nach Start, bei geaenderten Statusbits, nach Schaltbefehlen).
+  - interval: 5s
     then:
+      - lambda: |-
+          id(ww_jetzt_lesen) = false;
+          if (id(anlass_ms) == 0 || id(anlass_ms) == id(ww_erledigt)) return;
+          if (millis() - id(anlass_ms) < 8000) return;
+          if (millis() - id(letzter_frame) > 30000) return;
+          id(ww_erledigt) = id(anlass_ms); id(ww_jetzt_lesen) = true;
       - if:
           condition:
-            lambda: 'return id(can_anfragen).state && millis() - id(letzter_frame) < 30000 && id(bus_seit) != 0 && millis() - id(bus_seit) > ${anlaufpause_min} * 60000UL;'
+            lambda: 'return id(ww_jetzt_lesen);'
           then:
-            - delay: 17s    # nicht gleichzeitig mit den Heizkreis-Abfragen
             - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: [0x40, 0x20, 0x2A, 0x02, 0, 0, 0, 0] }  # WW-Betriebsart
             - delay: 150ms
             - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: [0x40, 0x2C, 0x2A, 0x02, 0, 0, 0, 0] }  # WW-Soll aktuell
             - delay: 150ms
             - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: [0x40, 0x39, 0x2A, 0x02, 0, 0, 0, 0] }  # WW-Soll normal
-
-  # Schalter AUS: nur die Warmwasser-Betriebsart, alle 15 min (liegt im WEM)
-  - interval: 900s
-    then:
-      - if:
-          condition:
-            lambda: 'return !id(can_anfragen).state && millis() - id(letzter_frame) < 30000 && id(bus_seit) != 0 && millis() - id(bus_seit) > ${anlaufpause_min} * 60000UL;'
-          then:
-            - delay: 2s
-            - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: [0x40, 0x20, 0x2A, 0x02, 0, 0, 0, 0] }  # WW-Betriebsart
 
 canbus:
   - id: !extend my_can_bus
@@ -62,7 +66,8 @@ switch:
   - id: !extend can_anfragen
     on_turn_off:
       - lambda: |-
-          for (auto *s : {id(ww_soll_akt), id(ww_soll_normal)}) s->publish_state(NAN);
+          // Betriebsart und Sollwerte werden bei Anlass gelesen und bleiben deshalb gueltig
+          (void) 0;
 
 text_sensor:
   - platform: template
