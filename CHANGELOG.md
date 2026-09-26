@@ -1,6 +1,10 @@
 # Changelog – ESP-CAN-Brücke Weishaupt (WeAct CAN485, ESPHome)
 
 
+## v15 – 2026-09-27
+- **Schalter „Eigene CAN-Anfragen“** (Einstellungen, bleibt über Neustarts erhalten). Startzustand in der Hauptdatei über `can_anfragen_start`, Vorgabe **aus** (nur mithören). Aus = nur mithören: ausgewertet wird, was ohnehin auf dem Bus liegt (PDOs des Kessels, Antworten auf Fragen des WEM). Schalten von Heizkreis-Betriebsart und Warmwasser bleibt auch dann erlaubt, samt der einen Kontroll-Leseanfrage; ebenso der Lesebefehl von Hand.
+- Beim Abschalten werden alle Werte, die nur durch eigene Abfragen aktuell blieben, auf „unbekannt“ gesetzt – kein veralteter Wert, der aktuell aussieht. Fragt der WEM einen davon selbst ab, kommt er über das Mithören zurück.
+
 ## v14 – 2026-09-27
 - **Abfragetakt nach Weishaupt-Vorgabe**: kein Wert öfter als alle 40 s (kürzestes Intervall des Datenloggers im WEM-Portal; die Datenpunktliste des WEM-Modbus-Gateways nennt 30 s / 60 s / 10 min).
   Kessel: Temperatur, Abgas, Vorlauf, Leistung, Drehzahl, Brenner alle 40 s; Vorlauf-Soll, Volumenstrom, Druck alle 60 s.

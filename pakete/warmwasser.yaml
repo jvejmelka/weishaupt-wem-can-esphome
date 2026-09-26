@@ -8,7 +8,7 @@ interval:
     then:
       - if:
           condition:
-            lambda: 'return millis() - id(letzter_frame) < 30000 && id(bus_seit) != 0 && millis() - id(bus_seit) > ${anlaufpause_min} * 60000UL;'
+            lambda: 'return id(can_anfragen).state && millis() - id(letzter_frame) < 30000 && id(bus_seit) != 0 && millis() - id(bus_seit) > ${anlaufpause_min} * 60000UL;'
           then:
             - delay: 17s    # nicht gleichzeitig mit den Heizkreis-Abfragen
             - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: [0x40, 0x20, 0x2A, 0x02, 0, 0, 0, 0] }  # WW-Betriebsart
@@ -47,6 +47,13 @@ canbus:
                 if (idx == 0x2A2C) id(ww_soll_akt).publish_state(v * 0.1f);
                 else id(ww_soll_normal).publish_state(v * 0.1f);
               }
+
+switch:
+  - id: !extend can_anfragen
+    on_turn_off:
+      - lambda: |-
+          for (auto *s : {id(ww_betriebsart_code), id(ww_soll_akt), id(ww_soll_normal)}) s->publish_state(NAN);
+          id(ww_betriebsart).publish_state("unbekannt");
 
 text_sensor:
   - platform: template

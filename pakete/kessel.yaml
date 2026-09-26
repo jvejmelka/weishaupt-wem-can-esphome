@@ -15,12 +15,16 @@
 # Die Statusbits (0x274D) werden nicht abgefragt - der WEM sendet sie bei jeder
 # Aenderung selbst (PDO 0x1C1).
 #
+# Mit dem Schalter "Eigene CAN-Anfragen" lassen sich die Abfragen ganz abschalten.
 # Gesendet wird nur, wenn der Bus lebt (letzter Frame < 30 s), und erst ${anlaufpause_min} min,
 # nachdem der Bus wieder da ist (Board-Start oder Heizung war stromlos): Nach einem
 # Stromzyklus bekommt der WEM Ruhe, das Board hoert solange nur mit.
 
 substitutions:
   anlaufpause_min: "10"
+  # Startzustand des Schalters "Eigene CAN-Anfragen", wenn noch nichts gespeichert ist.
+  # RESTORE_DEFAULT_OFF = nur mithoeren (Vorgabe), RESTORE_DEFAULT_ON = eigene Leseanfragen.
+  can_anfragen_start: RESTORE_DEFAULT_OFF
 
 web_server:
   sorting_groups:
@@ -98,7 +102,7 @@ interval:
     then:
       - if:
           condition:
-            lambda: 'return millis() - id(letzter_frame) < 30000 && id(bus_seit) != 0 && millis() - id(bus_seit) > ${anlaufpause_min} * 60000UL;'
+            lambda: 'return id(can_anfragen).state && millis() - id(letzter_frame) < 30000 && id(bus_seit) != 0 && millis() - id(bus_seit) > ${anlaufpause_min} * 60000UL;'
           then:
             - canbus.send: { canbus_id: my_can_bus, can_id: 0x602, data: [0x40, 0x32, 0x25, 0x00, 0, 0, 0, 0] }  # Kesseltemperatur
             - delay: 150ms
@@ -116,7 +120,7 @@ interval:
     then:
       - if:
           condition:
-            lambda: 'return millis() - id(letzter_frame) < 30000 && id(bus_seit) != 0 && millis() - id(bus_seit) > ${anlaufpause_min} * 60000UL;'
+            lambda: 'return id(can_anfragen).state && millis() - id(letzter_frame) < 30000 && id(bus_seit) != 0 && millis() - id(bus_seit) > ${anlaufpause_min} * 60000UL;'
           then:
             - delay: 7s
             - canbus.send: { canbus_id: my_can_bus, can_id: 0x602, data: [0x40, 0x45, 0x25, 0x00, 0, 0, 0, 0] }  # Vorlauf Soll
@@ -133,7 +137,7 @@ interval:
     then:
       - if:
           condition:
-            lambda: 'return millis() - id(letzter_frame) < 30000 && id(bus_seit) != 0 && millis() - id(bus_seit) > ${anlaufpause_min} * 60000UL;'
+            lambda: 'return id(can_anfragen).state && millis() - id(letzter_frame) < 30000 && id(bus_seit) != 0 && millis() - id(bus_seit) > ${anlaufpause_min} * 60000UL;'
           then:
             - delay: 13s
             - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: [0x40, 0x33, 0x29, 0x02, 0, 0, 0, 0] }  # Heizkreis-Betriebsart
@@ -306,6 +310,7 @@ text_sensor:
     update_interval: 30s
     web_server: { sorting_group_id: g_diag, sorting_weight: 4 }
     lambda: |-
+      if (!id(can_anfragen).state) return {"aus - nur mithoeren (Schalter)"};
       if (id(bus_seit) == 0 || millis() - id(letzter_frame) >= 30000) return {"aus - Bus schweigt"};
       uint32_t pause = ${anlaufpause_min} * 60000UL, seit = millis() - id(bus_seit);
       if (seit <= pause) return {"Anlaufpause, noch " + to_string((pause - seit) / 60000 + 1) + " min nur mithoeren"};
@@ -402,6 +407,28 @@ button:
                   - lambda: 'id(wlan_ergebnis).publish_state("verbunden und gespeichert: " + id(wlan_neu_ssid).state);'
                 on_error:
                   - lambda: 'id(wlan_ergebnis).publish_state("keine Verbindung zu " + id(wlan_neu_ssid).state + " - bisheriges WLAN bleibt");'
+
+switch:
+  # Eigene CAN-Anfragen: AUS = das Board hoert nur mit und wertet aus, was ohnehin auf dem
+  # Bus liegt (Kessel-PDOs, Antworten auf Fragen des WEM). Schalten ueber den WEM bleibt
+  # erlaubt, samt der einen Kontroll-Leseanfrage danach; ebenso der Lesebefehl von Hand.
+  - platform: template
+    name: "Eigene CAN-Anfragen"
+    id: can_anfragen
+    optimistic: true
+    restore_mode: ${can_anfragen_start}
+    web_server: { sorting_group_id: g_einst, sorting_weight: 5 }
+    # Beim Abschalten: alles, was nur durch eigene Abfragen aktuell blieb, auf "unbekannt".
+    # Fragt der WEM einen Wert selbst ab, fuellt das Mithoeren ihn sofort wieder.
+    on_turn_off:
+      - lambda: |-
+          for (auto *s : {id(wem_kessel), id(wem_abgas), id(wem_vorlauf), id(wem_leistung), id(wem_drehzahl),
+                          id(wem_brenner), id(wem_vorlauf_soll), id(wem_volumenstrom), id(wem_druck),
+                          id(hk_vorlauf), id(wem_ww_vlsoll), id(hk_betriebsart_code), id(hk_raumsoll_akt)})
+            s->publish_state(NAN);
+          id(wem_brenner_text).publish_state("unbekannt");
+          id(hk_betriebsart).publish_state("unbekannt");
+          id(brenner_vorher) = -1;
 
 number:
   - platform: template

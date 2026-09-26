@@ -95,6 +95,9 @@ das WEM-Portal lässt für seinen Datenlogger höchstens alle 40 s je Wert abfra
 | WEM: Betriebsarten, Raumsoll, Warmwasser-Sollwerte | 5 min und nach jedem Schaltbefehl |
 | nach Board-Start oder Stromzyklus der Heizung | 10 min nur mithören |
 
+Mit dem Schalter **„Eigene CAN-Anfragen“** (Einstellungen) lassen sich die eigenen Abfragen ganz
+abschalten; das Board hört dann nur mit. Schalten über den WEM bleibt trotzdem möglich.
+
 ## Überwachung
 
 Der Sensor **„Letzter CAN-Frame vor"** (Sekunden) eignet sich für eine Warnung: bleibt er
