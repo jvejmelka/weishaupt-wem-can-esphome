@@ -1,6 +1,10 @@
 # Changelog – ESP-CAN-Brücke Weishaupt (WeAct CAN485, ESPHome)
 
 
+## v12 – 2026-09-27
+- **Vorlauf** (Kessel, 0x2536/00) wird jetzt selbst abgefragt – der WEM fragt es nie ab, deshalb blieb das Feld bisher leer. Deutung bei laufendem Brenner noch zu prüfen.
+- Schalten per MQTT (`cmd/heizkreis`, `cmd/warmwasser`) am echten Board getestet: Warteschlange, WEM, Bestätigung am Bus, Protokoll.
+
 ## v11 – 2026-09-27
 - **Warteschlange sichtbar**: eigenes Feld „Warteschlange" (Ziel, Wert, Quelle, ab wann der nächste Befehl frei ist) und Knopf „Warteschlange leeren". Höchstens zwei Einträge, einer je Ziel (Heizkreis vor Warmwasser); ein neuer Wunsch für dasselbe Ziel ersetzt den alten.
 
