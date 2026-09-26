@@ -100,6 +100,22 @@ Der Bus-Wächter startet das Board nach einstellbarer Zeit ohne Frame selbst neu
 Beispiele: Heizkreis-Betriebsart JSON `02 00 2533 02` = CAN Knoten 1 `0x2933/2`;
 Warmwasser-Betriebsart JSON `03 00 2520 02` (1 = Ein, 2 = Aus) = CAN Knoten 1 `0x2A20/2`.
 
+## Hardware
+
+**WeAct CAN485 DevBoard V1** – ESP32-D0WD-V3, 8 MB Flash, CAN-Transceiver mit 2,5 kV galvanischer
+Trennung, RS485, USB-C; umschaltbarer 120-Ω-Abschluss (hier **aus**).
+
+- Hersteller-Repository mit Schaltplan und Pinbelegung:
+  [WeActStudio/WeActStudio.CAN485DevBoardV1_ESP32](https://github.com/WeActStudio/WeActStudio.CAN485DevBoardV1_ESP32)
+- Pinbelegung auch bei Zephyr: [WeAct CAN485 DevBoard V1](https://docs.zephyrproject.org/latest/boards/weact/can485dbv1/doc/index.html)
+- Vorstellung mit Preisen: [CNX Software, 14.01.2026](https://www.cnx-software.com/2026/01/14/weact-can485-a-low-cost-esp32-board-with-can-bus-and-rs485-interfaces/)
+- **Kaufen:** AliExpress (WeAct-Shop, Link aus dem CNX-Artikel): https://a.aliexpress.com/_c4TXgZeJ –
+  rund 9–17 $ plus Versand, je nach Land. Bei Amazon war das Board beim Schreiben nicht zu finden.
+- Stromversorgung im Betrieb: beliebiges USB-Netzteil ab 1 A.
+
+Alternative mit Einzelteilen (Aufbau von MenkeC): ESP32-C3 SuperMini plus Transceiver SN65HVD230 –
+billiger, aber **ohne** galvanische Trennung.
+
 ## Quellen – was bei der Entwicklung geholfen hat
 
 - [MenkeC/Weishaupt-C3supermini](https://github.com/MenkeC/Weishaupt-C3supermini) – ESPHome am
@@ -118,6 +134,17 @@ Warmwasser-Betriebsart JSON `03 00 2520 02` (1 = Ein, 2 = Aus) = CAN Knoten 1 `0
   - [#13](https://github.com/kraiz/hassio-weishaupt/issues/13) – lokale JSON-Schnittstelle erst
     nutzbar, wenn das WEM-Portal aus ist
   - [#9](https://github.com/kraiz/hassio-weishaupt/issues/9) – zwei Clients gleichzeitig führen zur Sperre
+- **Weishaupt-Unterlagen:**
+  - [Handbuch WEM-Modbus TCP (Löbbeshop, PDF)](https://www.loebbeshop.de/media/67944/file/static/pdf/weishaupt/manual-wem-modbustcp.pdf) –
+    Datenpunktliste mit Aktualisierungsklassen (30 s / 60 s / 10 min); zeigt, dass Weishaupt den
+    WEM selbst regelmäßig abfragt, und dass Gateway und WEM-Portal sich ausschließen.
+  - [Montage- und Betriebsanleitung WTC-GW 15–32-B (PDF)](https://www.intec-heizung.de/media/pdf/9f/c7/72/Weishaupt-Thermo-Condens-WTC-GW_15-32-B-Montage-u-Betriebsanleitung.pdf) –
+    Parameter 10.8.1 (JSON-Schnittstelle), Werkszugang des WEM, Klemme H/L/−/+.
+  - [WEM-Portal-FAQ (PDF)](https://www.wemportal.com/Web/Documents/FAQ/FAQ.de.pdf?lang=de)
+- Weitere Projekte und Diskussionen:
+  - [Varitras/weishaupt_modbus](https://github.com/Varitras/weishaupt_modbus) – Home Assistant über das WEM-Modbus-Gateway
+  - [Home-Assistant-Forum: Weishaupt WTC, CAPI VG, CanApiJson](https://community.home-assistant.io/t/weishaupt-wtc-weishaupt-capi-vg-canapijson/997400) – Aufbau des VG-Felds (CM MI MX OX OS VS VA)
+  - [geronet1/wem-python Issue #1](https://github.com/geronet1/wem-python/issues/1)
 - ESPHome-Dokumentation: [CAN-Bus / esp32_can](https://esphome.io/components/canbus/esp32/),
   [Pakete](https://esphome.io/components/packages/),
   [WLAN inkl. `wifi.configure`](https://esphome.io/components/wifi/),
