@@ -18,7 +18,7 @@
 substitutions:
   geraet: weact-can485-weishaupt       # Geraetename = MQTT-Praefix
   anzeigename: Weishaupt WTC-GW 15-B
-  firmware: "v13 vom 27.09.2026"
+  firmware: "v14 vom 27.09.2026"
 
 packages:
   kessel: !include pakete/kessel.yaml
@@ -34,7 +34,7 @@ esphome:
   friendly_name: ${anzeigename}
   project:
     name: "jvejmelka.weishaupt-wem-can"
-    version: "13"
+    version: "14"
 
 esp32:
   board: esp32dev

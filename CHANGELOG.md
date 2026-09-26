@@ -1,6 +1,14 @@
 # Changelog – ESP-CAN-Brücke Weishaupt (WeAct CAN485, ESPHome)
 
 
+## v14 – 2026-09-27
+- **Abfragetakt nach Weishaupt-Vorgabe**: kein Wert öfter als alle 40 s (kürzestes Intervall des Datenloggers im WEM-Portal; die Datenpunktliste des WEM-Modbus-Gateways nennt 30 s / 60 s / 10 min).
+  Kessel: Temperatur, Abgas, Vorlauf, Leistung, Drehzahl, Brenner alle 40 s; Vorlauf-Soll, Volumenstrom, Druck alle 60 s.
+  WEM: Vorlauf Heizkreis, Vorlaufsoll-Anforderung alle 60 s; Heizkreis- und Warmwasser-Betriebsart, Raumsoll, WW-Sollwerte alle 5 min (nach jedem Schaltbefehl wird gezielt nachgelesen).
+- Statusbits 0x274D werden nicht mehr abgefragt, sie kommen als PDO 0x1C1 von selbst.
+- **Anlaufpause**: nach Board-Start oder wenn der Bus wieder da ist (Heizung war stromlos), 10 min nur mithören. Anzeige „Eigene CAN-Anfragen“ unter Diagnose.
+- Last auf den WEM (Knoten 1): von 12 auf etwa 2,6 Anfragen pro Minute.
+
 ## v13 – 2026-09-27
 - **WEM-Lebenszeichen entfernt** – Automatik alle 6 h, Knopf „jetzt prüfen“ und Anzeige. Jede zusätzliche JSON-Anfrage ist ein Risiko: am 27.09. fiel die JSON-Schnittstelle des WEM nach vier Schaltbefehlen und einem Lebenszeichen binnen zehn Minuten aus (CM=05 auf alle Register).
 - **Zähler für WEM-JSON-Fehler und CM=05 entfernt.** CM=05 steht weiterhin im Ergebnis des Schaltbefehls.

@@ -3,13 +3,14 @@
 #   JSON MI03 entspricht auf dem Bus Knoten 1, Index JSON-OX + 0x500.
 
 interval:
-  - interval: 60s
+  # Warmwasser-Einstellungen, alle 5 min (aendern sich nur beim Schalten)
+  - interval: 300s
     then:
       - if:
           condition:
-            lambda: 'return millis() - id(letzter_frame) < 30000;'
+            lambda: 'return millis() - id(letzter_frame) < 30000 && id(bus_seit) != 0 && millis() - id(bus_seit) > ${anlaufpause_min} * 60000UL;'
           then:
-            - delay: 1s     # nicht gleichzeitig mit den Heizkreis-Abfragen
+            - delay: 17s    # nicht gleichzeitig mit den Heizkreis-Abfragen
             - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: [0x40, 0x20, 0x2A, 0x02, 0, 0, 0, 0] }  # WW-Betriebsart
             - delay: 150ms
             - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: [0x40, 0x2C, 0x2A, 0x02, 0, 0, 0, 0] }  # WW-Soll aktuell

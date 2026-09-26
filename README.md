@@ -83,6 +83,18 @@ bleibt das bisherige WLAN. Letzter Rückweg ist der Notfall-Hotspot mit Captive 
 
 Codes Heizkreis: 1 Standby, 2–4 Zeitprogramm 1–3, 5 Sommer, 6 Komfort, 7 Normal, 8 Absenk.
 
+## Abfragetakt
+
+Mithören ist passiv. Eigene Leseanfragen stellt das Board nach Weishaupts Vorgabe –
+das WEM-Portal lässt für seinen Datenlogger höchstens alle 40 s je Wert abfragen:
+
+| Werte | Takt |
+|---|---|
+| Kessel: Temperatur, Abgas, Vorlauf, Leistung, Drehzahl, Brenner | 40 s |
+| Kessel: Vorlauf-Soll, Volumenstrom, Druck; WEM: Vorlauf Heizkreis, Vorlaufsoll-Anforderung | 60 s |
+| WEM: Betriebsarten, Raumsoll, Warmwasser-Sollwerte | 5 min und nach jedem Schaltbefehl |
+| nach Board-Start oder Stromzyklus der Heizung | 10 min nur mithören |
+
 ## Überwachung
 
 Der Sensor **„Letzter CAN-Frame vor"** (Sekunden) eignet sich für eine Warnung: bleibt er
