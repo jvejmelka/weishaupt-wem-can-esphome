@@ -8,15 +8,12 @@
 # nur zehn Plaetzen bis zum naechsten Neustart der Heizung. Deshalb:
 #   - hoechstens ein Befehl pro Minute (Warteschlange: der NEUESTE Wunsch je Ziel gewinnt)
 #   - geschrieben wird nur MI 01/02/03 (Systemgeraet), nie der Kessel
-#   - ein Lebenszeichen alle ${wem_lebenszeichen_stunden} h (+/- 30 min Zufall), 0 = aus
-#   - jede CM=05-Antwort wird gezaehlt und gemeldet
+#   - eine CM=05-Antwort wird im Ergebnis gemeldet
+#   - der WEM wird nie von selbst abgefragt, nur wenn jemand schaltet
 #
 # Schalten per MQTT (braucht Paket mqtt):
 #   ${geraet}/cmd/heizkreis   "1".."8" oder der Name, z.B. "Zeitprogramm 1", "Standby"
 #   ${geraet}/schaltprotokoll (retained) die letzten 10 Befehle, einer je Zeile
-
-substitutions:
-  wem_lebenszeichen_stunden: "6"
 
 web_server:
   sorting_groups:
@@ -35,7 +32,7 @@ globals:
   - id: letzter_befehl          # millis() des letzten WEM-Aufrufs (Sperrminute)
     type: uint32_t
     initial_value: '0'
-  - id: schalt_ziel             # laufender Aufruf: 0 keiner, 1 Heizkreis, 2 Warmwasser, 3 Schreibbefehl, 4 Lebenszeichen
+  - id: schalt_ziel             # laufender Aufruf: 0 keiner, 1 Heizkreis, 2 Warmwasser, 3 Schreibbefehl
     type: int
     initial_value: '0'
   - id: schalt_wert
@@ -61,22 +58,8 @@ globals:
     initial_value: '0'
   - id: wunsch_ww_quelle
     type: std::string
-  - id: wem_fehler
-    type: int
-    restore_value: yes
-    initial_value: '0'
-  - id: wem_cm05
-    type: int
-    restore_value: yes
-    initial_value: '0'
   - id: protokoll
     type: std::vector<std::string>
-  - id: lz_faellig
-    type: uint32_t
-    initial_value: '0'
-  - id: lz_jetzt
-    type: bool
-    initial_value: 'false'
   - id: letzter_gesehen         # fuer die Anzeige: wann die Sperrminute endet
     type: uint32_t
     initial_value: '0'
@@ -204,8 +187,6 @@ script:
                   std::string rvg = p == std::string::npos ? std::string("") : body.substr(p + 6, body.find('"', p + 6) - p - 6);
                   std::string cm = rvg.size() >= 2 ? rvg.substr(0, 2) : std::string("--");
                   bool ok = response->status_code == 200 && (cm == "04" || cm == "02");
-                  if (cm == "05") { id(wem_cm05) += 1; id(wem_cm05_sensor).publish_state(id(wem_cm05)); }
-                  if (!ok) { id(wem_fehler) += 1; id(wem_fehler_sensor).publish_state(id(wem_fehler)); }
                   std::string zeit = id(uhr).now().is_valid() ? id(uhr).now().strftime("%H:%M ") : std::string("");
                   int ziel = id(schalt_ziel);
                   if (ziel == 3) {
@@ -214,21 +195,6 @@ script:
                                     "unklare Antwort, HTTP " + to_string(response->status_code) + (rvg.empty() ? "" : ", VG " + rvg);
                     id(schreib_antwort).publish_state(t);
                     id(protokoll_eintrag)->execute("Schreibbefehl " + id(schalt_vg) + ": " + t);
-                    id(schalt_ziel) = 0;
-                  } else if (ziel == 4) {
-                    std::string t;
-                    if (cm == "02" && rvg.size() >= 2) {
-                      int w = strtol(rvg.substr(rvg.size() - 2).c_str(), nullptr, 16);
-                      float bus = id(hk_betriebsart_code).state;
-                      t = zeit + "OK - WEM meldet Heizkreis-Betriebsart " + to_string(w) +
-                          (isnan(bus) ? std::string("") : (w == (int) bus ? ", Bus stimmt ueberein" : ", Bus meldet " + to_string((int) bus)));
-                    } else if (cm == "05") {
-                      t = zeit + "CM=05 - der WEM lehnt ab (Uebersetzer gesperrt? Heizung stromlos machen)";
-                    } else {
-                      t = zeit + "keine gueltige Antwort (HTTP " + to_string(response->status_code) + ")";
-                    }
-                    id(lz_status).publish_state(t);
-                    if (!ok) id(protokoll_eintrag)->execute("Lebenszeichen WEM: " + t);
                     id(schalt_ziel) = 0;
                   } else if (ziel == 1 || ziel == 2) {
                     if (cm == "05") {
@@ -243,16 +209,11 @@ script:
           on_error:
             then:
               - lambda: |-
-                  id(wem_fehler) += 1; id(wem_fehler_sensor).publish_state(id(wem_fehler));
                   std::string zeit = id(uhr).now().is_valid() ? id(uhr).now().strftime("%H:%M ") : std::string("");
                   int ziel = id(schalt_ziel);
                   if (ziel == 3) {
                     id(schreib_antwort).publish_state("WEM nicht erreichbar");
                     id(protokoll_eintrag)->execute("Schreibbefehl " + id(schalt_vg) + ": WEM nicht erreichbar");
-                    id(schalt_ziel) = 0;
-                  } else if (ziel == 4) {
-                    id(lz_status).publish_state(zeit + "WEM nicht erreichbar");
-                    id(protokoll_eintrag)->execute(std::string("Lebenszeichen WEM: nicht erreichbar"));
                     id(schalt_ziel) = 0;
                   } else if (ziel == 1 || ziel == 2) {
                     id(schalt_status).publish_state("WEM nicht erreichbar, pruefe trotzdem am Bus ...");
@@ -277,31 +238,6 @@ interval:
   - interval: 1s
     then:
       - script.execute: befehl_pruefen
-  # Lebenszeichen: eine harmlose Leseanfrage (Heizkreis-Betriebsart, am WEM belegt)
-  # alle N Stunden +/- 30 min Zufall - nie in einem festen Raster.
-  - interval: 60s
-    then:
-      - lambda: |-
-          id(lz_jetzt) = false;
-          const uint32_t std_ms = ${wem_lebenszeichen_stunden} * 3600000UL;
-          if (std_ms == 0) return;
-          uint32_t jetzt = millis();
-          uint32_t abstand = std_ms - 1800000UL + (random_uint32() % 3600000UL);
-          if (id(lz_faellig) == 0) { id(lz_faellig) = (jetzt + abstand) | 1; return; }
-          if ((int32_t)(jetzt - id(lz_faellig)) < 0) return;
-          if (id(wem_senden).is_running() || id(wunsch_hk) || id(wunsch_ww)) return;
-          if (id(letzter_befehl) != 0 && jetzt - id(letzter_befehl) < 60000) return;
-          id(lz_faellig) = (jetzt + abstand) | 1;
-          id(schalt_ziel) = 4; id(letzter_befehl) = jetzt | 1;
-          id(lz_jetzt) = true;
-      - if:
-          condition:
-            lambda: 'return id(lz_jetzt);'
-          then:
-            - script.execute:
-                id: wem_senden
-                vg: "010200253302000100"
-
 canbus:
   - id: !extend my_can_bus
     on_frame:
@@ -385,14 +321,6 @@ button:
           id(wunsch_hk) = 0; id(wunsch_ww) = 0;
           id(schalt_status).publish_state("Warteschlange geleert");
           id(protokoll_eintrag)->execute(std::string("Warteschlange von Hand geleert"));
-  - platform: template
-    name: "WEM-Lebenszeichen jetzt pruefen"
-    web_server: { sorting_group_id: g_schalten, sorting_weight: 8 }
-    on_press:
-      - lambda: |-
-          id(lz_faellig) = millis() | 1;
-          id(lz_status).publish_state("vorgemerkt, spaetestens in 1 min (Sperrminute beachtet)");
-
 text:
   - platform: template
     name: "Heizung: IP-Adresse"
@@ -441,28 +369,7 @@ text_sensor:
     id: schalt_protokoll
     web_server: { sorting_group_id: g_schalten, sorting_weight: 6 }
   - platform: template
-    name: "WEM-Lebenszeichen"
-    id: lz_status
-    web_server: { sorting_group_id: g_schalten, sorting_weight: 7 }
-  - platform: template
     name: "Schreibbefehl Antwort"
     id: schreib_antwort
     web_server: { sorting_group_id: g_schreiben, sorting_weight: 3 }
 
-sensor:
-  - platform: template
-    name: "WEM-JSON Fehler (Zaehler)"
-    id: wem_fehler_sensor
-    accuracy_decimals: 0
-    state_class: total_increasing
-    update_interval: 600s
-    lambda: 'return id(wem_fehler);'
-    web_server: { sorting_group_id: g_schalten, sorting_weight: 9 }
-  - platform: template
-    name: "WEM CM=05 Ablehnungen (Zaehler)"
-    id: wem_cm05_sensor
-    accuracy_decimals: 0
-    state_class: total_increasing
-    update_interval: 600s
-    lambda: 'return id(wem_cm05);'
-    web_server: { sorting_group_id: g_schalten, sorting_weight: 10 }

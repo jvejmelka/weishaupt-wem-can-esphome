@@ -12,8 +12,8 @@ das am CAN-Bus einer Weishaupt-Brennwertheizung mit **WEM-Systemgerät** (z. B. 
   (höchstens einer je Ziel, der neueste Wunsch gewinnt) und danach gesendet – sichtbar im Feld
   „Warteschlange“, mit Knopf zum Leeren.
 - **Schaltprotokoll** der letzten zehn Befehle mit Quelle und Ergebnis am Bus.
-- **Lebenszeichen des WEM** alle sechs Stunden (± 30 min Zufall) und Zähler für
-  Fehler und CM=05-Ablehnungen – ein toter WEM fällt auf, bevor man schalten will.
+- **Der WEM wird nie von selbst abgefragt** – nur dann, wenn jemand schaltet. Jede zusätzliche
+  JSON-Anfrage ist ein Risiko für die empfindliche Schnittstelle.
 - **Weboberfläche** mit Passwort, Lesefeld für beliebige Objekte, Schreibfeld für Experten,
   WLAN-Wechsel ohne neues Flashen.
 - **MQTT** für Messwerte, Lese-, Scan- und Schaltbefehle; wahlweise native Home-Assistant-API.
@@ -51,7 +51,7 @@ Nicht benötigte Zeilen unter `packages:` auskommentieren.
 | `warmwasser.yaml` | Warmwasserwerte (nur mit Speicher am WTC) | nein |
 | `mqtt.yaml` | MQTT-Broker, `cmd/lesen`, `cmd/scan`, `cmd/stop`, Rohmitschnitt | nein |
 | `homeassistant-api.yaml` | native ESPHome-API (verschlüsselt) | nein |
-| `wem-schalten.yaml` | Heizkreis schalten, Warteschlange, Lebenszeichen, Protokoll | nein |
+| `wem-schalten.yaml` | Heizkreis schalten, Warteschlange, Protokoll | nein |
 | `warmwasser-schalten.yaml` | Warmwasser Ein/Aus (braucht `wem-schalten` und `warmwasser`) | nein |
 | `feste-ip.yaml` | feste IP statt DHCP | nein |
 
@@ -100,6 +100,39 @@ Der Bus-Wächter startet das Board nach einstellbarer Zeit ohne Frame selbst neu
 
 Beispiele: Heizkreis-Betriebsart JSON `02 00 2533 02` = CAN Knoten 1 `0x2933/2`;
 Warmwasser-Betriebsart JSON `03 00 2520 02` (1 = Ein, 2 = Aus) = CAN Knoten 1 `0x2A20/2`.
+
+## Was belegt ist und was nicht
+
+Die Zuordnung der Objekte stammt teils aus fremden Vorlagen. Hier steht ehrlich, was an einer
+echten Anlage (WTC-GW 15-B) gegengeprüft ist.
+
+| Wert | Objekt | Stand |
+|---|---|---|
+| Außentemperatur | PDO 0x201 | **belegt** – Kesseldisplay und Wetterdienst |
+| Warmwasser | PDO 0x241 | **belegt** – Kesseldisplay |
+| Anlagendruck | 0x2714/2 | **belegt** – Kesseldisplay |
+| Kesseltemperatur | 0x2532/0 | **belegt** – Kesseldisplay |
+| Brenner, Kesselstatus | 0x2541/0, PDO 0x182 | **belegt** – Display „Heizkreise inaktiv“ |
+| Heizkreis-Betriebsart | Knoten 1 0x2933/2 | **belegt** für Standby, Zeitprogramm 1–3, Sommer. **Komfort, Normal, Absenk nie beobachtet** |
+| Warmwasser Ein/Aus | Knoten 1 0x2A20/2 | **belegt** – geschaltet und am Display gesehen |
+| Abgastemperatur | 0x2537/0 | **unbestätigt** – in manchen Vorlagen „Rücklauf“ genannt |
+| Vorlauf Soll | 0x2545/0 | **unbestätigt** |
+| Vorlauf | 0x2536/0 | **unbestätigt** – antwortet, Deutung erst bei laufendem Brenner prüfbar (Vorlauf muss dann über Kessel liegen) |
+| Leistung, Drehzahl, Volumenstrom | 0x2534, 0x2540, 0x2713/2 | aus der Vorlage übernommen, bei laufendem Brenner prüfen |
+| Wärmemengen Vortag | 0x2726–0x2728/2 | kommen nur, wenn der WEM sie selbst abfragt |
+
+Rückmeldungen von anderen Anlagen sind willkommen.
+
+## Sicherheit
+
+- Die Weboberfläche nutzt Basic Auth über **unverschlüsseltes HTTP** – nur im LAN betreiben,
+  von außen höchstens hinter einem Reverse Proxy mit TLS und eigener Anmeldung.
+- **Wer auf `<gerät>/cmd/...` schreiben darf, kann die Heizung schalten.** Am Broker Zugriffsregeln
+  (ACL) setzen: Schreibrecht auf `cmd/#` nur für Konten, die schalten sollen.
+- Die WEM-Zugangsdaten sind die Werkseinstellung von Weishaupt und laut Anleitung nicht änderbar.
+  Die WEM-Schnittstelle gehört deshalb nicht ins Internet.
+- Das Schaltprotokoll liegt im Arbeitsspeicher und ist nach einem Neustart leer
+  (retained im MQTT-Topic `schaltprotokoll` bleibt der letzte Stand).
 
 ## Hardware
 
