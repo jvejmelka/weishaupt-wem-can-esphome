@@ -147,8 +147,8 @@ Anlass (nach dem Start, bei geänderten Statusbits, nach Schaltbefehlen).
 - **Liest nur MQTT** vom Board (`<gerät>/sensor/+/state`, retained) und spricht **nie mit dem WEM**.
 - **Schalten** geht als MQTT-Befehl an das Board; das Board setzt ihn mit Sperrminute,
   Warteschlange und Kontrolle am Bus um. Die App zeigt „vorgemerkt“ und danach das Ergebnis.
-- Anmeldung mit Benutzer und Passwort aus der `.env`; die Sitzungen liegen in `data/`
-  und überleben einen Neubau.
+- Anmeldung mit Benutzer und Passwort aus der `.env` – **ohne beide startet die App nicht**.
+  Die Sitzungen liegen in `data/` und überleben einen Neubau.
 - Braucht Board-Firmware **ab v20** (Brennerphase). Ältere Firmware: der Brenner erscheint nur als An/Aus.
 
 ### Einrichten

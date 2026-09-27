@@ -22,6 +22,11 @@ app.use(express.json());
 const PORT = Number(process.env.PORT || 3000);
 const APP_USERNAME = process.env.APP_USERNAME || '';
 const APP_PASSWORD = process.env.APP_PASSWORD || '';
+// Ohne Login startet die App nicht - sonst stuende ein offener Heizungsschalter im Netz.
+if (!APP_USERNAME || !APP_PASSWORD) {
+  console.error('FEHLER: APP_USERNAME und APP_PASSWORD muessen gesetzt sein (.env). Die App startet ohne Login nicht.');
+  process.exit(1);
+}
 const MQTT_URL = process.env.MQTT_URL || 'mqtt://localhost:1883';
 const MQTT_USER = process.env.MQTT_USER || '';
 const MQTT_PASS = process.env.MQTT_PASS || '';
@@ -98,7 +103,6 @@ function generateToken() {
 }
 function authMiddleware(req, res, next) {
   if (req.path === '/api/login') return next();
-  if (!APP_USERNAME || !APP_PASSWORD) return next();
   const token = req.headers['x-app-token'] || '';
   if (!sessionTokens.has(token)) return res.status(401).json({ error: 'Nicht autorisiert' });
   next();
@@ -109,7 +113,7 @@ app.use(authMiddleware);
 
 app.post('/api/login', (req, res) => {
   const { user, pass } = req.body || {};
-  if (!APP_USERNAME || !APP_PASSWORD || (user === APP_USERNAME && pass === APP_PASSWORD)) {
+  if (user === APP_USERNAME && pass === APP_PASSWORD) {
     const token = generateToken();
     sessionTokens.add(token); tokensSichern();
     return res.json({ token });
