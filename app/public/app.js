@@ -1,6 +1,5 @@
 // ── Token-Auth ────────────────────────────────────────────────
 const TOKEN_KEY  = 'wem_token';
-const DETAIL_KEY = 'wem_details_open';
 
 function getToken() { return localStorage.getItem(TOKEN_KEY) || ''; }
 function saveToken(t) { localStorage.setItem(TOKEN_KEY, t); }
@@ -65,27 +64,7 @@ document.getElementById('installBtn').addEventListener('click', async () => {
   document.getElementById('installBtn').classList.add('hidden');
 });
 
-// ── Details aufklappen ────────────────────────────────────────
-function getDetailsOpen() { return localStorage.getItem(DETAIL_KEY) === 'true'; }
-function setDetailsOpen(v) { localStorage.setItem(DETAIL_KEY, v); }
-
-function applyDetails(open) {
-  const section = document.getElementById('detailsSection');
-  const toggle  = document.getElementById('detailsToggle');
-  if (open) {
-    section.classList.remove('collapsed');
-    toggle.textContent = '▲ Details';
-  } else {
-    section.classList.add('collapsed');
-    toggle.textContent = '▼ Details';
-  }
-}
-
-document.getElementById('detailsToggle').addEventListener('click', () => {
-  const next = !getDetailsOpen();
-  setDetailsOpen(next);
-  applyDetails(next);
-});
+// Details werden immer angezeigt (seit 27.09.2026, der Aufklapp-Knopf ist entfallen)
 
 // ── Progress Bar ──────────────────────────────────────────────
 const POLL_MS = 30000;
@@ -252,7 +231,6 @@ document.addEventListener('visibilitychange', () => {
 });
 
 async function init() {
-  applyDetails(getDetailsOpen());
   currentModeCode = null;
   try { await loadMeta(); } catch (e) { console.warn('loadMeta failed:', e); }
   await refreshStatus();
