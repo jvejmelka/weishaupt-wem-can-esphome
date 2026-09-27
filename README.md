@@ -263,6 +263,11 @@ billiger, aber **ohne** galvanische Trennung.
   [HTTP Request](https://esphome.io/components/http_request/),
   [MQTT](https://esphome.io/components/mqtt/), [Web Server](https://esphome.io/components/web_server/).
 
+## Kontakt
+
+Fragen, Fehlermeldungen und Rückmeldungen von anderen Anlagen bitte als
+[GitHub-Issue](https://github.com/jvejmelka/weishaupt-wem-can-esphome/issues).
+
 ## Herkunft
 
 Ausgangspunkt war [MenkeC/Weishaupt-C3supermini](https://github.com/MenkeC/Weishaupt-C3supermini).
