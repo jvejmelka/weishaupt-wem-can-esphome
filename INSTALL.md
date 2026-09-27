@@ -214,6 +214,17 @@ cp .env.example .env
 | `MQTT_GERAET` | wie `geraet` in der Firmware |
 | `APP_USERNAME`, `APP_PASSWORD` | Anmeldung in der App – **ohne beide startet sie nicht** |
 
+**Zusatzanzeigen (optional, Paket `zusatz`, ab Firmware v24):** Raumtemperaturen oder „Wärmepumpe
+läuft“ aus anderen MQTT-Geräten. Liste als JSON an das Board schicken (Vorlage
+`zusatz.json.example`, Topics anpassen):
+
+```
+mosquitto_pub -h <broker> -u <verwaltungskonto> -P <pw> -r -f zusatz.json -t <gerät>/cmd/zusatz
+```
+
+**ACL:** das App-Konto braucht für **jedes** eingetragene Topic eine eigene Zeile
+`topic read <topic>` – sonst bleibt der Eintrag auf „--“. Nur Lesen, kein Schreiben.
+
 ```
 docker compose up -d --build
 ```

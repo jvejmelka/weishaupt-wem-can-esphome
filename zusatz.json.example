@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "_hinweis": "Retained senden: mosquitto_pub -r -f zusatz.json -t <geraet>/cmd/zusatz  (Topics anpassen; das App-Konto braucht Leserecht darauf)",
+  "eintraege": [
+    { "name": "Wohnzimmer", "topic": "sensoren/wohnzimmer/temperatur", "feld": "tC", "einheit": "°C" },
+    { "name": "Büro", "topic": "sensoren/buero/temperatur", "einheit": "°C" },
+    { "name": "Wärmepumpe", "topic": "sensoren/waermepumpe/leistung", "feld": "apower", "einheit": "W", "art": "laeuft", "schwelle": 50 }
+  ]
+}

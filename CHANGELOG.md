@@ -1,6 +1,12 @@
 # Changelog – ESP-CAN-Brücke Weishaupt (WeAct CAN485, ESPHome)
 
 
+## v24 – 2026-09-27 (Zusatzanzeigen)
+- **Neues Paket `zusatz.yaml` (optional, braucht `mqtt`):** Liste von bis zu 6 Zusatzanzeigen für die Handy-App – Name, MQTT-Topic, Feld (bei JSON, auch verschachtelt `a.b`; leer = Payload ist die Zahl), Einheit, Art `wert` oder `laeuft` (mit Schwelle).
+- **Das Board liest diese Werte nicht selbst** und erzeugt keinen zusätzlichen Busverkehr oder Broker-Verkehr außer der Konfiguration: es speichert die Liste dauerhaft und veröffentlicht sie retained unter `<gerät>/app/zusatz` (beim Start und bei jeder Änderung).
+- Einstellen per MQTT `<gerät>/cmd/zusatz` (JSON `{"version":N,"eintraege":[…]}`, Ungültiges mit Meldung abgelehnt; dieselbe retained Datei wird dank Prüfsumme nicht erneut angewandt) oder in der Weboberfläche (Gruppe „Zusatzanzeigen (Handy-App)“, Feld „Zusatz-Befehl“: `NAME topic=… [feld=…] [einheit=…] [art=wert|laeuft] [schwelle=…]`, `NAME loeschen`, `alle loeschen`). Vorlage `zusatz.json.example`.
+- **Handy-App:** abonniert die Liste und die genannten Topics, zeigt unter dem Kessel eine kompakte Zeile („Wohnzimmer 21,3 °C · WP ◉ läuft“); Werte älter als 10 min als „--“, leere Liste = keine Zeile. `/api/status` liefert `zusatz: [{name, wert, einheit, art, laeuft, alter_s}]`. Das App-Konto braucht Leserecht auf jedes eingetragene Topic.
+
 ## Handy-App – 2026-09-27 (Ladung, Brenner-Zweck, Schaltfortschritt, ohne Scrollen)
 - Warmwasser: **„Ladung: Gas“** (orange pulsierend wie der Brenner, Kessel im Warmwasserbetrieb = Kesselstatus 15) bzw. „Ladung: aus“ ersetzt „Zustand: lädt gerade / keine Ladung“.
 - Kessel: hinter der Brennerphase der **Zweck** aus dem Kesselstatus („· Heizung“, „· Warmwasser“, „(Heizung wartet)“ bei Warmwasserbetrieb mit gleichzeitiger Heizanforderung); Kaminfeger und Wartung in Rot.

@@ -16,6 +16,7 @@ am selben Speicher, PV mit Hauskraftwerk.
 | [Einzelraumregelung mit Heizkörperventilen](#5-einzelraumregelung-mit-funk-heizkörperventilen) | mittel bis hoch | gering | eigenständig, ergänzt die Heizung |
 | [Anlage prüfen: ist alles richtig eingestellt?](#6-anlage-prüfen-ist-alles-richtig-eingestellt) | gering | keins | lohnt sich zuerst |
 | [Eigene Lese-Regeln in Home Assistant oder Node-RED](#7-eigene-lese-regeln-in-home-assistant-oder-node-red) | gering | gering | geht heute schon |
+| [Speichertemperatur oben](#8-speichertemperatur-oben) | gering bis mittel | gering | nur Näherungen, ohne Eingriff in den Speicher |
 
 Zuerst aber, womit das alles steht und fällt: den Messdaten.
 
@@ -192,3 +193,21 @@ einmal vom Bus (höchstens alle 10 s angenommen, nur Leseanfragen).
 Beispiele: nach dem Heimkommen einmal lesen; wenn die Vorlauftemperatur des Heizkreises steigt,
 obwohl Standby gemeldet ist; einmal morgens. Wichtig ist nur, dass die Automation selbst drosselt –
 `cmd/status` ist für Einzelwünsche gebaut, nicht für ein Abfrageraster.
+
+## 8. Speichertemperatur oben
+
+Am Bus gibt es nur den Warmwasserfühler des Gasgeräts, und der sitzt in der
+[Beispielanlage](ANLAGE.md) **unten** im Speicher. Oben misst nur die Trinkwasser-Wärmepumpe – sie hat
+aber nur ein Display, keine Datenschnittstelle. Wie man trotzdem an „oben“ kommt, ohne den Speicher
+zu öffnen:
+
+| Weg | Wie | Haken |
+|---|---|---|
+| **Fühler auf der Warmwasser-Austrittsleitung** | Anlegefühler (z. B. DS18B20 am Board oder an einem Shelly mit Fühlereingang) direkt am Speicheraustritt auf das Rohr, mit Wärmeleitpaste, **unter** die Rohrdämmung | misst Rohr-, nicht Wassertemperatur. Direkt am Austritt folgt das Rohr dem Speicher recht gut; weiter weg kühlt es ohne Zapfung ab |
+| **Fühler unter die Speicherdämmung** | wo sich die Verkleidung ohne Werkzeug öffnen lässt, einen flachen Anlegefühler auf die Speicherwand oben | nur wenn Verkleidung und Dämmung das zulassen; ein Funk-Sensor außen auf der Dämmung misst nur die Raumluft |
+| **Zweiter Fühler in der vorhandenen Tauchhülse** | neben den Fühler der Wärmepumpe in dieselbe Hülse schieben | nur wenn Platz ist, braucht Öffnen der Verkleidung – Fachbetrieb |
+| **Display abfotografieren** | kleine Kamera vor dem Display, Zahl per Texterkennung auslesen | aufwendig, lichtempfindlich, eher Spielerei |
+| **Rechnen statt messen** | aus unten-Temperatur, Wärmepumpen-Leistung (Steckdose) und Laufzeit schätzen | nur eine grobe Näherung |
+
+Für die meisten Fragen reicht die Temperatur unten zusammen mit „Wärmepumpe läuft“: unten kalt heißt,
+dass viel gezapft wurde – und genau dann springt das Gas an.

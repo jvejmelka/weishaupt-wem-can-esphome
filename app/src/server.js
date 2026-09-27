@@ -6,6 +6,9 @@
 //              mit Sperrminute, Warteschlange und Kontrolle am Bus um.
 //   Status:    MQTT-Befehl cmd/status - das Board liest die Betriebsarten einmal vom Bus
 //              (nur CAN-Leseanfragen, kein WEM-JSON).
+//   Zusatz:    Liste fremder MQTT-Topics (Raumtemperaturen, Waermepumpe ...), die das Board unter
+//              <geraet>/app/zusatz retained veroeffentlicht (Paket zusatz, ab Firmware v24). Die App
+//              abonniert diese Topics selbst - das App-Konto braucht dafuer Leserecht.
 // Frueher fragte die App die JSON-Schnittstelle des WEM direkt ab - die ist empfindlich und
 // wurde dadurch mehrfach bis zum Stromlos-Machen gesperrt.
 
@@ -55,6 +58,50 @@ const modeMap = {
 const werte = new Map();     // name -> { v: string, t: ms }
 let mqttVerbunden = false;
 
+// Zusatzanzeigen: Liste vom Board, Werte der fremden Topics
+const ZUSATZ_TOPIC = `${GERAET}/app/zusatz`;
+const ZUSATZ_MAX_ALTER_MS = 10 * 60 * 1000;
+let zusatzListe = [];                 // [{name, topic, feld, einheit, art, schwelle}]
+const zusatzWerte = new Map();        // topic -> { v: string, t: ms }
+let zusatzAbos = new Set();          // abonnierte fremde Topics
+let zusatzAlle = new Set();          // alle Topics der Liste (auch eigene des Boards)
+
+function zusatzUebernehmen(txt) {
+  let liste = [];
+  try {
+    const d = JSON.parse(txt || '{}');
+    if (Array.isArray(d.eintraege)) {
+      liste = d.eintraege.filter(e => e && typeof e.name === 'string' && typeof e.topic === 'string' &&
+        e.topic && !/[+#]/.test(e.topic)).slice(0, 6);
+    }
+  } catch { console.log('Zusatzliste: kein gueltiges JSON - ignoriert'); return; }
+  zusatzListe = liste;
+  zusatzAlle = new Set(liste.map(e => e.topic));
+  const neu = new Set(liste.map(e => e.topic).filter(t => !t.startsWith(`${GERAET}/`)));
+  for (const t of zusatzAbos) if (!neu.has(t)) client.unsubscribe(t);
+  for (const t of [...zusatzWerte.keys()]) if (!zusatzAlle.has(t)) zusatzWerte.delete(t);
+  for (const t of neu) if (!zusatzAbos.has(t)) client.subscribe(t);
+  zusatzAbos = neu;
+  console.log(`Zusatzliste: ${liste.length} Eintrag/Eintraege, ${neu.size} Topic(s) abonniert`);
+}
+
+function zusatzWert(e) {
+  const w = zusatzWerte.get(e.topic);
+  if (!w) return { wert: null, alter: null };
+  const alter = Math.round((Date.now() - w.t) / 1000);
+  if (Date.now() - w.t > ZUSATZ_MAX_ALTER_MS) return { wert: null, alter };
+  let v = w.v.trim();
+  if (e.feld) {
+    try {
+      let o = JSON.parse(v);
+      for (const k of String(e.feld).split('.')) o = (o != null && typeof o === 'object') ? o[k] : undefined;
+      v = o;
+    } catch { v = undefined; }
+  } else if (v.startsWith('{')) v = undefined;
+  const n = typeof v === 'boolean' ? (v ? 1 : 0) : Number(v);
+  return { wert: v === undefined || v === null || v === '' || !Number.isFinite(n) ? null : n, alter };
+}
+
 const client = mqtt.connect(MQTT_URL, {
   username: MQTT_USER, password: MQTT_PASS,
   clientId: `heizungsapp-${Math.random().toString(16).slice(2, 8)}`,
@@ -64,11 +111,20 @@ client.on('connect', () => {
   mqttVerbunden = true;
   client.subscribe(`${GERAET}/sensor/+/state`);
   client.subscribe(`${GERAET}/status`);
+  // nach Wiederverbindung: Zusatz-Topics neu abonnieren (die Liste kommt retained ohnehin neu)
+  for (const t of zusatzAbos) client.subscribe(t);
+  client.subscribe(ZUSATZ_TOPIC);
   console.log(`MQTT verbunden: ${MQTT_URL}`);
 });
 client.on('close', () => { mqttVerbunden = false; });
 client.on('error', e => console.log(`MQTT-Fehler: ${e.message}`));
 client.on('message', (topic, payload) => {
+  if (topic === ZUSATZ_TOPIC) { zusatzUebernehmen(payload.toString()); return; }
+  // fremde Topics der Zusatzliste NICHT in "werte" (dort wuerde z.B. "status" ueberschrieben)
+  if (zusatzAlle.has(topic)) {
+    zusatzWerte.set(topic, { v: payload.toString(), t: Date.now() });
+    if (!topic.startsWith(`${GERAET}/`)) return;
+  }
   const teile = topic.split('/');
   const name = teile.length === 4 ? teile[2] : teile[teile.length - 1];
   werte.set(name, { v: payload.toString(), t: Date.now() });
@@ -176,6 +232,15 @@ app.get('/api/status', (req, res) => {
     warteschlange:    text('warteschlange'),
     statusGelesen:    text('status_gelesen'),                  // "27.09. 14:05:12 gelesen" / "angefordert ..." (ab Firmware v21)
     busAlterS:        letzterFrame,
+    zusatz:           zusatzListe.map(e => {
+      const { wert, alter } = zusatzWert(e);
+      const laeuft = e.art === 'laeuft';
+      const schwelle = Number.isFinite(Number(e.schwelle)) ? Number(e.schwelle) : 1;
+      return {
+        name: e.name, einheit: e.einheit || '', art: laeuft ? 'laeuft' : 'wert',
+        wert, laeuft: laeuft ? (wert == null ? null : wert >= schwelle) : null, alter_s: alter
+      };
+    }),
     source: 'can-board'
   });
 });

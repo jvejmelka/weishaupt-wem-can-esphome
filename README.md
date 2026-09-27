@@ -59,6 +59,7 @@ Nicht benötigte Zeilen unter `packages:` auskommentieren.
 | `wem-schalten.yaml` | Heizkreis schalten, Warteschlange, Protokoll | nein |
 | `warmwasser-schalten.yaml` | Warmwasser Ein/Aus (braucht `wem-schalten` und `warmwasser`) | nein |
 | `verdacht.yaml` | **Regeln:** Betriebsarten nur lesen, wenn das Mithören eine Änderung vermuten lässt; feste Regeln R1–R4 einzeln schaltbar (Vorgabe: nur R3 an = Verhalten bis v21), dazu eigene Regeln (experimentell, eigener Hauptschalter, Vorgabe aus); einstellbar per Web und Datei (braucht `warmwasser`). Details: [PROTOKOLL.md, Abschnitt 6a](PROTOKOLL.md#6a-regeln-betriebsarten-bei-verdacht-lesen) | nein |
+| `zusatz.yaml` | **Zusatzanzeigen für die Handy-App:** Liste von bis zu 6 fremden MQTT-Topics (z. B. Raumtemperaturen, „Wärmepumpe läuft“), einstellbar per Web und Datei. Das Board liest diese Werte **nicht** selbst, es verwaltet nur die Liste (braucht `mqtt`). Details: [PROTOKOLL.md, Abschnitt 6b](PROTOKOLL.md#6b-zusatzanzeigen-für-die-handy-app) | nein |
 | `feste-ip.yaml` | feste IP statt DHCP | nein |
 
 Dazu optional die Handy-App im Ordner `app/` (siehe unten).
@@ -92,6 +93,8 @@ bleibt das bisherige WLAN. Letzter Rückweg ist der Notfall-Hotspot mit Captive 
 | `<gerät>/cmd/status` | beliebig | Heizkreis- und Warmwasser-Betriebsart einmal vom Bus lesen (höchstens alle 10 s, nur Leseanfragen); Zeitpunkt in „Status gelesen“ |
 | `<gerät>/cmd/regeln` | JSON-Datei, am besten retained (`mosquitto_pub -r -f regeln.json`) | Regeln einstellen: R1–R4 je an/aus und Abstand, Obergrenze, `eigene_regeln_an`, eigene Regeln (Vorlage `regeln.json.example`; das alte Feld `verdacht` wird seit v23 abgelehnt) |
 | `<gerät>/cmd/regel` | `NAME an` / `NAME aus` / `NAME loeschen` | eine Regel schalten (NAME = `R1`–`R4`, `eigene` = Hauptschalter der eigenen Regeln, oder eine eigene Regel) |
+| `<gerät>/cmd/zusatz` | JSON-Datei, am besten retained (`mosquitto_pub -r -f zusatz.json`) | Zusatzanzeigen der Handy-App einstellen: `{"version":N,"eintraege":[{name, topic, feld, einheit, art, schwelle}]}` (Vorlage `zusatz.json.example`); Ungültiges wird mit Meldung abgelehnt |
+| `<gerät>/app/zusatz` | (retained, vom Board) | aktuelle Liste der Zusatzanzeigen (die App abonniert daraus die Topics) |
 | `<gerät>/schaltprotokoll` | (retained, vom Board) | letzte zehn Befehle, einer je Zeile |
 | `<gerät>/regeln/stand` | (retained, vom Board) | aktiver Stand der Regeln als JSON (Format wie `cmd/regeln`, plus `firmware`), samt eigener Regeln |
 | `<gerät>/verdacht/protokoll` | (retained, vom Board) | letzte zehn Auslösungen: Regel, gelesen, geändert ja/nein |
@@ -152,6 +155,7 @@ Auf dem Startbildschirm installierbar („+ App“).
 | Vorgabe (gestrichelt) | **Vorgabe = eigener Schaltbefehl** über das Board, solange er nicht am Bus bestätigt ist: **vorgemerkt** (Warteschlange bzw. eben gedrückt), **gesendet** (Befehl an den WEM raus, Bus-Kontrolle steht aus). Nach „OK“ verschwindet die Strichelung, der Knopf wird voll markiert. **Rot gestrichelt** mit Kurztext: nicht übernommen / abgelehnt (CM=05) / keine Rückmeldung. **„von außen geändert“** am Ist-Knopf: der Bus steht auf etwas anderem als der letzte eigene erfolgreiche Befehl, ohne dass ein Befehl läuft (Display, Portal) | Board: `warteschlange`, `ergebnis_letzter_schaltbefehl`, `schaltprotokoll` |
 | Fortschritt (unter den Knöpfen) | nach einem Schaltbefehl im betroffenen Block: **vorgemerkt (ab HH:MM) → an WEM gesendet (JSON) → Bus liest nach → bestätigt ✓** (grün); im Fehlerfall endet die Kette rot mit **✗ nicht übernommen (steht auf …) / abgelehnt (CM=05) / keine Rückmeldung**. Der aktuelle Schritt pulsiert orange; nach dem Abschluss bleibt die Zeile 3 min stehen, ohne laufenden Befehl gibt es keine Zeile | Board: `warteschlange`, `ergebnis_letzter_schaltbefehl`, `schaltprotokoll` |
 | Kessel | Kesseltemperatur groß, daneben Vorlauf / Soll und Rücklauf; rechts **Brenner: aus / vorlüften / an / nachlüften** (an in Orange, nur mit Flamme), dahinter der **Zweck** aus dem Kesselstatus: „· Heizung“ bzw. „· Warmwasser“; „(Heizung wartet)“, wenn der Kessel Warmwasser macht und der Heizkreis gleichzeitig Wärme anfordert. **Kaminfeger** und **Wartung** stehen in Rot, auch bei Brenner aus | Board: `kesseltemperatur`, `vorlauf_vpt`, `vorlauf_soll`, `ruecklauf`, `brennerphase`, `kesselstatus_code`, `heizkreis_status_code` (Bit 0x0040), `heizanforderung` |
+| Zusatz (unter Kessel) | eine kompakte Zeile aus der Liste des Boards, z. B. „Wohnzimmer 21,3 °C · Arbeitszimmer 22,1 °C · WP ◉ läuft“ – Art `laeuft` zeigt „läuft“ (orange, pulsierend wie der Brenner) bzw. „aus“ ab der Schwelle. Werte älter als 10 min erscheinen als „--“; leere Liste = keine Zeile. Tippen/Überfahren zeigt das Alter des Werts | Board: `<gerät>/app/zusatz` (Paket `zusatz`), Werte direkt aus den dort genannten Topics |
 | Außen | Außentemperatur groß | Board: `aussentemperatur` |
 | Statuszeile | „Aktualisiert HH:MM:SS · Status gelesen HH:MM“, dahinter „nächster Befehl ab …“, solange die Sperrminute läuft (höchstens zwei Zeilen); nach einem Knopfdruck 3 min lang der Fortschritt: vorgemerkt → gesendet → **OK** (grün) oder **NICHT übernommen / abgelehnt (CM=05) / keine Rückmeldung** (rot); Fehler wie „CAN-Board nicht erreichbar“ | Board: `ergebnis_letzter_schaltbefehl`, `warteschlange`, `status_gelesen` |
 | Fußzeile | Build-Stand als Datum | App |
@@ -163,6 +167,8 @@ Anlass (nach dem Start, bei geänderten Statusbits, nach Schaltbefehlen).
 ### Wie sie arbeitet
 
 - **Liest nur MQTT** vom Board (`<gerät>/sensor/+/state`, retained) und spricht **nie mit dem WEM**.
+- **Zusatzanzeigen:** die App abonniert `<gerät>/app/zusatz` und danach die dort genannten fremden
+  Topics (bei Änderung der Liste neu abonniert bzw. abbestellt). Das Board selbst liest sie nicht.
 - **Schalten** geht als MQTT-Befehl an das Board; das Board setzt ihn mit Sperrminute,
   Warteschlange und Kontrolle am Bus um. Die App zeigt „vorgemerkt“, „gesendet“ und danach das Ergebnis der Bus-Kontrolle.
 - Anmeldung mit Benutzer und Passwort aus der `.env` – **ohne beide startet die App nicht**.
@@ -185,7 +191,13 @@ topic read  weact-can485-weishaupt/#
 topic write weact-can485-weishaupt/cmd/heizkreis
 topic write weact-can485-weishaupt/cmd/warmwasser
 topic write weact-can485-weishaupt/cmd/status
+# Zusatzanzeigen: je eingetragenem Topic genau eine Leserecht-Zeile, z. B.
+topic read  sensoren/wohnzimmer/temperatur
 ```
+
+**Jedes Topic der Zusatzliste braucht eine eigene `topic read`-Zeile** – fehlt sie, bleibt die
+Anzeige stumm auf „--“ (der Broker verweigert das Abo ohne Meldung an die App). Nur Leserecht
+vergeben: bei manchen Geräten (z. B. Shelly) lässt sich über ein benachbartes Topic schalten.
 
 ### Hinweise
 

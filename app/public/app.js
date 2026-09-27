@@ -335,6 +335,33 @@ function hkZustandText(s) {
 let letzteDaten = null;
 function refreshKnoepfe() { if (letzteDaten) zeigeWuensche(letzteDaten); passeAnWennNoetig(); }
 
+// Zusatzanzeigen (Liste vom Board): "Wohnzimmer 21,3 °C · WP ◉ läuft"; Werte aelter 10 min = "--"
+function zeigeZusatz(liste) {
+  const block = document.getElementById('zusatzBlock');
+  const box = document.getElementById('zusatzListe');
+  const eintraege = Array.isArray(liste) ? liste : [];
+  block.classList.toggle('hidden', eintraege.length === 0);
+  box.replaceChildren(...eintraege.map(e => {
+    const item = document.createElement('span');
+    item.className = 'zusatz-item';
+    const wert = document.createElement('span');
+    wert.className = 'zwert';
+    if (e.art === 'laeuft') {
+      wert.textContent = e.laeuft === true ? 'läuft' : e.laeuft === false ? 'aus' : '--';
+      item.classList.toggle('an', e.laeuft === true);
+    } else {
+      const nk = Math.abs(e.wert) >= 100 ? 0 : 1;
+      wert.textContent = e.wert == null ? '--' :
+        e.wert.toLocaleString('de-DE', { minimumFractionDigits: nk, maximumFractionDigits: nk }) + (e.einheit ? ' ' + e.einheit : '');
+    }
+    if (e.wert == null) item.classList.add('alt');
+    const alter = e.alter_s == null ? 'noch kein Wert' : `vor ${e.alter_s < 120 ? e.alter_s + ' s' : Math.round(e.alter_s / 60) + ' min'}`;
+    item.title = `${e.name}: ${e.wert == null ? '--' : e.wert + (e.einheit ? ' ' + e.einheit : '')} (${alter})`;
+    item.append(document.createTextNode(e.name), wert);
+    return item;
+  }));
+}
+
 async function refreshStatus() {
   try {
     const res = await apiFetch('/api/status');
@@ -373,6 +400,8 @@ async function refreshStatus() {
     zweckEl.textContent = zweck;
     zweckEl.classList.toggle('warn', !!data.kesselZweckWarnung);
     document.getElementById('brennerZeile').title = data.heizungWartet ? 'Kessel lädt Warmwasser, der Heizkreis fordert gleichzeitig Wärme an' : '';
+
+    zeigeZusatz(data.zusatz);
 
     letzteDaten = data;
     zeigeWuensche(data);

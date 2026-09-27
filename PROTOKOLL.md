@@ -15,6 +15,7 @@ Quellen stammt oder nur plausibel ist, steht das dabei.
 - [5. Schreiben über den WEM (JSON)](#5-schreiben-über-den-wem-json)
 - [6. Weboberfläche: lesen und schreiben](#6-weboberfläche-lesen-und-schreiben)
 - [6a. Regeln: Betriebsarten bei Verdacht lesen](#6a-regeln-betriebsarten-bei-verdacht-lesen)
+- [6b. Zusatzanzeigen für die Handy-App](#6b-zusatzanzeigen-für-die-handy-app)
 - [7. Neue Objekte finden: Scan und Differenz](#7-neue-objekte-finden-scan-und-differenz)
 - [8. Wann sich der WEM aufhängt](#8-wann-sich-der-wem-aufhängt)
 - [9. Beispiel: Heizkreis auf „Zeitprogramm 1“](#9-beispiel-heizkreis-auf-zeitprogramm-1)
@@ -544,6 +545,36 @@ nur Lesen an Knoten 1 und gedrosselt, aber Busverkehr. Diese Rechte nur einem Ve
 geben, nicht der Handy-App. Wer eigene Logik braucht, die über „ID + Maske + Muster“ hinausgeht,
 baut sie besser in Home Assistant oder Node-RED und schickt `cmd/status` (siehe
 [IDEEN.md](IDEEN.md#7-eigene-lese-regeln-in-home-assistant-oder-node-red)).
+
+## 6b. Zusatzanzeigen für die Handy-App
+
+Paket `zusatz.yaml` (ab v24) hat mit dem Kesselbus nichts zu tun: es verwaltet nur eine **Liste
+fremder MQTT-Topics** (bis 6), die die Handy-App zusätzlich anzeigt – z. B. Raumtemperaturen oder ob
+eine Wärmepumpe läuft. **Das Board liest diese Topics nicht**, es speichert die Liste dauerhaft und
+veröffentlicht sie retained unter `<gerät>/app/zusatz`. Die App abonniert daraus die Topics selbst.
+
+| Feld | Bedeutung |
+|---|---|
+| `name` | Anzeigename, 1–24 Byte |
+| `topic` | MQTT-Topic ohne Platzhalter `+`/`#` |
+| `feld` | JSON-Feld im Payload, verschachtelt mit Punkt (`aenergy.total`); fehlt es, ist der Payload selbst die Zahl |
+| `einheit` | bis 8 Zeichen, z. B. `°C` |
+| `art` | `wert` (Vorgabe) zeigt die Zahl; `laeuft` zeigt „läuft“ ab `schwelle` (Vorgabe 1), sonst „aus“ |
+
+Einstellen: JSON `{"version":N,"eintraege":[…]}` an `<gerät>/cmd/zusatz` (retained möglich,
+Prüfsumme wie bei `cmd/regeln`) oder in der Weboberfläche, Feld **Zusatz-Befehl**:
+
+```
+Wohnzimmer topic=sensoren/wz/temp feld=tC einheit=°C
+WP topic=sensoren/wp/status feld=apower einheit=W art=laeuft schwelle=50
+WP loeschen
+alle loeschen
+```
+
+Der Name ist alles vor dem ersten Wort mit `=` (darf Leerzeichen enthalten); Werte ohne
+Leerzeichen. Ein vorhandener Eintrag gleichen Namens wird ersetzt. Ergebnis in **Zusatz Meldung**,
+die Liste in **Zusatzanzeigen**. In der App gelten Werte älter als 10 min als „--“ – bei Sensoren,
+die nur alle paar Minuten senden (Batteriegeräte), ist das Alter entsprechend hoch.
 
 ## 7. Neue Objekte finden: Scan und Differenz
 

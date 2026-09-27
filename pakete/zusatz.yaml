@@ -1,0 +1,178 @@
+# Paket ZUSATZ: Zusatzanzeigen fuer die Handy-App (z.B. Raumtemperaturen, Waermepumpe laeuft).
+# Braucht das Paket mqtt. Das Board liest diese Werte NICHT selbst und erzeugt keinen
+# zusaetzlichen Broker-Verkehr - es verwaltet nur die Liste (bis 6 Eintraege), speichert sie
+# dauerhaft und veroeffentlicht sie retained unter ${geraet}/app/zusatz. Die App abonniert die
+# dort genannten Topics selbst (das App-Konto braucht dafuer Leserecht auf jedes Topic).
+#
+# Einstellen:
+#   MQTT  ${geraet}/cmd/zusatz  JSON (retained moeglich, siehe zusatz.json.example):
+#         {"version":1,"eintraege":[{"name":"Wohnzimmer","topic":"sensor/wz/temp","feld":"tC",
+#          "einheit":"°C"},{"name":"WP","topic":"sensor/wp/status","feld":"apower",
+#          "einheit":"W","art":"laeuft","schwelle":50}]}
+#         feld leer/fehlt = Payload ist selbst die Zahl; "a.b" = verschachteltes JSON-Feld.
+#         art "wert" (Vorgabe) zeigt die Zahl, "laeuft" zeigt laeuft/aus (an ab schwelle).
+#         Dieselbe Datei (Pruefsumme) wird nach Neustart/Wiederverbindung nicht erneut
+#         angewandt - Aenderungen aus der Weboberflaeche bleiben also erhalten.
+#   Web   Feld "Zusatz-Befehl":  NAME topic=... [feld=...] [einheit=...] [art=wert|laeuft] [schwelle=...]
+#                                NAME loeschen   |   alle loeschen
+#   Zuletzt geschrieben gilt (Web und Datei aendern dieselbe Liste).
+
+esphome:
+  includes:
+    - pakete/zusatz.h
+  on_boot:
+    priority: -100
+    then:
+      - lambda: |-
+          std::string f;
+          if (!zs::aus_speicher(id(zs_speicher).data(), f)) ESP_LOGW("zusatz", "Liste: %s", f.c_str());
+          ESP_LOGI("zusatz", "%u Zusatzanzeige(n) geladen", (unsigned) zs::liste().size());
+          id(zs_liste_ts).publish_state(zs::anzeige());
+          #ifdef USE_MQTT
+          mqtt::global_mqtt_client->subscribe("${geraet}/cmd/zusatz", [](const std::string &t, const std::string &p) {
+            id(zs_datei)->execute(p);
+          });
+          #endif
+
+globals:
+  - id: zs_speicher            # Liste in Speicherform (JSON), ueberlebt den Neustart
+    type: std::array<char, 1600>
+    restore_value: yes
+  - id: zs_datei_hash          # Pruefsumme der zuletzt uebernommenen Datei
+    type: uint32_t
+    restore_value: yes
+    initial_value: '0'
+  - id: zs_version             # "version" der zuletzt uebernommenen Datei (-1 = keine)
+    type: int
+    restore_value: yes
+    initial_value: '-1'
+  - id: zs_gesendet
+    type: bool
+    initial_value: 'false'
+
+web_server:
+  sorting_groups:
+    - id: g_zusatz
+      name: "Zusatzanzeigen (Handy-App)"
+      sorting_weight: 49
+
+script:
+  # speichern + retained veroeffentlichen + Anzeige erneuern
+  - id: zs_aenderung
+    mode: queued
+    max_runs: 5
+    then:
+      - lambda: |-
+          std::string s = zs::speicherform();
+          auto &m = id(zs_speicher);
+          if (s.size() < m.size()) { m.fill(0); memcpy(m.data(), s.c_str(), s.size()); }
+          else ESP_LOGE("zusatz", "Liste zu gross (%u Byte) - nicht gespeichert", (unsigned) s.size());
+          id(zs_liste_ts).publish_state(zs::anzeige());
+          id(zs_gesendet) = false;
+          id(zs_senden)->execute();
+
+  - id: zs_senden
+    mode: queued
+    max_runs: 5
+    then:
+      - lambda: |-
+          #ifdef USE_MQTT
+          if (!mqtt::global_mqtt_client->is_connected()) return;
+          JsonDocument d;
+          JsonObject o = d.to<JsonObject>();
+          o["firmware"] = "${firmware}";
+          if (id(zs_version) >= 0) o["version"] = id(zs_version);
+          JsonArray a = o["eintraege"].to<JsonArray>();
+          for (auto &e : zs::liste()) zs::eintrag_json(a.add<JsonObject>(), e);
+          std::string s;
+          serializeJson(d, s);
+          id(zs_gesendet) = mqtt::global_mqtt_client->publish("${geraet}/app/zusatz", s, 0, true);
+          #endif
+
+  - id: zs_datei
+    mode: queued
+    parameters:
+      txt: string
+    then:
+      - lambda: |-
+          std::string z = id(uhr).now().is_valid() ? id(uhr).now().strftime("%H:%M:%S ") : std::string("");
+          uint32_t h = zs::fnv(txt);
+          if (h == id(zs_datei_hash)) { ESP_LOGI("zusatz", "Zusatz-Datei unveraendert - ignoriert"); return; }
+          int version = -1; std::vector<zs::Eintrag> v; std::string f;
+          if (!zs::datei_lesen(txt, version, v, f)) {
+            id(zs_meldung_ts).publish_state(z + "Datei ABGELEHNT: " + f);
+            ESP_LOGW("zusatz", "Zusatz-Datei abgelehnt: %s", f.c_str());
+            return;
+          }
+          std::vector<zs::Eintrag> vorher = zs::liste();
+          zs::liste() = v;
+          if (zs::speicherform().size() >= id(zs_speicher).size()) {
+            zs::liste() = vorher;
+            id(zs_meldung_ts).publish_state(z + "Datei ABGELEHNT: Liste zu lang (Topics/Namen kuerzen)");
+            return;
+          }
+          id(zs_datei_hash) = h;
+          if (version >= 0) id(zs_version) = version;
+          char b[80];
+          snprintf(b, sizeof(b), "Datei uebernommen (version %d): %u Eintrag/Eintraege", version, (unsigned) v.size());
+          id(zs_meldung_ts).publish_state(z + b);
+          ESP_LOGI("zusatz", "%s", b);
+          id(zs_aenderung)->execute();
+
+  - id: zs_befehl
+    mode: queued
+    parameters:
+      txt: string
+    then:
+      - lambda: |-
+          std::string z = id(uhr).now().is_valid() ? id(uhr).now().strftime("%H:%M:%S ") : std::string("");
+          std::vector<zs::Eintrag> vorher = zs::liste();
+          bool ok = false;
+          std::string m = zs::befehl(txt, ok);
+          if (ok && zs::speicherform().size() >= id(zs_speicher).size()) {
+            zs::liste() = vorher; ok = false; m = "Liste zu lang (Topics/Namen kuerzen)";
+          }
+          id(zs_meldung_ts).publish_state(z + m);
+          if (ok) id(zs_aenderung)->execute();
+
+interval:
+  - interval: 10s
+    then:
+      - lambda: |-
+          #ifdef USE_MQTT
+          if (!mqtt::global_mqtt_client->is_connected()) id(zs_gesendet) = false;
+          else if (!id(zs_gesendet)) id(zs_senden)->execute();
+          #endif
+
+text:
+  - platform: template
+    name: "Zusatz-Befehl"
+    id: zs_eingabe
+    optimistic: true
+    mode: text
+    max_length: 200
+    web_server: { sorting_group_id: g_zusatz, sorting_weight: 2 }
+
+button:
+  - platform: template
+    name: "Zusatz-Befehl ausfuehren"
+    web_server: { sorting_group_id: g_zusatz, sorting_weight: 3 }
+    on_press:
+      - script.execute:
+          id: zs_befehl
+          txt: !lambda 'return id(zs_eingabe).state;'
+
+text_sensor:
+  - platform: template
+    name: "Zusatzanzeigen"
+    id: zs_liste_ts
+    web_server: { sorting_group_id: g_zusatz, sorting_weight: 1 }
+  - platform: template
+    name: "Zusatz Meldung"
+    id: zs_meldung_ts
+    web_server: { sorting_group_id: g_zusatz, sorting_weight: 4 }
+  - platform: template
+    name: "Zusatz Hilfe"
+    update_interval: 86400s
+    web_server: { sorting_group_id: g_zusatz, sorting_weight: 5 }
+    lambda: 'return {"Befehl: NAME topic=... [feld=...] [einheit=...] [art=wert|laeuft] [schwelle=...]  -  NAME loeschen  -  alle loeschen. Oder JSON an cmd/zusatz. Das Board liest die Werte nicht selbst, die Handy-App abonniert die Topics."};'

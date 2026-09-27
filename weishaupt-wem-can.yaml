@@ -15,12 +15,13 @@
 #   pakete/warmwasser-schalten.yaml  Warmwasser Ein/Aus ueber WEM (braucht wem-schalten)
 #   pakete/verdacht.yaml             Regeln: Betriebsarten nur lesen, wenn das Mithoeren eine Aenderung
 #                                    vermuten laesst (R1-R4 einzeln, eigene Regeln experimentell; braucht warmwasser)
+#   pakete/zusatz.yaml               Zusatzanzeigen fuer die Handy-App (Liste fremder MQTT-Topics, braucht mqtt)
 #   pakete/feste-ip.yaml             feste IP statt DHCP (Empfehlung: DHCP + Router-Reservierung)
 #
 substitutions:
   geraet: weact-can485-weishaupt       # Geraetename = MQTT-Praefix
   anzeigename: Weishaupt WTC-GW 15-B
-  firmware: "v23 vom 27.09.2026"
+  firmware: "v24 vom 27.09.2026"
   # Eigene CAN-Leseanfragen beim ersten Start (danach gilt der Schalter in der Weboberflaeche):
   #   RESTORE_DEFAULT_OFF = nur mithoeren (Vorgabe, wenn die Zeile fehlt)
   #   RESTORE_DEFAULT_ON  = eigene Leseanfragen im Weishaupt-Takt
@@ -46,6 +47,7 @@ packages:
   schalten: !include pakete/wem-schalten.yaml
   warmwasser_schalten: !include pakete/warmwasser-schalten.yaml
   verdacht: !include pakete/verdacht.yaml
+  zusatz: !include pakete/zusatz.yaml
   # feste_ip: !include pakete/feste-ip.yaml
 
 esphome:
@@ -53,7 +55,7 @@ esphome:
   friendly_name: ${anzeigename}
   project:
     name: "jvejmelka.weishaupt-wem-can"
-    version: "23"
+    version: "24"
 
 esp32:
   board: esp32dev

@@ -252,6 +252,19 @@ html, body {
   display: flex; align-items: center; }
 .block.aussen .block-head { margin-bottom: .3rem; }
 
+/* ── ZUSATZANZEIGEN ── (eine kompakte Zeile, bricht bei vielen Eintraegen um; leer = ausgeblendet) */
+.block.zusatz { padding-top: .45rem; padding-bottom: .45rem; }
+.block.zusatz.hidden { display: none; }
+.zusatz-liste {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: .15rem .9rem;
+  font-size: .85rem; letter-spacing: .03em; color: var(--text2); line-height: 1.3;
+}
+.zusatz-item { white-space: nowrap; }
+.zusatz-item .zwert { font-family: var(--mono); color: var(--text); margin-left: .3rem; }
+.zusatz-item.alt .zwert { color: var(--muted); }
+.zusatz-item.an .zwert { color: var(--amber); font-weight: 700; }
+.zusatz-item.an .zwert::before { content: '◉ '; color: var(--amber); animation: pulse 1s ease infinite; }
+
 /* ── MESSAGE ── (hoechstens zwei Zeilen, damit die Hoehe planbar bleibt; ganzer Text im title) */
 .message {
   margin: 0 .9rem;
