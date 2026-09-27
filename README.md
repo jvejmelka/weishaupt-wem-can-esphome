@@ -123,24 +123,60 @@ Warmwasser-Betriebsart JSON `03 00 2520 02` (1 = Ein, 2 = Aus) = CAN Knoten 1 `0
 
 ## Handy-App (optional, Ordner `app/`)
 
-Eine schlanke Web-App (PWA) fürs Handy: Brenner, Heizkreis-Betriebsart mit Vorgabe und Ist,
-Warmwasser mit Vorgabe und Ist, Außentemperatur, Kessel, Rücklauf, Vorlauf. Umschalten per Knopf.
+Eine schlanke Web-App (PWA) fürs Handy, gebaut für 360–412 px Breite **ohne Scrollen**.
+Auf dem Startbildschirm installierbar („+ App“).
 
-- **Liest nur MQTT** vom Board und spricht **nie mit dem WEM**. Schaltbefehle gehen an
-  `<gerät>/cmd/heizkreis` bzw. `cmd/warmwasser`; das Board setzt sie mit Sperrminute,
-  Warteschlange und Kontrolle am Bus um.
-- **Eigenes Broker-Konto** empfohlen, das nur lesen und die zwei Schaltbefehle senden darf:
-  ```
-  user heizungsapp
-  topic read  weact-can485-weishaupt/#
-  topic write weact-can485-weishaupt/cmd/heizkreis
-  topic write weact-can485-weishaupt/cmd/warmwasser
-  ```
-- Start: `cp .env.example .env`, Werte eintragen, `docker compose up -d --build`,
-  dann `http://<Host>:4000`. Anmeldung mit `APP_USERNAME`/`APP_PASSWORD`.
-- Die Oberfläche ist für eine Handybreite von 360 px gebaut und passt ohne Scrollen.
-- Eine frühere Fassung der App fragte die JSON-Schnittstelle des WEM direkt ab – genau das,
-  was die Schnittstelle nicht verträgt.
+### Was sie zeigt
+
+| Bereich | Inhalt | Quelle |
+|---|---|---|
+| Kopfzeile | grüner Punkt = letzter Abruf erfolgreich, rot = Problem; oranger Strich = Countdown bis zum nächsten Abruf (30 s) | App |
+| Brenner | **Aus / Vorlüften / An / Nachlüften** (An nur mit Flamme); VORGABE = eingestellte Heizkreis-Betriebsart, IST = Heizkreis-Status aus den Statusbits | Board: `brennerphase`, `heizkreis_betriebsart`, `heizkreis_status` |
+| Betriebsart | acht Knöpfe (Standby, ZP 1–3, Sommer, Komfort, Normal, Absenk), die aktive ist hervorgehoben | Knopf → `cmd/heizkreis` |
+| Warmwasser | Temperatur, Knöpfe EIN/AUS, VORGABE = eingestellte Betriebsart, IST = lädt gerade | Board: `warmwasser`, `warmwasser_betriebsart`, `warmwasser_aktiv`; Knopf → `cmd/warmwasser` |
+| Messwerte | Außentemperatur, Kessel, Rücklauf, Vorlauf Ist, Vorlauf Soll | Board, überwiegend passiv mitgelesen |
+| Statuszeile | „Aktualisiert HH:MM:SS“, dahinter die Warteschlange des Boards; nach einem Knopfdruck 3 min lang der Fortschritt: vorgemerkt → gesendet → **OK** (grün) oder **NICHT übernommen / abgelehnt (CM=05) / keine Rückmeldung** (rot); Fehler wie „CAN-Board nicht erreichbar“ | Board: `ergebnis_letzter_schaltbefehl`, `warteschlange` |
+| Fußzeile | Build-Stand als Datum | App |
+
+Messwerte, die länger als 10 min nicht aktualisiert wurden, zeigt die App als „--“ statt eines
+alten Werts. Betriebsarten und Sollwerte sind davon ausgenommen – das Board liest sie nur bei
+Anlass (nach dem Start, bei geänderten Statusbits, nach Schaltbefehlen).
+
+### Wie sie arbeitet
+
+- **Liest nur MQTT** vom Board (`<gerät>/sensor/+/state`, retained) und spricht **nie mit dem WEM**.
+- **Schalten** geht als MQTT-Befehl an das Board; das Board setzt ihn mit Sperrminute,
+  Warteschlange und Kontrolle am Bus um. Die App zeigt „vorgemerkt“ und danach das Ergebnis.
+- Anmeldung mit Benutzer und Passwort aus der `.env`; die Sitzungen liegen in `data/`
+  und überleben einen Neubau.
+- Braucht Board-Firmware **ab v20** (Brennerphase). Ältere Firmware: der Brenner erscheint nur als An/Aus.
+
+### Einrichten
+
+```
+cd app
+cp .env.example .env          # Broker, MQTT-Konto, App-Login eintragen
+docker compose up -d --build  # danach http://<Host>:4000
+```
+
+Eigenes Broker-Konto, das nur lesen und die zwei Schaltbefehle senden darf:
+
+```
+user heizungsapp
+topic read  weact-can485-weishaupt/#
+topic write weact-can485-weishaupt/cmd/heizkreis
+topic write weact-can485-weishaupt/cmd/warmwasser
+```
+
+### Hinweise
+
+- **Von außen nur hinter einem Reverse Proxy mit TLS.** Die App selbst spricht HTTP.
+- **Cloudflare & Co. cachen Stil- und Skriptdateien** (bei uns 4 h). Deshalb hängt der Build
+  an `style.css` und `app.js` eine Versionsnummer an – nach einem Update genügt einmal Neuladen.
+- **Warum die App den WEM nicht selbst fragt:** Eine frühere Fassung las ihre Werte bei jedem
+  Öffnen direkt über die JSON-Schnittstelle des WEM. Das verträgt die Schnittstelle nicht – sie
+  wurde dadurch mehrfach gesperrt und kam erst nach Stromlos-Machen der Heizung wieder. Seitdem
+  liest die App nur MQTT vom Board, und Schaltbefehle gehen über das Board mit Sperrminute.
 
 ## Was belegt ist und was nicht
 
