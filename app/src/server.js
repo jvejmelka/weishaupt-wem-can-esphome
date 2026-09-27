@@ -35,6 +35,9 @@ const MQTT_PASS = process.env.MQTT_PASS || '';
 const GERAET = process.env.MQTT_GERAET || 'weact-can485-weishaupt';
 // Werte, die laenger nicht aktualisiert wurden, gelten als veraltet (Board weg / Bus tot)
 const VERALTET_MS = Number(process.env.VERALTET_MS || 10 * 60 * 1000);
+// Weboberflaeche des Boards (nur als Link in der Kopfzeile; die App reicht nichts durch, das Board
+// fragt sein Passwort selbst ab). Leer oder kein http(s) = Knopf ausgeblendet.
+const BOARD_URL = /^https?:\/\/\S+$/i.test((process.env.BOARD_URL || '').trim()) ? process.env.BOARD_URL.trim() : '';
 
 // Heizkreis-Betriebsarten (Code wie am Bus, Knoten 1 0x2933/2)
 const modeMap = {
@@ -201,6 +204,7 @@ app.post('/api/lesen', (req, res) => {
 app.get('/api/meta', (req, res) => {
   res.json({
     app: 'weishaupt-heizungsapp',
+    boardUrl: BOARD_URL || null,   // nur fuer angemeldete Nutzer (authMiddleware)
     modes: Object.entries(modeMap).map(([value, label]) => ({ value: Number(value), label }))
   });
 });

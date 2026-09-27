@@ -394,6 +394,10 @@ lesenBtn.addEventListener('click', statusLesen);
 async function loadMeta() {
   const res = await apiFetch('/api/meta');
   const data = await res.json();
+  // Knopf zur Weboberflaeche des Boards: nur, wenn BOARD_URL gesetzt ist
+  const boardBtn = document.getElementById('boardBtn');
+  if (data.boardUrl) { boardBtn.href = data.boardUrl; boardBtn.classList.remove('hidden'); }
+  else { boardBtn.removeAttribute('href'); boardBtn.classList.add('hidden'); }
   const container = document.getElementById('modes');
   container.innerHTML = '';
   for (const mode of data.modes) {

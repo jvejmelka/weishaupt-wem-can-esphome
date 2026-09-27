@@ -17,15 +17,15 @@
 }
 
 /* ── GROESSE ──
-   Alles ist in rem gebaut; die Grundschrift richtet sich nach Breite UND Hoehe des Geraets:
-   - Breite: 4,44vw = 16 px bei 360 px (vier Knoepfe nebeneinander muessen passen)
+   Die App ist eine schmale Spalte (hoechstens 460 CSS-px, schwarzer Rand daneben ist gewollt).
+   Alles ist in rem gebaut; die Grundschrift richtet sich nach Spaltenbreite UND Geraetehoehe:
+   - Breite: Spaltenbreite / 22,5  (= 16 px bei 360 px; vier Knoepfe nebeneinander muessen passen)
    - Hoehe:  100dvh / --hoehe (= Hoehe des Inhalts in rem), damit nie gescrollt werden muss
-   Der kleinere Wert gewinnt; quadratische und querformatige Geraete (z.B. Unihertz Titan 2)
-   werden von der Hoehe begrenzt, hohe Handys von der Breite. */
-:root { --hoehe: 47.5; --breite: 4.44vw; }
+   Der kleinere Wert gewinnt. Restliche Hoehe geht als Luft ZWISCHEN die Bloecke, nicht hinein. */
+:root { --hoehe: 43.5; --spalte: min(100vw, 460px); }
 html {
-  font-size: clamp(11px, min(var(--breite), calc(100vh / var(--hoehe))), 30px);
-  font-size: clamp(11px, min(var(--breite), calc(100dvh / var(--hoehe))), 30px);
+  font-size: clamp(11px, min(calc(var(--spalte) / 22.5), calc(100vh / var(--hoehe))), 24px);
+  font-size: clamp(11px, min(calc(var(--spalte) / 22.5), calc(100dvh / var(--hoehe))), 24px);
 }
 html, body {
   background: var(--bg);
@@ -86,7 +86,7 @@ html, body {
 
 /* ── PROGRESS BAR ── */
 .progress-bar {
-  height: 2px; background: var(--border);
+  height: 2px; background: var(--border); margin-top: -.7rem; flex: none;
 }
 .progress-fill {
   height: 100%; width: 0%;
@@ -99,15 +99,15 @@ html, body {
 
 /* ── LAYOUT ── */
 .app {
-  width: 100%; max-width: 720px; margin: 0 auto;
+  width: 100%; max-width: 460px; margin: 0 auto;
   min-height: 100vh; min-height: 100dvh;
   padding: 0 0 env(safe-area-inset-bottom, 0);
-  display: flex; flex-direction: column; gap: 0;
+  display: flex; flex-direction: column; gap: .7rem;
 }
-/* uebrige Hoehe auf die Bloecke verteilen: Knoepfe werden hoeher, Werte bleiben mittig */
-.app > .block { flex: 1 1 auto; display: flex; flex-direction: column; }
-.app > #hkBlock { flex-grow: 2.4; }
-.app > #wwBlock { flex-grow: 1.4; }
+/* uebrige Hoehe gleichmaessig als Luft zwischen die Bloecke (auto-Raender teilen sie sich),
+   die Bloecke selbst bleiben so hoch wie ihr Inhalt */
+.app > .block, .app > .message { flex: none; margin-top: auto; }
+.app > .app-version { margin-top: -.3rem; }
 
 /* ── HEADER ── */
 .header {
@@ -144,12 +144,19 @@ html, body {
   padding: .5rem; min-width: 2.75rem; min-height: 2.75rem;
   display: flex; align-items: center; justify-content: center;
 }
+.board-btn {
+  color: var(--muted); font-size: 1.15rem; line-height: 1; text-decoration: none;
+  min-width: 2.2rem; min-height: 2.75rem;
+  display: flex; align-items: center; justify-content: center; transition: color .2s;
+}
+.board-btn:hover { color: var(--amber); }
+.board-btn.hidden { display: none; }
 .logout-btn svg { width: 1.15rem; height: 1.15rem; }
 .logout-btn:hover { color: var(--red); }
 
 /* ── BLOECKE (Heizkreis, Warmwasser, Kessel, Aussen) ── */
 .block {
-  margin: .7rem 1rem 0;
+  margin: 0 .9rem;
   background: var(--bg2); border: 1px solid var(--border);
   padding: .6rem .7rem .7rem .9rem;
   position: relative; border-radius: 2px;
@@ -187,8 +194,8 @@ html, body {
 
 /* ── KNOEPFE ── */
 .modes-grid, .ww-grid {
-  display: grid; gap: .4rem; flex: 1 1 auto;
-  grid-auto-rows: minmax(2.75rem, 4.6rem); align-content: center;
+  display: grid; gap: .45rem;
+  grid-auto-rows: 3.1rem;
 }
 .modes-grid { grid-template-columns: repeat(4, 1fr); }
 .ww-grid    { grid-template-columns: repeat(2, 1fr); }
@@ -196,7 +203,7 @@ html, body {
   position: relative;
   background: var(--bg3); border: 1px solid var(--border);
   color: var(--text2); padding: .35rem .15rem;
-  font-family: var(--sans); font-size: .85rem; font-weight: 600;
+  font-family: var(--sans); font-size: .95rem; font-weight: 600;
   letter-spacing: .04em; cursor: pointer; min-height: 2.75rem; min-width: 0;
   transition: all .15s; text-transform: uppercase;
   border-radius: 2px;
@@ -219,20 +226,20 @@ html, body {
 .mode-btn.fehler.active .hinweis { color: #5a0000; font-weight: 600; }
 
 /* ── KESSEL / AUSSEN ── */
-.kessel-zeile { display: flex; align-items: center; gap: .9rem; flex: 1 1 auto; }
+.kessel-zeile { display: flex; align-items: center; gap: .9rem; padding: .15rem 0; }
 .kessel-wert { font-family: var(--mono); font-size: 2.2rem; color: var(--amber); line-height: 1; white-space: nowrap; }
 .einheit { font-family: var(--mono); font-size: .75rem; color: var(--text2); margin-left: .15rem; }
 .kessel-detail {
   font-size: .85rem; letter-spacing: .03em; color: var(--text2); line-height: 1.35;
 }
 .kessel-detail span { font-family: var(--mono); color: var(--text); }
-.aussen-wert { font-family: var(--mono); font-size: 3.2rem; color: var(--amber); line-height: 1;
-  flex: 1 1 auto; display: flex; align-items: center; }
+.aussen-wert { font-family: var(--mono); font-size: 2.8rem; color: var(--amber); line-height: 1;
+  display: flex; align-items: center; }
 .block.aussen .block-head { margin-bottom: .3rem; }
 
 /* ── MESSAGE ── (hoechstens zwei Zeilen, damit die Hoehe planbar bleibt; ganzer Text im title) */
 .message {
-  margin: .7rem 1rem 0;
+  margin: 0 .9rem;
   padding: .45rem .8rem;
   font-size: .8rem; letter-spacing: .1em; color: var(--text2);
   border-left: 2px solid var(--border);
@@ -261,18 +268,6 @@ html, body {
   color: #2a2a2a; letter-spacing: .1em;
 }
 
-/* ── HOCHFORMAT: Kessel und Aussen untereinander (die Reihe gibt ihre Bloecke an .app weiter) ── */
+/* Kessel und Aussen stehen untereinander (die Reihe gibt ihre Bloecke an .app weiter) */
 .reihe { display: contents; }
-
-/* ── QUADRATISCH / BREIT (z.B. Unihertz Titan 2 mit 1440x1440, Tablet quer, Desktop) ──
-   Heizkreis-Knoepfe in einer Reihe, Kessel und Aussen nebeneinander: der Inhalt braucht dann
-   rund 34 rem Hoehe statt 46, die Schrift wird entsprechend groesser. */
-@media (min-aspect-ratio: 4/5) {
-  :root { --hoehe: 35.5; --breite: calc(min(100vw, 720px) / 33); }
-  .modes-grid { grid-template-columns: repeat(8, 1fr); gap: .3rem; }
-  .modes-grid .mode-btn { font-size: .8rem; letter-spacing: .02em; }
-  .reihe { display: flex; gap: .7rem; margin: .7rem 1rem 0; flex: 1 1 auto; }
-  .reihe > .block { margin: 0; flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
-  .reihe > .block.aussen { flex: .75 1 0; }
-  .kessel-zeile { flex-wrap: wrap; gap: .2rem .8rem; align-content: center; }
-}
+.reihe > .block { flex: none; margin-top: auto; }

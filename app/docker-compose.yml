@@ -13,6 +13,7 @@ services:
       MQTT_GERAET: ${MQTT_GERAET:-weact-can485-weishaupt}
       APP_USERNAME: ${APP_USERNAME}
       APP_PASSWORD: ${APP_PASSWORD}
+      BOARD_URL: ${BOARD_URL:-}
     volumes:
       - ./data:/data        # Anmelde-Tokens ueberleben einen Neubau
     mem_limit: 256m

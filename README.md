@@ -137,7 +137,7 @@ Die Dokumente im Überblick:
 
 ## Handy-App (optional, Ordner `app/`)
 
-Eine schlanke Web-App (PWA) fürs Handy, gebaut für 360–412 px Breite **ohne Scrollen**.
+Eine schlanke Web-App (PWA) fürs Handy: eine schmale Spalte (höchstens 460 CSS-px), die die volle Höhe nutzt **ohne Scrollen** – auch auf quadratischen Displays.
 Auf dem Startbildschirm installierbar („+ App“).
 
 ### Was sie zeigt
@@ -145,6 +145,7 @@ Auf dem Startbildschirm installierbar („+ App“).
 | Bereich | Inhalt | Quelle |
 |---|---|---|
 | Kopfzeile | grüner Punkt = letzter Abruf erfolgreich, rot = Problem; oranger Strich = Countdown bis zum nächsten Abruf (30 s) | App |
+| ⚙ (Kopfzeile) | öffnet die Weboberfläche des Boards in einem neuen Tab – nur sichtbar, wenn `BOARD_URL` in der `.env` gesetzt ist. Die App reicht nichts durch; das Board fragt sein Passwort selbst ab und ist nur im LAN erreichbar | `.env`: `BOARD_URL` |
 | Heizkreis | acht Knöpfe (Standby, ZP 1–3, Sommer, Komfort, Normal, Absenk). **Voll markiert = Ist**: die Betriebsart, die das Board am Bus gelesen hat (0x2933/2). Rechts vom Titel **„Zustand: …“** = Laufzustand aus den Statusbits (z. B. „Standby“, „Zeitprogramm, heizt“, „· WW lädt“) | Board: `heizkreis_betriebsart_code`, `heizkreis_status`; Knopf → `cmd/heizkreis` |
 | ↻ (beim Heizkreis) | lässt das Board Heizkreis- und Warmwasser-Betriebsart einmal vom Bus lesen (die liest es sonst nur bei Anlass); die Statuszeile zeigt „angefordert …“ und dann „Status HH:MM:SS gelesen“ | Knopf → `cmd/status`; Board: `status_gelesen` |
 | Warmwasser | Temperatur (Fühler **unten** im Speicher), Knöpfe EIN/AUS – **voll markiert = Ist** am Bus (0x2A20/2); rechts **„Zustand: lädt gerade / keine Ladung“** | Board: `warmwasser`, `warmwasser_betriebsart`, `warmwasser_aktiv`; Knopf → `cmd/warmwasser` |
