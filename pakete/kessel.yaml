@@ -85,6 +85,10 @@ globals:
   - id: hk_jetzt_lesen
     type: bool
     initial_value: 'false'
+  # letzte manuelle Status-Anforderung (Knopf "Status lesen" / MQTT cmd/status)
+  - id: status_manuell_ms
+    type: uint32_t
+    initial_value: '0'
   - id: statusbits_vorher
     type: int
     initial_value: '-1'
@@ -173,6 +177,8 @@ interval:
   #   - einmal, wenn die Anlaufpause vorbei ist (Board-Start, Bus wieder da)
   #   - wenn sich die Statusbits aendern (PDO 0x1C1, z.B. Umstellung am Display/Portal)
   #   - nach einem eigenen Schaltbefehl (das Schalten-Paket liest dann gezielt nach)
+  #   - auf Wunsch: Knopf "Status lesen" bzw. MQTT ${geraet}/cmd/status (Skript status_lesen,
+  #     hebt die 2-min-Grenze fuer diese eine Lesung auf, nimmt Wuensche hoechstens alle 10 s an)
   # anlass_ms = Zeitpunkt des Anlasses; gelesen wird 5 s danach, hoechstens alle 2 min.
   # Das Warmwasser-Paket haengt sich mit eigener Merkvariable an denselben Anlass.
   - interval: 5s
@@ -192,6 +198,30 @@ interval:
             lambda: 'return id(hk_jetzt_lesen);'
           then:
             - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: [0x40, 0x33, 0x29, 0x02, 0, 0, 0, 0] }  # Heizkreis-Betriebsart
+
+script:
+  # Status auf Wunsch: Heizkreis-Betriebsart (0x2933/2) und - mit Paket warmwasser -
+  # Warmwasser-Betriebsart und -Sollwerte einmal vom Bus lesen. Nutzt das Anlass-Nachlesen
+  # (interval 5s), schickt also nur LESE-Anfragen an Knoten 1, nie etwas an den WEM per JSON.
+  - id: status_lesen
+    mode: single
+    then:
+      - lambda: |-
+          uint32_t jetzt = millis();
+          std::string z = id(uhr).now().is_valid() ? id(uhr).now().strftime("%H:%M:%S ") : std::string("");
+          if (id(bus_seit) == 0 || jetzt - id(letzter_frame) > 30000) {
+            id(status_gelesen).publish_state(z + "Bus schweigt - nicht gelesen"); return;
+          }
+          if (id(status_manuell_ms) != 0 && jetzt - id(status_manuell_ms) < 10000) {
+            ESP_LOGI("status", "Status-Anforderung verworfen (hoechstens alle 10 s)"); return;
+          }
+          id(status_manuell_ms) = jetzt | 1;
+          id(hk_letzte_lesung) = 0;                  // 2-min-Grenze fuer diese Lesung aufheben
+          id(anlass_ms) = (jetzt - 5000) | 1;        // naechster 5-s-Takt liest sofort
+          if (jetzt - id(bus_seit) <= id(pause_ms))
+            id(status_gelesen).publish_state(z + "angefordert - Anlaufpause, liest danach");
+          else
+            id(status_gelesen).publish_state(z + "angefordert ...");
 
 canbus:
   - platform: esp32_can
@@ -322,6 +352,8 @@ canbus:
                 static const char* n[] = {"?", "Standby", "Zeitprogramm 1", "Zeitprogramm 2", "Zeitprogramm 3", "Sommer", "Komfort", "Normal", "Absenk"};
                 id(hk_betriebsart_code).publish_state((float) b);
                 id(hk_betriebsart).publish_state(b <= 8 ? n[b] : "unbekannt");
+                std::string z = id(uhr).now().is_valid() ? id(uhr).now().strftime("%d.%m. %H:%M:%S ") : std::string("");
+                id(status_gelesen).publish_state(z + "gelesen");
               } else if (sub == 2 && (idx == 0x2958 || idx == 0x2907)) {
                 int16_t v = (int16_t)((x[5] << 8) | x[4]);
                 if (v == (int16_t) 0x8000) return;
@@ -390,6 +422,10 @@ text_sensor:
     id: wem_betriebsart_hk
     web_server: { sorting_group_id: g_betrieb, sorting_weight: 3 }
   - platform: template
+    name: "Status gelesen"             # Zeitpunkt der letzten Lesung der Betriebsarten
+    id: status_gelesen
+    web_server: { sorting_group_id: g_betrieb, sorting_weight: 12 }
+  - platform: template
     name: "Lesebefehl Antwort"
     id: lese_antwort
     web_server: { sorting_group_id: g_lesen, sorting_weight: 3 }
@@ -455,6 +491,11 @@ text_sensor:
       return {b};
 
 button:
+  - platform: template
+    name: "Status lesen"               # Betriebsarten einmal vom Bus lesen (nur Leseanfragen)
+    web_server: { sorting_group_id: g_betrieb, sorting_weight: 11 }
+    on_press:
+      - script.execute: status_lesen
   - platform: restart
     name: "Neustart ESP"
     web_server: { sorting_group_id: g_diag, sorting_weight: 10 }

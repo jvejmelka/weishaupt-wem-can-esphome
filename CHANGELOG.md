@@ -1,6 +1,12 @@
 # Changelog – ESP-CAN-Brücke Weishaupt (WeAct CAN485, ESPHome)
 
 
+## v21 – 2026-09-27
+- **Status lesen auf Wunsch:** Knopf „Status lesen“ in der Weboberfläche (Gruppe Betriebsarten) und MQTT-Befehl `<gerät>/cmd/status` (beliebiger Inhalt). Liest einmal die Heizkreis-Betriebsart (Knoten 1 0x2933/2) und – mit Paket warmwasser – Warmwasser-Betriebsart und -Sollwerte (0x2A20/0x2A2C/0x2A39). Nur CAN-Leseanfragen über das vorhandene Anlass-Nachlesen, keine WEM-JSON-Anfrage, keine periodische Abfrage.
+- Die 2-min-Grenze gilt für diese eine Lesung nicht; Wünsche werden höchstens alle 10 s angenommen, gesendet wird nur bei lebendem Bus (in der Anlaufpause erst danach).
+- Neue Anzeige „Status gelesen“: Zeitpunkt der letzten Lesung der Heizkreis-Betriebsart bzw. Hinweis „angefordert …“ / „Bus schweigt“.
+- Handy-App: Knopf „STATUS LESEN“ neben der Überschrift Betriebsart.
+
 ## v20 – 2026-09-27
 - **Brenner nach Betriebsphase** (0x2541: 0 aus, 1 Vorbelüftung, 2 Steuer-, 3 Regelbetrieb, 4 Nachbelüftung). „Brenner Status“ zeigt jetzt Aus / Vorlüften / Ein / Nachlüften; „Brenner“ (0/1) und der Startzähler zählen nur noch mit Flamme (Phase 2/3), nicht mehr schon beim Vorlüften. Neuer Zahlenwert „Brennerphase“.
 

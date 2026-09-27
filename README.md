@@ -54,7 +54,7 @@ Nicht benötigte Zeilen unter `packages:` auskommentieren.
 |---|---|---|
 | `kessel.yaml` | Kesselwerte, Heizkreis-Zustand, Diagnose, Lesefeld, Bus-Wächter, WLAN-Wechsel | ja |
 | `warmwasser.yaml` | Warmwasserwerte (nur mit Speicher am WTC) | nein |
-| `mqtt.yaml` | MQTT-Broker, `cmd/lesen`, `cmd/scan`, `cmd/stop`, Rohmitschnitt | nein |
+| `mqtt.yaml` | MQTT-Broker, `cmd/lesen`, `cmd/scan`, `cmd/stop`, `cmd/status`, Rohmitschnitt | nein |
 | `homeassistant-api.yaml` | native ESPHome-API (verschlüsselt) | nein |
 | `wem-schalten.yaml` | Heizkreis schalten, Warteschlange, Protokoll | nein |
 | `warmwasser-schalten.yaml` | Warmwasser Ein/Aus (braucht `wem-schalten` und `warmwasser`) | nein |
@@ -88,6 +88,7 @@ bleibt das bisherige WLAN. Letzter Rückweg ist der Notfall-Hotspot mit Captive 
 | `<gerät>/cmd/lesen` | `01 2933 02` (Knoten Index Sub, hex) | ein Objekt lesen |
 | `<gerät>/cmd/scan` | `01 2A00 2AFF 3` | Bereich lesen, Antworten in `<gerät>/canraw` |
 | `<gerät>/cmd/stop` | beliebig | Scan abbrechen |
+| `<gerät>/cmd/status` | beliebig | Heizkreis- und Warmwasser-Betriebsart einmal vom Bus lesen (höchstens alle 10 s, nur Leseanfragen); Zeitpunkt in „Status gelesen“ |
 | `<gerät>/schaltprotokoll` | (retained, vom Board) | letzte zehn Befehle, einer je Zeile |
 
 Codes Heizkreis: 1 Standby, 2–4 Zeitprogramm 1–3, 5 Sommer, 6 Komfort, 7 Normal, 8 Absenk.
@@ -137,6 +138,7 @@ Auf dem Startbildschirm installierbar („+ App“).
 | Kopfzeile | grüner Punkt = letzter Abruf erfolgreich, rot = Problem; oranger Strich = Countdown bis zum nächsten Abruf (30 s) | App |
 | Brenner | **Aus / Vorlüften / An / Nachlüften** (An nur mit Flamme); VORGABE = eingestellte Heizkreis-Betriebsart, IST = Heizkreis-Status aus den Statusbits | Board: `brennerphase`, `heizkreis_betriebsart`, `heizkreis_status` |
 | Betriebsart | acht Knöpfe (Standby, ZP 1–3, Sommer, Komfort, Normal, Absenk), die aktive ist hervorgehoben | Knopf → `cmd/heizkreis` |
+| STATUS LESEN | Knopf neben „Betriebsart“: lässt das Board Heizkreis- und Warmwasser-Betriebsart einmal vom Bus lesen (die liest es sonst nur bei Anlass); die Statuszeile zeigt „angefordert …“ und dann „Status HH:MM:SS gelesen“ | Knopf → `cmd/status`; Board: `status_gelesen` |
 | Warmwasser | Temperatur, Knöpfe EIN/AUS, VORGABE = eingestellte Betriebsart, IST = lädt gerade | Board: `warmwasser`, `warmwasser_betriebsart`, `warmwasser_aktiv`; Knopf → `cmd/warmwasser` |
 | Messwerte | Außentemperatur, Kessel, Rücklauf, Vorlauf Ist, Vorlauf Soll | Board, überwiegend passiv mitgelesen |
 | Statuszeile | „Aktualisiert HH:MM:SS“, dahinter die Warteschlange des Boards; nach einem Knopfdruck 3 min lang der Fortschritt: vorgemerkt → gesendet → **OK** (grün) oder **NICHT übernommen / abgelehnt (CM=05) / keine Rückmeldung** (rot); Fehler wie „CAN-Board nicht erreichbar“ | Board: `ergebnis_letzter_schaltbefehl`, `warteschlange` |
@@ -163,13 +165,14 @@ cp .env.example .env          # Broker, MQTT-Konto, App-Login eintragen
 docker compose up -d --build  # danach http://<Host>:4000
 ```
 
-Eigenes Broker-Konto, das nur lesen und die zwei Schaltbefehle senden darf:
+Eigenes Broker-Konto, das nur lesen, die zwei Schaltbefehle und den Status-Lesebefehl senden darf:
 
 ```
 user heizungsapp
 topic read  weact-can485-weishaupt/#
 topic write weact-can485-weishaupt/cmd/heizkreis
 topic write weact-can485-weishaupt/cmd/warmwasser
+topic write weact-can485-weishaupt/cmd/status
 ```
 
 ### Hinweise

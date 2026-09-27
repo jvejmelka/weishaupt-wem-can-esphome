@@ -4,6 +4,8 @@
 //              mithoert oder selbst abfragt.
 //   Schalten:  MQTT-Befehl an das Board (cmd/heizkreis, cmd/warmwasser). Das Board setzt ihn
 //              mit Sperrminute, Warteschlange und Kontrolle am Bus um.
+//   Status:    MQTT-Befehl cmd/status - das Board liest die Betriebsarten einmal vom Bus
+//              (nur CAN-Leseanfragen, kein WEM-JSON).
 // Frueher fragte die App die JSON-Schnittstelle des WEM direkt ab - die ist empfindlich und
 // wurde dadurch mehrfach bis zum Stromlos-Machen gesperrt.
 
@@ -151,6 +153,7 @@ app.get('/api/status', (req, res) => {
     modeAktuellLabel: text('heizkreis_status'),
     schaltStatus:     text('ergebnis_letzter_schaltbefehl'),
     warteschlange:    text('warteschlange'),
+    statusGelesen:    text('status_gelesen'),                  // "27.09. 14:05:12 gelesen" / "angefordert ..." (ab Firmware v21)
     busAlterS:        letzterFrame,
     source: 'can-board'
   });
@@ -182,6 +185,15 @@ app.post('/api/warmwasser', (req, res) => {
   client.publish(`${GERAET}/cmd/warmwasser`, an ? 'Ein' : 'Aus', { qos: 1 }, err => {
     if (err) return res.status(500).json({ error: `Senden fehlgeschlagen: ${err.message}` });
     res.json({ ok: true, queued: true, an });
+  });
+});
+
+// Betriebsarten einmal vom Bus lesen lassen (Board nimmt das hoechstens alle 10 s an)
+app.post('/api/lesen', (req, res) => {
+  if (!mqttVerbunden) return res.status(503).json({ error: 'MQTT-Broker nicht erreichbar' });
+  client.publish(`${GERAET}/cmd/status`, '1', { qos: 1 }, err => {
+    if (err) return res.status(500).json({ error: `Senden fehlgeschlagen: ${err.message}` });
+    res.json({ ok: true });
   });
 });
 

@@ -191,6 +191,7 @@ Schalten per MQTT:
 ```
 mosquitto_pub -t weact-can485-weishaupt/cmd/heizkreis  -m "Zeitprogramm 1"
 mosquitto_pub -t weact-can485-weishaupt/cmd/warmwasser -m "Ein"
+mosquitto_pub -t weact-can485-weishaupt/cmd/status     -m 1      # Betriebsarten einmal vom Bus lesen
 ```
 
 Zwischen zwei Befehlen liegt mindestens eine Minute; spätere landen in der Warteschlange.
@@ -209,7 +210,7 @@ cp .env.example .env
 | Schlüssel | Bedeutung |
 |---|---|
 | `MQTT_URL` | z. B. `mqtt://<broker>:1883` |
-| `MQTT_USER`, `MQTT_PASS` | eigenes Konto, s. [README](README.md#einrichten-1) – nur lesen plus die zwei Schaltbefehle |
+| `MQTT_USER`, `MQTT_PASS` | eigenes Konto, s. [README](README.md#einrichten-1) – nur lesen plus die zwei Schaltbefehle und `cmd/status` |
 | `MQTT_GERAET` | wie `geraet` in der Firmware |
 | `APP_USERNAME`, `APP_PASSWORD` | Anmeldung in der App – **ohne beide startet sie nicht** |
 

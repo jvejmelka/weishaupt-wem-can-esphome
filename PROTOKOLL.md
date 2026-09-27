@@ -119,9 +119,11 @@ Bus. Sie werden gelesen, auch wenn „Eigene CAN-Anfragen“ aus ist, aber nur
 
 - einmal nach der Anlaufpause,
 - wenn sich die Statusbits ändern (PDO `0x1C1`, etwa bei einer Umstellung am Display oder im Portal),
-- nach einem eigenen Warmwasser-Schaltbefehl.
+- nach einem eigenen Warmwasser-Schaltbefehl,
+- auf Wunsch: Knopf „Status lesen“ (Weboberfläche, Handy-App) bzw. MQTT `<gerät>/cmd/status`.
+  Wünsche werden höchstens alle 10 s angenommen, gesendet wird nur bei lebendem Bus.
 
-Die Heizkreis-Betriebsart wird dabei höchstens alle 2 min gelesen. Bekannte Lücke: ein Wechsel
+Die Heizkreis-Betriebsart wird dabei höchstens alle 2 min gelesen – außer auf ausdrücklichen Wunsch. Bekannte Lücke: ein Wechsel
 zwischen zwei Zeitprogrammen am Display ändert die Statusbits nicht und bleibt bis zum nächsten
 Anlass unbemerkt.
 
@@ -327,6 +329,15 @@ Namen hier sind die aus der Firmware.
 | **Lesebefehl Antwort** | `01 2933/02 = 2 (0x02, 1 Byte)` oder `… Abbruch 06020000 (Objekt fehlt?)`; bei totem Bus „Bus tot - nicht gesendet“ |
 
 Dasselbe geht per MQTT: `<gerät>/cmd/lesen` mit `01 2933 02`.
+
+### Betriebsarten: Status lesen
+
+| Element | Funktion |
+|---|---|
+| **Status lesen** (Knopf) | liest Heizkreis-Betriebsart (`0x2933`/2) und – mit Paket warmwasser – `0x2A20`, `0x2A2C`, `0x2A39` (je Subindex 2) einmal von Knoten 1. Nur Leseanfragen, kein WEM-JSON |
+| **Status gelesen** | `27.09. 09:32:51 gelesen`, während der Anforderung `09:32:46 angefordert ...`, bei totem Bus `… Bus schweigt - nicht gelesen` |
+
+Per MQTT: `<gerät>/cmd/status` mit beliebigem Inhalt. Höchstens ein Wunsch alle 10 s.
 
 ### Schalten (über WEM, Kontrolle am Bus)
 

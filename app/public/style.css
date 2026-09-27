@@ -228,7 +228,15 @@ html, body {
 .modes-title {
   font-size: .7rem; letter-spacing: .25em; color: var(--text2);
   margin-bottom: .75rem;
+  display: flex; align-items: center; justify-content: space-between; gap: .5rem;
 }
+.lesen-btn {
+  background: var(--bg3); border: 1px solid var(--border); color: var(--text2);
+  font-family: var(--sans); font-weight: 600; font-size: .72rem; letter-spacing: .1em;
+  min-height: 28px; padding: 0 .6rem; border-radius: 2px; cursor: pointer;
+}
+.lesen-btn:disabled { opacity: .5; cursor: default; }
+.lesen-btn.busy { border-color: var(--amber); color: var(--amber); }
 .modes-grid {
   display: grid; grid-template-columns: repeat(4, 1fr);
   gap: .4rem;

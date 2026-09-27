@@ -2,6 +2,8 @@
 #   ${geraet}/cmd/lesen  "KNOTEN INDEX SUB"          hex, z.B. "01 2933 02" -> Antwort in "Lesebefehl Antwort"
 #   ${geraet}/cmd/scan   "KNOTEN START ENDE MAXSUB"  hex, z.B. "01 2A00 2AFF 3" -> Antworten in ${geraet}/canraw
 #   ${geraet}/cmd/stop   (beliebig)                   bricht den Scan ab
+#   ${geraet}/cmd/status (beliebig)                   liest Heizkreis- und Warmwasser-Betriebsart einmal
+#                                                     vom Bus (hoechstens alle 10 s), Zeitpunkt in "Status gelesen"
 # Schaltbefehle (cmd/heizkreis, cmd/warmwasser) kommen aus den Schalten-Paketen.
 # Die Befehle koennen nur LESEN: das Kommandobyte ist fest 0x40 (SDO-Upload).
 
@@ -35,6 +37,9 @@ mqtt:
     - topic: ${geraet}/cmd/stop
       then:
         - lambda: 'id(scan_aktiv) = false; ESP_LOGI("scan", "Objektscan abgebrochen");'
+    - topic: ${geraet}/cmd/status
+      then:
+        - script.execute: status_lesen
 
 globals:
   - id: scan_aktiv

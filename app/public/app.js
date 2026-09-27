@@ -170,6 +170,7 @@ async function refreshStatus() {
       document.getElementById('message').textContent = schoen(t);
     }
     letzterSchaltStatus = data.schaltStatus;
+    pruefeStatusLesung(data);
     startProgress();
   } catch (err) {
     setStatus('err');
@@ -216,6 +217,52 @@ async function setWarmwasser(an) {
 }
 document.getElementById('wwEin').addEventListener('click', () => setWarmwasser(true));
 document.getElementById('wwAus').addEventListener('click', () => setWarmwasser(false));
+
+// ── Status lesen (Betriebsarten einmal vom Bus) ───────────────
+// Das Board liest Heizkreis- und Warmwasser-Betriebsart nur bei Anlass. Der Knopf schickt
+// cmd/status; danach 5x im 4-s-Abstand abfragen, bis "Status gelesen" sich aendert.
+let statusLesung = null;
+const lesenBtn = document.getElementById('statusLesenBtn');
+async function statusLesen() {
+  if (statusLesung) return;
+  lesenBtn.disabled = true; lesenBtn.classList.add('busy');
+  try {
+    const res = await apiFetch('/api/lesen', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Fehler');
+    statusLesung = { seit: Date.now(), vorher: letzterStatusGelesen };
+    setStatus('');
+    document.getElementById('message').textContent = 'Status angefordert …';
+    for (let i = 1; i <= 5; i++) setTimeout(refreshStatus, i * 4000);
+    setTimeout(() => {
+      if (!statusLesung) return;
+      statusLesung = null; setStatus('err');
+      document.getElementById('message').textContent = 'Keine Rückmeldung vom Board';
+    }, 22000);
+  } catch (err) {
+    setStatus('err');
+    document.getElementById('message').textContent = err.message || 'Fehler';
+  }
+  setTimeout(() => { lesenBtn.disabled = false; lesenBtn.classList.remove('busy'); }, 10000);
+}
+let letzterStatusGelesen = null;
+function pruefeStatusLesung(data) {
+  const neu = data.statusGelesen || null;
+  if (statusLesung && neu && neu !== statusLesung.vorher) {
+    if (/gelesen/.test(neu)) {
+      statusLesung = null; setStatus('ok');
+      document.getElementById('message').textContent = 'Status ' + neu.replace(/^\d\d\.\d\d\.\s*/, '');
+    } else if (/schweigt/.test(neu)) {
+      statusLesung = null; setStatus('err');
+      document.getElementById('message').textContent = 'Bus schweigt – nicht gelesen';
+    } else {
+      document.getElementById('message').textContent = 'Status ' + neu.replace(/^[\d:]+\s*/, '');
+      statusLesung.vorher = neu;
+    }
+  }
+  letzterStatusGelesen = neu;
+}
+lesenBtn.addEventListener('click', statusLesen);
 
 async function loadMeta() {
   const res = await apiFetch('/api/meta');
