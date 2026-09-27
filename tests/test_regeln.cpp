@@ -1,4 +1,6 @@
-// Tests des Bauteils weishaupt_can (components/weishaupt_can/): Regellogik (regellogik.h), Datei-Parser
+// Tests des Bauteils weishaupt_can (components/weishaupt_can/): Regellogik (regellogik.h, regelwerk.h;
+// die Einzeltests R1-R5 pruefen die eingefrorene v29-Fassung rl29, die Aequivalenz v29/neu steht in
+// test_aequivalenz.inc), Datei-Parser
 // (verdacht.h, zusatz.h), Schaltbefehle/Status-JSON (befehle.h) und die Zustandsklassen (kern.h) -
 // laeuft auf dem PC, ohne ESPHome, ohne Board, ohne Bus.
 // Alle Frames sind AUSGEDACHT nach den Mustern in PROTOKOLL.md, keine Mitschnitte.
@@ -9,6 +11,9 @@
 #include "../components/weishaupt_can/zusatz.h"
 #include "../components/weishaupt_can/befehle.h"
 #include "../components/weishaupt_can/kern.h"
+#include "referenz_v29/regellogik_v29.h"
+#include <cstdarg>
+#include <random>
 #include <cstdio>
 #include <fstream>
 #include <sstream>
@@ -33,6 +38,11 @@ struct Reg { Reg(const char *n, std::function<void()> f) { tests().push_back({n,
 
 using F = std::vector<uint8_t>;
 
+// Kurzform-Regel (ein Frame-Ausloeser): CAN-ID, Maske, Muster
+static uint16_t kid(const vd::Regel &r) { return r.ausloeser[0].glieder[0].can_id; }
+static const vd::Bytes8 &kmaske(const vd::Regel &r) { return r.ausloeser[0].glieder[0].maske; }
+static const vd::Bytes8 &kmuster(const vd::Regel &r) { return r.ausloeser[0].glieder[0].muster[0]; }
+
 // SDO-Anfrage des WEM an den Kessel (0x602): Kommandobyte, Index LE, Subindex
 static F sdo(uint8_t kmd, uint16_t idx, uint8_t sub, uint8_t d0 = 0) {
   return F{kmd, (uint8_t) (idx & 0xFF), (uint8_t) (idx >> 8), sub, d0, 0, 0, 0};
@@ -51,7 +61,7 @@ struct Zeitframe { uint32_t t; F x; };
 static int r1_zaehlen(const std::vector<Zeitframe> &folge) {
   uint32_t a = 0, b = 0;
   int n = 0;
-  for (auto &z : folge) if (rl::r1_frame(a, b, z.x, z.t)) n++;
+  for (auto &z : folge) if (rl29::r1_frame(a, b, z.x, z.t)) n++;
   return n;
 }
 
@@ -125,27 +135,27 @@ TEST(r1_zeitfenster) {
 
 TEST(r1_zustand_nach_abschluss_geleert) {
   uint32_t a = 0, b = 0;
-  PRUEFE(!rl::r1_frame(a, b, sdo(0xA4, 0x2101, 0x0A), 1000));
-  PRUEFE(!rl::r1_frame(a, b, sdo(0xA4, 0x2102, 0x0D), 1200));
-  PRUEFE(rl::r1_frame(a, b, sdo(0xA4, 0x2102, 0x01), 1400));
+  PRUEFE(!rl29::r1_frame(a, b, sdo(0xA4, 0x2101, 0x0A), 1000));
+  PRUEFE(!rl29::r1_frame(a, b, sdo(0xA4, 0x2102, 0x0D), 1200));
+  PRUEFE(rl29::r1_frame(a, b, sdo(0xA4, 0x2102, 0x01), 1400));
   PRUEFE(a == 0 && b == 0);
   // ein zweites 2102/01 allein loest nicht erneut aus
-  PRUEFE(!rl::r1_frame(a, b, sdo(0xA4, 0x2102, 0x01), 1600));
+  PRUEFE(!rl29::r1_frame(a, b, sdo(0xA4, 0x2102, 0x01), 1600));
 }
 
 TEST(r1_ignoriert_antworten_und_kurze_frames) {
   uint32_t a = 0, b = 0;
   // Antworten des Kessels (0x43/0x4F) und Abbrueche (0x80) sind keine Anfragen
-  PRUEFE(!rl::r1_frame(a, b, sdo(0x43, 0x2101, 0x0A), 1000));
+  PRUEFE(!rl29::r1_frame(a, b, sdo(0x43, 0x2101, 0x0A), 1000));
   PRUEFE(a == 0);
-  PRUEFE(!rl::r1_frame(a, b, F{0xA4, 0x01, 0x21, 0x0A}, 1000));   // nur 4 Bytes
+  PRUEFE(!rl29::r1_frame(a, b, F{0xA4, 0x01, 0x21, 0x0A}, 1000));   // nur 4 Bytes
   PRUEFE(a == 0);
 }
 
 TEST(r1_wem_neustart_und_eigener_befehl) {
-  PRUEFE(!rl::wem_neu(0, 1000));
-  PRUEFE(rl::wem_neu(1001, 1000 + 299999));
-  PRUEFE(!rl::wem_neu(1001, 1001 + 300000));
+  PRUEFE(!rl29::wem_neu(0, 1000));
+  PRUEFE(rl29::wem_neu(1001, 1000 + 299999));
+  PRUEFE(!rl29::wem_neu(1001, 1001 + 300000));
   PRUEFE(!rl::eigen_ruht(0, 50000));
   PRUEFE(rl::eigen_ruht(10001, 10001 + 119999));
   PRUEFE(!rl::eigen_ruht(10001, 10001 + 120000));
@@ -155,51 +165,51 @@ TEST(r1_wem_neustart_und_eigener_befehl) {
 
 TEST(w252b_schreiben_und_aenderung) {
   int vorher = -1, v = 0;
-  PRUEFE(rl::w252b_frame(vorher, sdo(0x2F, 0x252B, 0x00, 0x0F), v) && v == 0x0F);
-  PRUEFE(!rl::w252b_frame(vorher, sdo(0x2F, 0x252B, 0x00, 0x0F), v));     // gleicher Wert
-  PRUEFE(rl::w252b_frame(vorher, sdo(0x2F, 0x252B, 0x00, 0x0A), v) && v == 0x0A);
+  PRUEFE(rl29::w252b_frame(vorher, sdo(0x2F, 0x252B, 0x00, 0x0F), v) && v == 0x0F);
+  PRUEFE(!rl29::w252b_frame(vorher, sdo(0x2F, 0x252B, 0x00, 0x0F), v));     // gleicher Wert
+  PRUEFE(rl29::w252b_frame(vorher, sdo(0x2F, 0x252B, 0x00, 0x0A), v) && v == 0x0A);
   // Lesen von 0x252B ist kein Schreiben; anderer Index ebenso nicht
   int vorher2 = -1;
-  PRUEFE(!rl::w252b_frame(vorher2, sdo(0xA4, 0x252B, 0x00), v));
-  PRUEFE(!rl::w252b_frame(vorher2, sdo(0x2F, 0x252C, 0x00, 0x0F), v));
+  PRUEFE(!rl29::w252b_frame(vorher2, sdo(0xA4, 0x252B, 0x00), v));
+  PRUEFE(!rl29::w252b_frame(vorher2, sdo(0x2F, 0x252C, 0x00, 0x0F), v));
   PRUEFE(vorher2 == -1);
 }
 
 TEST(r2_r4_bedingungen) {
-  PRUEFE(rl::r2_bei_252b(0x0F, 2));        // Warmwasserbetrieb, bekannt "Aus"
-  PRUEFE(!rl::r2_bei_252b(0x0F, 1));       // bekannt "Ein": kein Widerspruch
-  PRUEFE(!rl::r2_bei_252b(0x0F, -1));      // unbekannt
-  PRUEFE(rl::r4_bei_252b(0x0A, 1));        // Heizbetrieb bei Standby
-  PRUEFE(rl::r4_bei_252b(0x0A, 5));        // Heizbetrieb bei Sommer
-  PRUEFE(!rl::r4_bei_252b(0x0A, 2));       // Zeitprogramm: erwartet
-  PRUEFE(rl::r2_bei_kstatus(15, 2) && !rl::r2_bei_kstatus(10, 2));
-  PRUEFE(rl::r4_bei_kstatus(10, 1) && !rl::r4_bei_kstatus(15, 1));
+  PRUEFE(rl29::r2_bei_252b(0x0F, 2));        // Warmwasserbetrieb, bekannt "Aus"
+  PRUEFE(!rl29::r2_bei_252b(0x0F, 1));       // bekannt "Ein": kein Widerspruch
+  PRUEFE(!rl29::r2_bei_252b(0x0F, -1));      // unbekannt
+  PRUEFE(rl29::r4_bei_252b(0x0A, 1));        // Heizbetrieb bei Standby
+  PRUEFE(rl29::r4_bei_252b(0x0A, 5));        // Heizbetrieb bei Sommer
+  PRUEFE(!rl29::r4_bei_252b(0x0A, 2));       // Zeitprogramm: erwartet
+  PRUEFE(rl29::r2_bei_kstatus(15, 2) && !rl29::r2_bei_kstatus(10, 2));
+  PRUEFE(rl29::r4_bei_kstatus(10, 1) && !rl29::r4_bei_kstatus(15, 1));
 }
 
 TEST(kesselstatus_flanke) {
   int vorher = -1, st = 0;
-  PRUEFE(!rl::kstatus_flanke(vorher, F{10}, st));    // erster Wert: keine Flanke
+  PRUEFE(!rl29::kstatus_flanke(vorher, F{10}, st));    // erster Wert: keine Flanke
   PRUEFE(vorher == 10);
-  PRUEFE(!rl::kstatus_flanke(vorher, F{10}, st));
-  PRUEFE(rl::kstatus_flanke(vorher, F{15}, st) && st == 15);
-  PRUEFE(!rl::kstatus_flanke(vorher, F{}, st));      // leerer Frame
+  PRUEFE(!rl29::kstatus_flanke(vorher, F{10}, st));
+  PRUEFE(rl29::kstatus_flanke(vorher, F{15}, st) && st == 15);
+  PRUEFE(!rl29::kstatus_flanke(vorher, F{}, st));      // leerer Frame
 }
 
 // ---------------------------------------------------------------- R3/R5 (Statusbits PDO 0x1C1)
 
 TEST(statusbits_byte_reihenfolge) {
   // Bytes 2-3 little-endian: 00 00 00 10 = 0x1000 (Standby), 00 00 10 00 = 0x0010 (WW-Ladung)
-  PRUEFE(rl::statusbits_m(F{0, 0, 0x00, 0x10}) == 0x1000);
-  PRUEFE(rl::statusbits_m(F{0, 0, 0x10, 0x00}) == 0x0010);
+  PRUEFE(rl29::statusbits_m(F{0, 0, 0x00, 0x10}) == 0x1000);
+  PRUEFE(rl29::statusbits_m(F{0, 0, 0x10, 0x00}) == 0x0010);
 }
 
 TEST(r3_standby_bit) {
   int sv = -1, rv = -1;
-  auto e = rl::statusbits(sv, rv, F{0, 0, 0x00, 0x10});      // erster Stand: Standby
+  auto e = rl29::statusbits(sv, rv, F{0, 0, 0x00, 0x10});      // erster Stand: Standby
   PRUEFE(e.geaendert && !e.r3 && !e.r5);                     // Vorwert unbekannt: nichts ausloesen
-  e = rl::statusbits(sv, rv, F{0, 0, 0x00, 0x10});           // unveraendert
+  e = rl29::statusbits(sv, rv, F{0, 0, 0x00, 0x10});           // unveraendert
   PRUEFE(!e.geaendert);
-  e = rl::statusbits(sv, rv, F{0, 0, 0x00, 0x00});           // Heizung ein
+  e = rl29::statusbits(sv, rv, F{0, 0, 0x00, 0x00});           // Heizung ein
   PRUEFE(e.geaendert && e.r3 && !e.r5 && e.sv == 1 && e.stby == 0);
 }
 
@@ -207,36 +217,36 @@ TEST(r3_nicht_bei_ww_ladung_und_heizbetrieb) {
   // 0x0010 (WW-Ladung) und 0x0040 (Heizbetrieb) zaehlen weder fuer R3 noch fuer R5.
   // Wer die Bytes vertauscht, liest 00 00 10 00 als Standby - dieser Test faengt das.
   int sv = -1, rv = -1;
-  rl::statusbits(sv, rv, F{0, 0, 0x00, 0x00});
-  auto e = rl::statusbits(sv, rv, F{0, 0, 0x10, 0x00});
+  rl29::statusbits(sv, rv, F{0, 0, 0x00, 0x00});
+  auto e = rl29::statusbits(sv, rv, F{0, 0, 0x10, 0x00});
   PRUEFE(!e.geaendert && !e.r3 && !e.r5);
-  e = rl::statusbits(sv, rv, F{0, 0, 0x40, 0x00});
+  e = rl29::statusbits(sv, rv, F{0, 0, 0x40, 0x00});
   PRUEFE(!e.geaendert);
-  e = rl::statusbits(sv, rv, F{0, 0, 0x50, 0x00});
+  e = rl29::statusbits(sv, rv, F{0, 0, 0x50, 0x00});
   PRUEFE(!e.geaendert);
 }
 
 TEST(r5_uebrige_bits) {
   int sv = -1, rv = -1;
-  rl::statusbits(sv, rv, F{0, 0, 0x00, 0x10});
-  auto e = rl::statusbits(sv, rv, F{0, 0, 0x04, 0x10});     // 0x1004: Heizbedarf-Bit dazu
+  rl29::statusbits(sv, rv, F{0, 0, 0x00, 0x10});
+  auto e = rl29::statusbits(sv, rv, F{0, 0, 0x04, 0x10});     // 0x1004: Heizbedarf-Bit dazu
   PRUEFE(e.geaendert && !e.r3 && e.r5 && e.rest == 0x0004 && e.rv == 0);
-  e = rl::statusbits(sv, rv, F{0, 0, 0x04, 0x04});          // 0x0404: Standby weg, 0x0400 dazu
+  e = rl29::statusbits(sv, rv, F{0, 0, 0x04, 0x04});          // 0x0404: Standby weg, 0x0400 dazu
   PRUEFE(e.r3 && e.r5);
 }
 
 TEST(status_entscheiden) {
-  rl::StatusAenderung beide;
+  rl29::StatusAenderung beide;
   beide.geaendert = beide.r3 = beide.r5 = true;
-  auto s = rl::status_entscheiden(beide, false, true);       // R3 an: R3 liest, R5 nicht zusaetzlich
+  auto s = rl29::status_entscheiden(beide, false, true);       // R3 an: R3 liest, R5 nicht zusaetzlich
   PRUEFE(s.r3 && s.r3_liest && !s.r5);
-  s = rl::status_entscheiden(beide, false, false);           // R3 aus: R3 nur Schatten, R5 wird gerufen
+  s = rl29::status_entscheiden(beide, false, false);           // R3 aus: R3 nur Schatten, R5 wird gerufen
   PRUEFE(s.r3 && !s.r3_liest && s.r5);
-  s = rl::status_entscheiden(beide, true, true);             // eigener Befehl: alles ruht
+  s = rl29::status_entscheiden(beide, true, true);             // eigener Befehl: alles ruht
   PRUEFE(!s.r3 && !s.r5);
-  rl::StatusAenderung nur5;
+  rl29::StatusAenderung nur5;
   nur5.geaendert = nur5.r5 = true;
-  s = rl::status_entscheiden(nur5, false, true);
+  s = rl29::status_entscheiden(nur5, false, true);
   PRUEFE(!s.r3 && s.r5);
 }
 
@@ -348,8 +358,9 @@ TEST(regeln_beispieldatei) {
   std::string f;
   PRUEFE(vd::datei_lesen(datei("regeln.json.example"), d, f));
   PRUEFE(d.version == 1 && d.an[0] == 1 && d.an[3] == 0 && d.abstand[1] == 10 && d.max_h == 6);
-  PRUEFE(d.eigene_an == 0 && d.hat_eigene && d.eigene.size() == 1);
-  PRUEFE(d.eigene[0].can_id == 0x602 && d.eigene[0].lesen == 3 && d.eigene[0].abstand_min == 30);
+  PRUEFE(d.eigene_an == 0 && d.hat_eigene && d.eigene.size() == 2);
+  PRUEFE(vd::kurzform(d.eigene[0]) && !vd::kurzform(d.eigene[1]) && d.eigene[1].ausloeser.size() == 2);
+  PRUEFE(kid(d.eigene[0]) == 0x602 && d.eigene[0].lesen == 3 && d.eigene[0].abstand_min == 30);
 }
 
 TEST(regeln_altes_feld_verdacht_abgelehnt) {
@@ -387,11 +398,11 @@ TEST(regeln_eigene) {
   vd::Datei d;
   std::string f;
   PRUEFE(eigene_ok("{\"name\":\"t1\",\"can_id\":\"0x1C1\",\"muster\":\"00 00\",\"lesen\":\"hk\"}", f, d));
-  PRUEFE(d.eigene[0].lesen == 1 && d.eigene[0].maske[1] == 0xFF && d.eigene[0].maske[2] == 0x00);
+  PRUEFE(d.eigene[0].lesen == 1 && kmaske(d.eigene[0])[1] == 0xFF && kmaske(d.eigene[0])[2] == 0x00);
   PRUEFE(d.eigene[0].abstand_min == 10 && d.eigene[0].an);
   // Muster wird mit der Maske verundet
   PRUEFE(eigene_ok("{\"name\":\"t2\",\"can_id\":1538,\"maske\":\"F0\",\"muster\":\"FF\"}", f, d));
-  PRUEFE(d.eigene[0].can_id == 0x602 && d.eigene[0].muster[0] == 0xF0);
+  PRUEFE(kid(d.eigene[0]) == 0x602 && kmuster(d.eigene[0])[0] == 0xF0);
   // gesperrte IDs, reservierte Namen, Grenzen
   PRUEFE(!eigene_ok("{\"name\":\"t\",\"can_id\":\"0x601\",\"muster\":\"40\"}", f, d) && enthaelt(f, "gesperrt"));
   PRUEFE(!eigene_ok("{\"name\":\"t\",\"can_id\":\"0x581\",\"muster\":\"40\"}", f, d) && enthaelt(f, "gesperrt"));
@@ -418,7 +429,7 @@ TEST(regeln_speicher_rundreise) {
   std::string s = vd::speicherform();
   PRUEFE(s.size() < 2400);                                   // passt in vd_speicher
   vd::eigene().clear();
-  PRUEFE(vd::aus_speicher(s.c_str(), f) && vd::eigene().size() == 1);
+  PRUEFE(vd::aus_speicher(s.c_str(), f) && vd::eigene().size() == 2);
   PRUEFE(vd::speicherform() == s);
   PRUEFE(vd::aus_speicher("", f) && vd::eigene().empty());
   PRUEFE(!vd::aus_speicher("{kaputt", f));
@@ -810,6 +821,9 @@ TEST(register_json_schreiben_wie_v27) {
 }
 
 #include "test_kern.inc"
+#include "referenz_v29/dispatch_v29.inc"
+#include "test_aequivalenz.inc"
+#include "test_regelwerk.inc"
 
 int main() {
   for (auto &t : tests()) {

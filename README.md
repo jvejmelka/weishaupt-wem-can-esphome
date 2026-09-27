@@ -70,8 +70,11 @@ Bauteils (`id(wcan)->…`). Die Klassen in [`kern.h`](components/weishaupt_can/k
 | `wc::Verdacht` | Laufzeitzustand der Regeln R1–R5 und der eigenen Regeln (teils gespeichert) |
 | `wc::Zusatz` | Zusatzanzeigen: Speicherform und Datei-Prüfsumme (gespeichert) |
 
-Dazu die reinen Logik-Dateien: [`regellogik.h`](components/weishaupt_can/regellogik.h)
-(Entscheidung der Regeln), [`befehle.h`](components/weishaupt_can/befehle.h) (Warteschlange,
+Dazu die reinen Logik-Dateien: [`regelwerk.h`](components/weishaupt_can/regelwerk.h)
+(Auswerter aller Regeln; R1–R5 dort seit v30 als **Datenregeln** im selben Format wie die eigenen
+Regeln, siehe [REGELN.md](REGELN.md#5-eigene-regeln-experimentell)),
+[`regellogik.h`](components/weishaupt_can/regellogik.h) (gemeinsame Bausteine: Ruhezeit,
+Masken, Rückrechnung R4, Prüfung vor dem Lesen), [`befehle.h`](components/weishaupt_can/befehle.h) (Warteschlange,
 Befehlsphasen, Status-JSON), [`verdacht.h`](components/weishaupt_can/verdacht.h) und
 [`zusatz.h`](components/weishaupt_can/zusatz.h) (Parser, JSON), `register_gen.h` (erzeugt aus
 `register.yaml`). Das ESPHome-Gerüst [`weishaupt_can.h`](components/weishaupt_can/weishaupt_can.h)
@@ -380,12 +383,16 @@ billiger, aber **ohne** galvanische Trennung.
 
 ## Tests & CI
 
-Die Entscheidungslogik der Regeln steht in [`regellogik.h`](components/weishaupt_can/regellogik.h), die
+Die Regeln (Format und Auswerter) stehen in [`verdacht.h`](components/weishaupt_can/verdacht.h) und
+[`regelwerk.h`](components/weishaupt_can/regelwerk.h), gemeinsame Bausteine in
+[`regellogik.h`](components/weishaupt_can/regellogik.h), die
 Schaltbefehle (Phasen, Warteschlange, Parser für `cmd/heizkreis`/`cmd/warmwasser`) und das
 Status-JSON in [`befehle.h`](components/weishaupt_can/befehle.h), der Zustand des Boards in den
 Klassen von [`kern.h`](components/weishaupt_can/kern.h) – reines C++ ohne ESPHome. Die Tests der
 Klassen treiben den Code von v28 (als Vergleichsfassung im Test) und die Klassen mit denselben,
-teils zufälligen Eingaben und verlangen gleiches Ergebnis. Getestet mit
+teils zufälligen Eingaben und verlangen gleiches Ergebnis; ebenso vergleicht ein Äquivalenztest die
+Regeln von v29 (eingefroren in [`tests/referenz_v29/`](tests/referenz_v29/)) mit den Datenregeln
+Frame für Frame – Logzeilen, Auslösungen, Ereignisse, gespeicherter Zustand. Getestet mit
 ausgedachten Beispiel-Frames nach [PROTOKOLL.md](PROTOKOLL.md), zusammen mit den Parsern für
 `cmd/regeln`, `cmd/regel` und `cmd/zusatz`. Lokal (braucht `g++` und
 `curl`; ArduinoJson wird in der Board-Version 7.4.3 geladen und per SHA-256 geprüft):

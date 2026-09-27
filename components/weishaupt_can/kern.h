@@ -10,7 +10,7 @@
 //   Brenner     Flankenerkennung, Brennerstarts
 //   Protokoll   Schalt- und Regelprotokoll (10 Eintraege)
 //   Schalten    Sperrminute, laufender WEM-Aufruf, Schreibbefehl
-//   Verdacht    Laufzeitzustand der Regeln R1-R5 und der eigenen Regeln
+//   Verdacht    Laufzeitzustand der Regeln R1-R5 (Datenregeln, regelwerk.h) und der eigenen Regeln
 //   Zusatz      Zusatzanzeigen (Speicherform, Datei-Pruefsumme)
 //
 // Was hier steht, sendet nichts: die Klassen liefern nur, OB und WAS gesendet wird.
@@ -26,6 +26,7 @@
 #include "regellogik.h"
 #include "befehle.h"
 #include "verdacht.h"
+#include "regelwerk.h"
 
 namespace wc {
 
@@ -363,17 +364,22 @@ struct Verdacht {
   std::map<std::string, uint32_t> letzt, letzt_schatten;
   Protokoll protokoll;
   Offen offen_hk, offen_ww;
-  uint32_t r1_a = 0, r1_b = 0;            // R1: 2101/0A und 2102/0D gesehen
-  uint32_t wem_start = 0;                 // Bootup-Meldung des WEM
-  int kstatus_vorher = -1, w252b_vorher = -1;
-  float vl = NAN, at = NAN;               // R4: Vorlaufsoll HZ, Aussentemperatur
-  int r4_key = -1;
+  rw::Werk werk{rw::feste_regeln()};     // R1-R5 als Datenregeln (regelwerk.h) samt Laufzeitzustand
   bool stand_gesendet = false;
   // gespeichert (frueher Globals vd_*): ueberleben den Neustart
   int stby_vorher = -1, rest_vorher = -1;
   uint32_t datei_hash = 0;
   int datei_version = -1;
   std::array<char, 2400> speicher{};      // eigene Regeln in Speicherform
+
+  // Regeln fuer einen Frame auswerten (feste, dann eigene). k.hk/ww/plaetze setzt diese Funktion.
+  std::vector<rw::Aktion> frame(uint32_t can_id, const std::vector<uint8_t> &x, rw::Kontext k) {
+    k.hk = hk_bekannt;
+    k.ww = ww_bekannt;
+    k.plaetze[0] = &stby_vorher;
+    k.plaetze[1] = &rest_vorher;
+    return rw::frame(werk, vd::eigene(), can_id, x, k);
+  }
 
   // Regel hat ausgeloest: offene Lesung merken, Anlass setzen. ziel 1 HK, 2 WW, 3 beide
   void ausgeloest(const std::string &regel, int ziel, uint32_t jetzt, Anlass &a) {

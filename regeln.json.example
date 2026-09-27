@@ -1,11 +1,26 @@
 {
-  "_kommentar": "Regeln R1-R5 und eigene Regeln (Vorgaben seit v25). Erklaerung: REGELN.md. Senden: mosquitto_pub -r -f regeln.json -t <geraet>/cmd/regeln. Ausgeschaltete Regeln laufen im Schattenmodus weiter (melden 'waere', lesen nicht).",
+  "_kommentar": "Regeln R1-R5 und eigene Regeln (Vorgaben seit v25, Regelformat seit v30). Erklaerung: REGELN.md. Senden: mosquitto_pub -r -f regeln.json -t <geraet>/cmd/regeln. Ausgeschaltete Regeln laufen im Schattenmodus weiter (melden 'waere', lesen nicht).",
   "version": 1,
-  "R1": {"an": true,  "abstand_min": 1},
-  "R2": {"an": true,  "abstand_min": 10},
-  "R3": {"an": true,  "abstand_min": 1},
-  "R4": {"an": false, "abstand_min": 30},
-  "R5": {"an": false, "abstand_min": 5},
+  "R1": {
+    "an": true,
+    "abstand_min": 1
+  },
+  "R2": {
+    "an": true,
+    "abstand_min": 10
+  },
+  "R3": {
+    "an": true,
+    "abstand_min": 1
+  },
+  "R4": {
+    "an": false,
+    "abstand_min": 30
+  },
+  "R5": {
+    "an": false,
+    "abstand_min": 5
+  },
   "max_pro_stunde": 6,
   "eigene_regeln_an": false,
   "eigene": [
@@ -13,11 +28,76 @@
       "name": "Portal-Seitenaufruf",
       "an": false,
       "can_id": "0x602",
-      "maske":  "00 FF FF 00 00 00 00 00",
+      "maske": "00 FF FF 00 00 00 00 00",
       "muster": "00 3E 22 00 00 00 00 00",
       "lesen": "beide",
       "abstand_min": 30,
       "beschreibung": "WEM fragt den Kessel 0x223E ab - kam einmal beim Oeffnen einer Portalseite; Zusammenhang unbelegt"
+    },
+    {
+      "name": "ww-folge",
+      "an": false,
+      "lesen": "ww",
+      "abstand_min": 1,
+      "ausloeser": [
+        {
+          "folge": [
+            {
+              "can_id": "0x602",
+              "maske": "FF FF FF FF",
+              "muster": [
+                "A4 01 21 0A",
+                "40 01 21 0A"
+              ],
+              "laenge_min": 5,
+              "fenster_ms": 15000
+            },
+            {
+              "can_id": "0x602",
+              "maske": "FF FF FF FF",
+              "muster": [
+                "A4 02 21 0D",
+                "40 02 21 0D"
+              ],
+              "laenge_min": 5,
+              "fenster_ms": 10000
+            },
+            {
+              "can_id": "0x602",
+              "maske": "FF FF FF FF",
+              "muster": [
+                "A4 02 21 01",
+                "40 02 21 01"
+              ],
+              "laenge_min": 5
+            }
+          ],
+          "text": "WW-Folge"
+        },
+        {
+          "flanke": {
+            "can_id": "0x182",
+            "laenge_min": 1
+          },
+          "byte": 0,
+          "gleich": [
+            15
+          ],
+          "wenn": {
+            "ww": [
+              2
+            ]
+          }
+        }
+      ],
+      "ruhe_nach": {
+        "can_id": "0x701",
+        "muster": "00",
+        "laenge_min": 1,
+        "ms": 300000,
+        "grund": "WEM-Neustart"
+      },
+      "beschreibung": "Beispiel Langform (v30): Warmwasser-Folge wie R1 und Kesselstatus 15 bei bekanntem Aus"
     }
   ]
 }

@@ -1,6 +1,7 @@
 # Regeln: Betriebsarten lesen, wenn sich etwas geändert haben könnte
 
-Paket `pakete/verdacht.yaml`, ab Firmware v22, in dieser Form ab **v25**. Diese Seite erklärt, was
+Paket `pakete/verdacht.yaml`, ab Firmware v22, in dieser Form ab **v25**; seit **v30** sind R1–R5
+Datenregeln im selben Format wie die eigenen Regeln (Verhalten unverändert, gegen v29 geprüft). Diese Seite erklärt, was
 die Regeln tun, woran sie eine Änderung erkennen, wie sicher das ist und wie man sie einstellt.
 
 - [1. Worum es geht](#1-worum-es-geht)
@@ -199,18 +200,31 @@ ausgeschaltete Regel angeschlagen hätte – und kann das gegen die bekannten Um
 
 ## 5. Eigene Regeln (experimentell)
 
-Einfache Auslöser ohne Programmierung: *kommt ein Frame mit dieser CAN-ID, dessen Datenbytes UND
-Maske gleich Muster UND Maske sind, dann nach dem Mindestabstand lesen*. Eigener Block
-„Eigene Regeln (experimentell)“ mit **eigenem Hauptschalter, Vorgabe aus**. Höchstens 8 Regeln,
-dauerhaft im Flash gespeichert (überleben einen Neustart auch ohne Broker).
+Eigene Auslöser ohne Programmierung. Eigener Block „Eigene Regeln (experimentell)“ mit **eigenem
+Hauptschalter, Vorgabe aus**. Höchstens 8 Regeln, dauerhaft im Flash gespeichert (überleben einen
+Neustart auch ohne Broker).
+
+**Seit v30 sind die festen Regeln R1–R5 selbst Datenregeln in genau diesem Format** (hinterlegt in
+[`regelwerk.h`](components/weishaupt_can/regelwerk.h), Abschnitt „die festen Regeln als Daten“) und
+laufen durch denselben Auswerter wie die eigenen. Was R1–R5 können – Folgen mit Zeitfenstern,
+Flanken, Bedingungen auf den bekannten Stand, Ruhe nach einem Frame, „nicht zusätzlich, wenn eine
+andere Regel schon liest“ –, können damit auch eigene Regeln.
+
+### Kurzform (wie bis v29)
+
+*Kommt ein Frame mit dieser CAN-ID, dessen Datenbytes UND Maske gleich Muster UND Maske sind, dann
+nach dem Mindestabstand lesen.* Alte Regeln gelten unverändert und werden byteweise gleich
+gespeichert und gemeldet.
 
 | Feld | Inhalt |
 |---|---|
 | `name` | 1–24 Zeichen `A-Z a-z 0-9 - _ .`, eindeutig, nicht `R1`–`R5`, `eigene`, `verdacht` |
 | `an` | `true`/`false` (Vorgabe `true`) |
 | `can_id` | `"0x602"` oder Zahl. **`0x601` und `0x581` sind gesperrt** – das sind die eigenen Anfragen des Boards und ihre Antworten; eine Regel darauf würde sich selbst auslösen |
-| `muster` | 1–8 Bytes hex, z. B. `"A4 3E 22"` |
-| `maske` | 1–8 Bytes hex; fehlt sie, zählen genau die Bytes, die im Muster stehen |
+| `muster` | 1–8 Bytes hex, z. B. `"A4 3E 22"` – ab v30 auch eine **Liste** mit 1–4 Mustern (eines muss passen) |
+| `maske` | 1–8 Bytes hex; fehlt sie, zählen genau die Bytes, die im Muster stehen (bei einer Liste müssen die Muster dann gleich lang sein) |
+| `laenge_min` | ab v30, optional: der Frame muss mindestens so viele Datenbytes haben (0–8) |
+| `wenn` | ab v30, optional: nur wenn der zuletzt gelesene Stand passt, z. B. `{"ww":[2]}` oder `{"hk":[1,5]}` (Werte wie in [Abschnitt 3](#3-die-regeln-im-einzelnen)) |
 | `lesen` | `"hk"`, `"ww"` oder `"beide"` (Vorgabe) |
 | `abstand_min` | 1–1440 (Vorgabe 10) |
 | `beschreibung` | warum es die Regel gibt, bis 120 Zeichen |
@@ -224,22 +238,94 @@ Zusammenhang unbelegt). Byte 0 ist ausmaskiert, damit `0x40` und `0xA4` beide pa
  "lesen": "beide", "abstand_min": 30}
 ```
 
+### Langform (ab v30): mehrere Auslöser, Folgen, Flanken
+
+Statt `can_id`/`maske`/`muster` eine Liste `ausloeser` (1–4). Jeder Auslöser hat **genau eine**
+Art; trifft einer zu, wird gelesen (Mindestabstand, Obergrenze, Schattenmodus und Ruhe nach eigenem
+Schaltbefehl gelten wie immer):
+
+| Art | Schreibweise | trifft zu, wenn … |
+|---|---|---|
+| Frame | `{"frame": {can_id, maske, muster, laenge_min}}` | ein passender Frame kommt |
+| Folge | `{"folge": [Glied, Glied, …]}` (2–4 Glieder, je `{can_id, maske, muster, laenge_min, fenster_ms}`) | die Glieder in dieser Reihenfolge kamen und beim letzten jedes frühere höchstens `fenster_ms` alt ist (fehlt `fenster_ms`: egal). Danach beginnt die Folge von vorn |
+| Flanke | `{"flanke": {can_id, maske, muster, laenge_min}, "byte": 2, "bytes": 2, "bits": "0x1000", "erster": false, "gleich": [15]}` | sich ein Wert im Frame ändert: `bytes` (1–2) Bytes ab `byte`, little-endian, UND `bits`. Hat `bits` genau ein Bit, zählt 0/1. `erster: true` = schon der erste gesehene Wert gilt als Änderung. `gleich`: nur bei diesen neuen Werten |
+| Baustein | `{"baustein": "r4_vorlauf"}` | eine Rechnung im Code zutrifft (siehe unten) |
+
+Zusätzlich je Auslöser: `wenn` (wie oben), `text` (Kennung im Log, bis 40 Zeichen),
+`meldung_ruht` und `meldung_unterdrueckt` (eigener Logtext, Platzhalter `{regel}`, `{grund}`,
+`{text}`, `{alt}`, `{neu}`, `{althex}`, `{neuhex}`, `{durch}`).
+
+Auf Ebene der Regel:
+
+| Feld | Inhalt |
+|---|---|
+| `ruhe_nach` | `{can_id, maske, muster, laenge_min, "ms": 300000, "grund": "WEM-Neustart"}` – nach so einem Frame ruht die ganze Regel `ms` lang (1–86 400 000); im Log steht `grund` |
+| `unterdrueckt_durch` | Name einer anderen Regel: liest die im selben Frame schon (eingeschaltet), wird diese nicht zusätzlich gerufen |
+
+**Beispiel:** die R1-Folge als eigene Regel, zusätzlich „Kesselstatus springt auf 15, bekannt ist
+Warmwasser Aus“, beides 5 min Ruhe nach einem Neustart des WEM:
+
+```json
+{"name": "ww-folge", "an": false, "lesen": "ww", "abstand_min": 1,
+ "ausloeser": [
+   {"folge": [
+      {"can_id": "0x602", "maske": "FF FF FF FF", "muster": ["A4 01 21 0A", "40 01 21 0A"], "laenge_min": 5, "fenster_ms": 15000},
+      {"can_id": "0x602", "maske": "FF FF FF FF", "muster": ["A4 02 21 0D", "40 02 21 0D"], "laenge_min": 5, "fenster_ms": 10000},
+      {"can_id": "0x602", "maske": "FF FF FF FF", "muster": ["A4 02 21 01", "40 02 21 01"], "laenge_min": 5}],
+    "text": "WW-Folge"},
+   {"flanke": {"can_id": "0x182", "laenge_min": 1}, "byte": 0, "gleich": [15], "wenn": {"ww": [2]}}],
+ "ruhe_nach": {"can_id": "0x701", "muster": "00", "laenge_min": 1, "ms": 300000, "grund": "WEM-Neustart"}}
+```
+
+Die Langform braucht mehr Speicher: alle eigenen Regeln zusammen dürfen in der Speicherform
+höchstens 2400 Zeichen lang sein, sonst lehnt das Board die Datei ab („eigene Regeln zu lang“).
+
+### R1–R5 im Regelformat
+
+So stehen die festen Regeln im Code (als JSON geschrieben; `an` und `abstand_min` kommen bei ihnen
+aus den Schaltern und Mindestabständen der Weboberfläche):
+
+| Regel | Auslöser |
+|---|---|
+| R1 | Folge `0x602` `A4/40 01 21 0A` (≤ 15 s) → `A4/40 02 21 0D` (≤ 10 s) → `A4/40 02 21 01`, je mindestens 5 Bytes; `ruhe_nach` `0x701` = `00` 300 000 ms „WEM-Neustart“; lesen ww |
+| R2 | Flanke `0x602` Maske `E0 FF FF` Muster `20 2B 25` (WEM schreibt 0x252B), Byte 4, `erster: true`, `gleich [15]`, `wenn {"ww":[2]}`; Flanke `0x182` Byte 0, `gleich [15]`, `wenn {"ww":[2]}`; lesen ww |
+| R3 | Flanke `0x1C1` Bytes 2–3, `bits 0x1000` (Standby-Bit → 0/1); lesen hk |
+| R4 | wie R2 mit `gleich [10]`/`[10]` und `wenn {"hk":[1,5]}`, dazu Baustein `r4_vorlauf`; lesen hk |
+| R5 | Flanke `0x1C1` Bytes 2–3, `bits 0xEFAF` (ohne Standby, WW-Ladung, Heizbetrieb), `unterdrueckt_durch: "R3"`; lesen hk |
+
+Der Test `aequivalenz_feste_regeln_als_json` schreibt R1–R5 genau so als JSON, liest sie wieder ein
+und vergleicht sie mit v29 (siehe [Abschnitt 9](#9-geprüft-an-mitschnitten)).
+
+**Warum `r4_vorlauf` ein Baustein bleibt:** R4 rechnet aus Vorlaufsoll (PDO `0x241`) und
+Außentemperatur (PDO `0x201`, ein anderer Frame!) eine Raumsoll-Stufe zurück –
+`RT = (VL − 1,4 + 1,1 · AT) / 2,1`, dann Stufe 18/20/21 – und vergleicht sie mit der bekannten
+Betriebsart (Komfort 21, Normal 20, Absenk 18). Das ist Gleitkomma-Rechnung über zwei Frames mit
+Stufen und eigenem Gedächtnis („derselbe Widerspruch nicht zweimal“); als Byte-Muster lässt sich das
+nicht sinnvoll schreiben, und die Formel ist nur bei milder Außentemperatur geeicht. Der Baustein
+ist benannt und kann auch in eigenen Regeln benutzt werden; sein Zustand gehört dem jeweiligen
+Auslöser, R4 wird davon nicht berührt. Ebenfalls nur im Code (nicht im Dateiformat): wo die
+Vorwerte von R3/R5 dauerhaft gespeichert werden – damit sie über ein Update hinweg dieselben
+Schlüssel behalten.
+
+### Hinzufügen, anzeigen, schalten
+
 **Hinzufügen oder ändern:** Liste `eigene` in der Datei (siehe [6](#6-einstellen)). Steht `eigene`
 in der Datei, ersetzt sie die ganze Liste (Zähler und „zuletzt“ gleichnamiger Regeln bleiben);
 fehlt der Schlüssel, bleiben die eigenen Regeln unverändert.
 
 **Anzeigen:** Weboberfläche, Gruppe **Eigene Regeln (experimentell)**, z. B.
-`Portal-Seitenaufruf an: 602 [.. 3E 22] -> beide, 30 min, zuletzt …, 3 x`; vollständig mit Maske
-unter `<gerät>/regeln/stand`.
+`Portal-Seitenaufruf an: 602 [.. 3E 22] -> beide, 30 min, zuletzt …, 3 x`, in der Langform
+`ww-folge an: folge 602 x3 + flanke 182 -> ww, 1 min, …`; vollständig unter `<gerät>/regeln/stand`
+(Kurzform-Regeln mit denselben Feldern wie bisher, Langform mit `ausloeser`).
 
 **Schalten und löschen:** `NAME an`, `NAME aus`, `NAME loeschen` – per MQTT (siehe
 [7](#7-per-mqtt-schalten)) oder im Feld **Regel-Befehl** der Weboberfläche.
 
 **Sicherungen:** wie die festen Regeln (eigener Befehl 2 min, Mindestabstand, gemeinsame
-Obergrenze pro Stunde), dazu die Sperre für `0x601`/`0x581`.
+Obergrenze pro Stunde), dazu die Sperre für `0x601`/`0x581` in jedem Glied.
 
-Was über „ID + Maske + Muster“ hinausgeht (mehrere Bedingungen, Uhrzeiten, Werte anderer Geräte),
-baut man besser in Home Assistant oder Node-RED und schickt `<gerät>/cmd/status` – siehe
+Was darüber hinausgeht (Uhrzeiten, Werte anderer Geräte), baut man besser in Home Assistant oder
+Node-RED und schickt `<gerät>/cmd/status` – siehe
 [IDEEN.md, Abschnitt 7](IDEEN.md#7-eigene-lese-regeln-in-home-assistant-oder-node-red).
 
 ## 6. Einstellen
@@ -455,6 +541,18 @@ Byte-Positionen wurden dabei gegengeprüft: Kesselstatus `0x182` Byte 0; Vorlauf
 Bytes 0–1; Außentemperatur `0x201` Bytes 1–2; `0x252B` schreibt der WEM als 1-Byte-Download
 (`0x2F`, Wert in Byte 4) über `0x602` mit den Werten `01` (keine Anforderung), `0A` (Heizung) und
 `0F` (Warmwasser).
+
+**Umbau auf Datenregeln (v30), gegen v29 geprüft:** die Logik von v29 liegt eingefroren in
+[`tests/referenz_v29/`](tests/referenz_v29/). Der Test `aequivalenz_zufall_v29_gleich_neu` spielt
+400 Zufallsläufe zu je 1500 Frames (die Hälfte über den Überlauf von `millis()`, mit eingestreuten
+R1-Folgen, Umschalt-Szenen, Antworten, WEM-Neustarts, eigenem Schaltbefehl, wechselnden Schaltern,
+Abständen und Obergrenzen) durch beide Fassungen und verlangt nach **jedem** Frame dieselben
+Logzeilen, dieselben Aufrufe mit gleichem Ergebnis (Auslösung, Schatten, Abstand, Obergrenze,
+Bus), dieselben Ereignisse und denselben gespeicherten Zustand. Er prüft auch, dass jeder Fall
+vorkam (jede Regel ausgelöst, jede „ruht“-Meldung, „R3 liest schon“, Baustein R4, Schatten,
+Obergrenze …). Dazu feste Szenarien genau an den Zeitfenstern von R1 und eine Gegenprobe: neun
+absichtlich eingebaute Fehler (Fenster, Kommandobyte, WEM-Neustart, Bedingung, Bits, Ziel, Logtext
+…) machen den Vergleich jeweils rot.
 
 ## 10. Grenzen und offene Fragen
 
