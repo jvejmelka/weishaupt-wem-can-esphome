@@ -58,7 +58,7 @@ Nicht benötigte Zeilen unter `packages:` auskommentieren.
 | `homeassistant-api.yaml` | native ESPHome-API (verschlüsselt) | nein |
 | `wem-schalten.yaml` | Heizkreis schalten, Warteschlange, Protokoll | nein |
 | `warmwasser-schalten.yaml` | Warmwasser Ein/Aus (braucht `wem-schalten` und `warmwasser`) | nein |
-| `verdacht.yaml` | **Verdachts-Lesen (experimentell):** Betriebsarten nur lesen, wenn das Mithören eine Änderung vermuten lässt; feste Regeln R1–R4 und eigene Regeln, einstellbar per Web und Datei (braucht `warmwasser`). Details: [PROTOKOLL.md, Abschnitt 6a](PROTOKOLL.md#6a-verdachts-lesen-experimentell) | nein |
+| `verdacht.yaml` | **Regeln:** Betriebsarten nur lesen, wenn das Mithören eine Änderung vermuten lässt; feste Regeln R1–R4 einzeln schaltbar (Vorgabe: nur R3 an = Verhalten bis v21), dazu eigene Regeln (experimentell, eigener Hauptschalter, Vorgabe aus); einstellbar per Web und Datei (braucht `warmwasser`). Details: [PROTOKOLL.md, Abschnitt 6a](PROTOKOLL.md#6a-regeln-betriebsarten-bei-verdacht-lesen) | nein |
 | `feste-ip.yaml` | feste IP statt DHCP | nein |
 
 Dazu optional die Handy-App im Ordner `app/` (siehe unten).
@@ -90,10 +90,10 @@ bleibt das bisherige WLAN. Letzter Rückweg ist der Notfall-Hotspot mit Captive 
 | `<gerät>/cmd/scan` | `01 2A00 2AFF 3` | Bereich lesen, Antworten in `<gerät>/canraw` |
 | `<gerät>/cmd/stop` | beliebig | Scan abbrechen |
 | `<gerät>/cmd/status` | beliebig | Heizkreis- und Warmwasser-Betriebsart einmal vom Bus lesen (höchstens alle 10 s, nur Leseanfragen); Zeitpunkt in „Status gelesen“ |
-| `<gerät>/cmd/regeln` | JSON-Datei, am besten retained (`mosquitto_pub -r -f regeln.json`) | Verdachts-Lesen einstellen: Hauptschalter, R1–R4, Obergrenze, eigene Regeln (Vorlage `regeln.json.example`) |
-| `<gerät>/cmd/regel` | `NAME an` / `NAME aus` / `NAME loeschen` | eine Regel schalten (NAME = `verdacht`, `R1`–`R4` oder eine eigene Regel) |
+| `<gerät>/cmd/regeln` | JSON-Datei, am besten retained (`mosquitto_pub -r -f regeln.json`) | Regeln einstellen: R1–R4 je an/aus und Abstand, Obergrenze, `eigene_regeln_an`, eigene Regeln (Vorlage `regeln.json.example`; das alte Feld `verdacht` wird seit v23 abgelehnt) |
+| `<gerät>/cmd/regel` | `NAME an` / `NAME aus` / `NAME loeschen` | eine Regel schalten (NAME = `R1`–`R4`, `eigene` = Hauptschalter der eigenen Regeln, oder eine eigene Regel) |
 | `<gerät>/schaltprotokoll` | (retained, vom Board) | letzte zehn Befehle, einer je Zeile |
-| `<gerät>/regeln/stand` | (retained, vom Board) | aktiver Stand des Verdachts-Lesens als JSON, samt eigener Regeln |
+| `<gerät>/regeln/stand` | (retained, vom Board) | aktiver Stand der Regeln als JSON (Format wie `cmd/regeln`, plus `firmware`), samt eigener Regeln |
 | `<gerät>/verdacht/protokoll` | (retained, vom Board) | letzte zehn Auslösungen: Regel, gelesen, geändert ja/nein |
 
 **Wer `cmd/regeln` oder `cmd/regel` schreiben darf, kann Leseanfragen auslösen** – nur Lesen an

@@ -1,4 +1,4 @@
-# Paket VERDACHT (experimentell): Betriebsarten nur dann vom Bus lesen, wenn das Mithoeren
+# Paket VERDACHT (Regeln): Betriebsarten nur dann vom Bus lesen, wenn das Mithoeren
 # einen Verdacht liefert, dass sich etwas geaendert hat. Braucht die Pakete kessel und
 # warmwasser; mit Paket mqtt zusaetzlich einstellbar per Datei (cmd/regeln) und Befehl (cmd/regel).
 #
@@ -15,20 +15,23 @@
 #   R3  Statusbits des WEM (PDO 0x1C1) aendern sich                                        -> HK lesen
 #   R4  Heizanforderung passt nicht zur bekannten Heizkreis-Betriebsart                    -> HK lesen
 # R1-R4 ruhen 2 min nach einem eigenen Schaltbefehl (der liest ohnehin selbst nach).
-# Eigene Regeln: generische Trigger "CAN-ID + Maske + Muster", siehe PROTOKOLL.md.
+# Seit v23 hat jede feste Regel ihren eigenen Schalter - es gibt KEINEN gemeinsamen Hauptschalter
+# mehr. Vorgabe: nur R3 an (= Verhalten bis v21: Heizkreis bei Statusbit-Aenderung nachlesen).
+# Eigene Regeln (experimentell): generische Trigger "CAN-ID + Maske + Muster", mit EIGENEM
+# Hauptschalter (Vorgabe aus), der nur fuer die eigenen Regeln gilt. Siehe PROTOKOLL.md.
 
 substitutions:
   # Startwerte, solange noch nichts gespeichert ist (danach gelten Weboberflaeche bzw. Datei)
-  verdacht_start: RESTORE_DEFAULT_OFF       # Hauptschalter
-  verdacht_r1_start: RESTORE_DEFAULT_ON
-  verdacht_r2_start: RESTORE_DEFAULT_ON
-  verdacht_r3_start: RESTORE_DEFAULT_ON
-  verdacht_r4_start: RESTORE_DEFAULT_OFF    # Rueckrechnung nur fuer milde Aussentemperaturen geeicht
-  verdacht_abstand_r1: "10"
-  verdacht_abstand_r2: "10"
-  verdacht_abstand_r3: "5"
-  verdacht_abstand_r4: "30"
-  verdacht_max_h: "6"
+  regel_r1_start: RESTORE_DEFAULT_OFF
+  regel_r2_start: RESTORE_DEFAULT_OFF
+  regel_r3_start: RESTORE_DEFAULT_ON        # = Verhalten bis v21
+  regel_r4_start: RESTORE_DEFAULT_OFF       # Rueckrechnung nur fuer milde Aussentemperaturen geeicht
+  regel_abstand_r1: "10"
+  regel_abstand_r2: "10"
+  regel_abstand_r3: "5"
+  regel_abstand_r4: "30"
+  regeln_max_h: "6"
+  eigene_regeln_start: RESTORE_DEFAULT_OFF  # Hauptschalter NUR fuer die eigenen Regeln
 
 esphome:
   includes:
@@ -64,6 +67,11 @@ globals:
     type: uint32_t
     restore_value: yes
     initial_value: '0'
+  # "version" der zuletzt uebernommenen Datei (-1 = keine), wird im Stand zurueckgemeldet
+  - id: vd_datei_version
+    type: int
+    restore_value: yes
+    initial_value: '-1'
   # R3: letzter Stand der Statusbits (ohne WW-Ladung/Heizbetrieb), ueberlebt den Neustart
   - id: vd_bits_vorher
     type: int
@@ -134,7 +142,7 @@ globals:
 web_server:
   sorting_groups:
     - id: g_verdacht
-      name: "Verdachts-Lesen (experimentell)"
+      name: "Regeln (R1-R4)"
       sorting_weight: 47
     - id: g_eigene
       name: "Eigene Regeln (experimentell)"
@@ -152,7 +160,6 @@ script:
     then:
       - lambda: |-
           uint32_t jetzt = millis();
-          if (!id(vd_haupt).state) return;
           if (id(bus_seit) == 0 || jetzt - id(letzter_frame) > 30000 || jetzt - id(bus_seit) <= id(pause_ms)) {
             ESP_LOGD("verdacht", "%s: Bus nicht bereit (Anlaufpause/Bus schweigt) - nicht gelesen", regel.c_str()); return;
           }
@@ -224,13 +231,14 @@ script:
           JsonDocument d;
           JsonObject o = d.to<JsonObject>();
           o["firmware"] = "${firmware}";
-          o["verdacht"] = id(vd_haupt).state;
+          if (id(vd_datei_version) >= 0) o["version"] = id(vd_datei_version);
           for (int i = 0; i < 4; i++) {
             JsonObject r = o[rn[i]].to<JsonObject>();
             r["an"] = sw[i]->state;
             r["abstand_min"] = (int) ab[i]->state;
           }
           o["max_pro_stunde"] = (int) id(vd_max_h).state;
+          o["eigene_regeln_an"] = id(vd_eigene_haupt).state;
           JsonArray a = o["eigene"].to<JsonArray>();
           for (auto &r : vd::eigene()) vd::regel_json(a.add<JsonObject>(), r, true);
           std::string s;
@@ -288,15 +296,18 @@ script:
             if (d.abstand[i] > 0) { auto c = ab[i]->make_call(); c.set_value(d.abstand[i]); c.perform(); }
           }
           if (d.max_h > 0) { auto c = id(vd_max_h).make_call(); c.set_value(d.max_h); c.perform(); }
-          if (d.verdacht == 1) id(vd_haupt).turn_on(); else if (d.verdacht == 0) id(vd_haupt).turn_off();
+          if (d.eigene_an == 1) id(vd_eigene_haupt).turn_on(); else if (d.eigene_an == 0) id(vd_eigene_haupt).turn_off();
           id(vd_datei_hash) = h;
-          char b[96];
-          snprintf(b, sizeof(b), "uebernommen: Hauptschalter %s, %u eigene Regel(n)", id(vd_haupt).state ? "an" : "aus", (unsigned) vd::eigene().size());
+          if (d.version >= 0) id(vd_datei_version) = d.version;
+          char b[128];
+          snprintf(b, sizeof(b), "uebernommen (version %d): R1 %s, R2 %s, R3 %s, R4 %s, eigene %s (%u)", d.version,
+                   id(vd_r1).state ? "an" : "aus", id(vd_r2).state ? "an" : "aus", id(vd_r3).state ? "an" : "aus",
+                   id(vd_r4).state ? "an" : "aus", id(vd_eigene_haupt).state ? "an" : "aus", (unsigned) vd::eigene().size());
           id(vd_datei_ts).publish_state(z + b);
           ESP_LOGI("verdacht", "Regeln-Datei %s", b);
           id(vd_stand)->execute();
 
-  # Einzelbefehl "NAME an" / "NAME aus" / "NAME loeschen" (NAME = R1..R4, verdacht, eigene Regel)
+  # Einzelbefehl "NAME an" / "NAME aus" / "NAME loeschen" (NAME = R1..R4, eigene, eigene Regel)
   - id: vd_befehl
     mode: queued
     parameters:
@@ -318,7 +329,10 @@ script:
           bool an = cmd == "an";
           std::string k = name; for (auto &c : k) c = tolower(c);
           switch_::Switch *sw = nullptr;
-          if (k == "verdacht" || k == "hauptschalter") sw = id(vd_haupt);
+          if (k == "verdacht" || k == "hauptschalter") {
+            id(vd_befehl_ts).publish_state(z + "'" + name + "' gibt es seit v23 nicht mehr: R1-R4 einzeln schalten, eigene Regeln mit 'eigene an|aus'"); return;
+          }
+          if (k == "eigene") sw = id(vd_eigene_haupt);
           else if (k == "r1") sw = id(vd_r1); else if (k == "r2") sw = id(vd_r2);
           else if (k == "r3") sw = id(vd_r3); else if (k == "r4") sw = id(vd_r4);
           if (sw != nullptr) {
@@ -328,7 +342,7 @@ script:
             return;
           }
           vd::Regel *r = vd::finden(name);
-          if (r == nullptr) { id(vd_befehl_ts).publish_state(z + "keine Regel '" + name + "' (feste: R1-R4, verdacht)"); return; }
+          if (r == nullptr) { id(vd_befehl_ts).publish_state(z + "keine Regel '" + name + "' (feste: R1-R4, eigene)"); return; }
           if (cmd == "an" || cmd == "aus") { r->an = an; id(vd_befehl_ts).publish_state(z + "OK: " + r->name + (an ? " an" : " aus")); }
           else {
             std::string n = r->name;
@@ -479,7 +493,7 @@ canbus:
         can_id_mask: 0x000
         then:
           - lambda: |-
-              if (!id(vd_haupt).state || vd::eigene().empty()) return;
+              if (!id(vd_eigene_haupt).state || vd::eigene().empty()) return;
               if (can_id == 0x601 || can_id == 0x581) return;      // eigene Anfragen und ihre Antworten nie
               for (auto &r : vd::eigene()) {
                 if (!r.an || r.can_id != can_id) continue;
@@ -493,18 +507,18 @@ canbus:
 
 switch:
   - platform: template
-    name: "Verdachts-Lesen (Hauptschalter)"
-    id: vd_haupt
+    name: "Eigene Regeln (Hauptschalter)"
+    id: vd_eigene_haupt
     optimistic: true
-    restore_mode: ${verdacht_start}
-    web_server: { sorting_group_id: g_verdacht, sorting_weight: 1 }
+    restore_mode: ${eigene_regeln_start}
+    web_server: { sorting_group_id: g_eigene, sorting_weight: 0 }
     on_turn_on: { script.execute: vd_stand }
     on_turn_off: { script.execute: vd_stand }
   - platform: template
     name: "R1 Warmwasser am Display oder Portal umgeschaltet"
     id: vd_r1
     optimistic: true
-    restore_mode: ${verdacht_r1_start}
+    restore_mode: ${regel_r1_start}
     web_server: { sorting_group_id: g_verdacht, sorting_weight: 10 }
     on_turn_on: { script.execute: vd_stand }
     on_turn_off: { script.execute: vd_stand }
@@ -512,7 +526,7 @@ switch:
     name: "R2 Warmwasserbetrieb trotz Aus"
     id: vd_r2
     optimistic: true
-    restore_mode: ${verdacht_r2_start}
+    restore_mode: ${regel_r2_start}
     web_server: { sorting_group_id: g_verdacht, sorting_weight: 20 }
     on_turn_on: { script.execute: vd_stand }
     on_turn_off: { script.execute: vd_stand }
@@ -520,7 +534,7 @@ switch:
     name: "R3 Statusbits geaendert"
     id: vd_r3
     optimistic: true
-    restore_mode: ${verdacht_r3_start}
+    restore_mode: ${regel_r3_start}
     web_server: { sorting_group_id: g_verdacht, sorting_weight: 30 }
     on_turn_on: { script.execute: vd_stand }
     on_turn_off: { script.execute: vd_stand }
@@ -528,7 +542,7 @@ switch:
     name: "R4 Heizanforderung passt nicht"
     id: vd_r4
     optimistic: true
-    restore_mode: ${verdacht_r4_start}
+    restore_mode: ${regel_r4_start}
     web_server: { sorting_group_id: g_verdacht, sorting_weight: 40 }
     on_turn_on: { script.execute: vd_stand }
     on_turn_off: { script.execute: vd_stand }
@@ -539,7 +553,7 @@ number:
     id: vd_ab_r1
     optimistic: true
     restore_value: true
-    initial_value: ${verdacht_abstand_r1}
+    initial_value: ${regel_abstand_r1}
     min_value: 1
     max_value: 1440
     step: 1
@@ -551,7 +565,7 @@ number:
     id: vd_ab_r2
     optimistic: true
     restore_value: true
-    initial_value: ${verdacht_abstand_r2}
+    initial_value: ${regel_abstand_r2}
     min_value: 1
     max_value: 1440
     step: 1
@@ -563,7 +577,7 @@ number:
     id: vd_ab_r3
     optimistic: true
     restore_value: true
-    initial_value: ${verdacht_abstand_r3}
+    initial_value: ${regel_abstand_r3}
     min_value: 1
     max_value: 1440
     step: 1
@@ -575,7 +589,7 @@ number:
     id: vd_ab_r4
     optimistic: true
     restore_value: true
-    initial_value: ${verdacht_abstand_r4}
+    initial_value: ${regel_abstand_r4}
     min_value: 1
     max_value: 1440
     step: 1
@@ -583,11 +597,11 @@ number:
     web_server: { sorting_group_id: g_verdacht, sorting_weight: 41 }
     on_value: { script.execute: vd_stand }
   - platform: template
-    name: "Verdachts-Lesen: hoechstens pro Stunde"
+    name: "Regeln: hoechstens pro Stunde (alle zusammen)"
     id: vd_max_h
     optimistic: true
     restore_value: true
-    initial_value: ${verdacht_max_h}
+    initial_value: ${regeln_max_h}
     min_value: 1
     max_value: 60
     step: 1
@@ -620,7 +634,6 @@ text_sensor:
     update_interval: 30s
     web_server: { sorting_group_id: g_verdacht, sorting_weight: 3 }
     lambda: |-
-      if (!id(vd_haupt).state) return {"aus (Hauptschalter) - es wird nur bei Start, Schaltbefehl und 'Status lesen' gelesen"};
       std::string s;
       switch_::Switch *sw[] = {id(vd_r1), id(vd_r2), id(vd_r3), id(vd_r4)};
       number::Number *ab[] = {id(vd_ab_r1), id(vd_ab_r2), id(vd_ab_r3), id(vd_ab_r4)};
@@ -629,9 +642,10 @@ text_sensor:
         if (!s.empty()) s += ", ";
         s += "R" + to_string(i + 1) + " " + to_string((int) ab[i]->state) + " min";
       }
+      if (s.empty()) s = "R1-R4 aus (gelesen wird nur bei Start, Schaltbefehl und 'Status lesen')";
       int n = 0; for (auto &r : vd::eigene()) if (r.an) n++;
-      if (n) s += (s.empty() ? "" : ", ") + to_string(n) + " eigene";
-      if (s.empty()) s = "keine Regel an";
+      if (!id(vd_eigene_haupt).state) s += " | eigene Regeln aus";
+      else s += " | eigene Regeln an: " + to_string(n) + " aktiv";
       uint32_t jetzt = millis(); int h = 0;
       for (auto t : id(vd_zeiten)) if (jetzt - t <= 3600000UL) h++;
       s += " | max " + to_string((int) id(vd_max_h).state) + "/h, letzte Stunde " + to_string(h);
@@ -639,7 +653,7 @@ text_sensor:
       else if (jetzt - id(bus_seit) <= id(pause_ms)) s += " | Anlaufpause";
       return {s};
   - platform: template
-    name: "Verdachts-Lesen Protokoll"
+    name: "Regeln Protokoll"
     id: vd_protokoll_ts
     web_server: { sorting_group_id: g_verdacht, sorting_weight: 4 }
   - platform: template

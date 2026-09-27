@@ -128,6 +128,28 @@ CAN-Telegramme über WLAN weiterreichen. Das Raumgerät wäre damit tragbar.
 solche, die ein echtes Weishaupt-Gerät erzeugt hat. Fehler in der Weiterleitung können Knoten
 verwirren. Deshalb nur als Experiment, mit Rückweg (Kabel oder Gerät abziehen) und nie auf Knoten 2.
 
+### Gesucht: jemand mit Weishaupt-Raumgerät am Bus
+
+Wir haben **kein** Raumgerät und können deshalb nicht sehen, was es auf dem Bus sendet. Genau das
+wäre aber die Grundlage für diese Idee – und nebenbei für eine Raumaufschaltung aus eigenen Sensoren
+(Idee 3). Wer ein Weishaupt-Raumgerät am CAN-Bus seines WEM hat (Bedieneinheit mit Raumfühler) und
+dieses Board betreibt, könnte mit wenigen Mitschnitten helfen:
+
+1. Rohmitschnitt einschalten (Schalter „CAN-Rohmitschnitt nach MQTT“, das Board hört nur zu)
+   und die Frames aus `<gerät>/canraw` in eine Datei schreiben.
+2. Einige Minuten **ohne** Eingriff mitschneiden – zeigt, was das Raumgerät regelmäßig sendet
+   (Heartbeat, Raumtemperatur, Sollwert).
+3. Am Raumgerät nacheinander **eine** Sache ändern, mit einer Minute Pause dazwischen, und die
+   Uhrzeit notieren: Raumsollwert hoch/runter, Betriebsart umstellen.
+4. Wenn möglich: Raumgerät kurz abziehen und wieder anstecken (Bootup, Anmeldung am WEM).
+5. Die Hardware-/Softwarestände von Raumgerät und WEM notieren.
+
+**Bitte keine Rohdateien öffentlich hochladen** – sie können Seriennummern und Gerätekennungen
+enthalten. Besser: eine Zusammenfassung als [GitHub-Issue](https://github.com/jvejmelka/weishaupt-wem-can-esphome/issues)
+(welche CAN-IDs das Raumgerät sendet, wie oft, welche Bytes sich beim Verstellen ändern) und für
+Details Kontakt über das Issue. Die Auswertung folgt dem Verfahren „Scan und Differenz“ aus
+[PROTOKOLL.md, Abschnitt 7](PROTOKOLL.md#7-neue-objekte-finden-scan-und-differenz).
+
 ## 5. Einzelraumregelung mit Funk-Heizkörperventilen
 
 Funk-Thermostate an den Heizkörpern (z. B. Shelly BLU TRV, FRITZ!DECT, Homematic) regeln jeden Raum
@@ -159,8 +181,8 @@ Viele dieser Fragen lassen sich schon heute beantworten, ohne irgendetwas zu sch
 
 ## 7. Eigene Lese-Regeln in Home Assistant oder Node-RED
 
-Das Board kennt feste Verdachts-Regeln (R1–R4) und einfache eigene Regeln der Form „CAN-ID +
-Maske + Muster“ ([PROTOKOLL.md, Abschnitt 6a](PROTOKOLL.md#6a-verdachts-lesen-experimentell)).
+Das Board kennt feste Regeln (R1–R4, einzeln schaltbar) und einfache eigene Regeln der Form „CAN-ID +
+Maske + Muster“ ([PROTOKOLL.md, Abschnitt 6a](PROTOKOLL.md#6a-regeln-betriebsarten-bei-verdacht-lesen)).
 Was dafür zu verwickelt ist – mehrere Bedingungen, Uhrzeiten, Anwesenheit, Werte anderer Geräte –
 lässt sich außerhalb bauen: eine Automation in Home Assistant oder ein Flow in Node-RED beobachtet
 die MQTT-Werte des Boards (oder `<gerät>/canraw`, wenn der Rohmitschnitt an ist) und schickt bei

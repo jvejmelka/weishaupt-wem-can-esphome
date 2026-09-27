@@ -35,7 +35,8 @@ inline std::vector<Regel> &eigene() { static std::vector<Regel> v; return v; }
 
 // Inhalt der Datei (cmd/regeln). -1 = Feld fehlt, Wert bleibt wie er ist.
 struct Datei {
-  int verdacht = -1;
+  int version = -1;           // frei waehlbare Nummer, wird im Stand zurueckgemeldet
+  int eigene_an = -1;         // Hauptschalter NUR fuer die eigenen Regeln
   int an[4] = {-1, -1, -1, -1};
   int abstand[4] = {-1, -1, -1, -1};
   int max_h = -1;
@@ -72,8 +73,8 @@ inline bool name_ok(const std::string &n) {
     if (!(isalnum((unsigned char) c) || c == '-' || c == '_' || c == '.')) return false;
   std::string k = n;
   for (auto &c : k) c = tolower(c);
-  // R1..R4 und "verdacht" sind die festen Namen
-  return !(k == "r1" || k == "r2" || k == "r3" || k == "r4" || k == "verdacht");
+  // R1..R4, "eigene" (Hauptschalter der eigenen Regeln) und das alte "verdacht" sind reserviert
+  return !(k == "r1" || k == "r2" || k == "r3" || k == "r4" || k == "eigene" || k == "verdacht");
 }
 
 inline bool regel_lesen(JsonObject o, Regel &r, std::string &f) {
@@ -85,7 +86,7 @@ inline bool regel_lesen(JsonObject o, Regel &r, std::string &f) {
   }
   if (!o["name"].is<const char *>()) { f = "name fehlt"; return false; }
   r.name = o["name"].as<const char *>();
-  if (!name_ok(r.name)) { f = "name '" + r.name + "': 1-24 Zeichen A-Z a-z 0-9 - _ . (nicht R1-R4)"; return false; }
+  if (!name_ok(r.name)) { f = "name '" + r.name + "': 1-24 Zeichen A-Z a-z 0-9 - _ . (nicht R1-R4/eigene)"; return false; }
   std::string p = "Regel " + r.name + ": ";
   if (!o["an"].isNull()) { if (!o["an"].is<bool>()) { f = p + "an muss true/false sein"; return false; } r.an = o["an"].as<bool>(); }
   // CAN-ID: "0x602" oder Zahl
@@ -145,8 +146,16 @@ inline bool datei_lesen(const std::string &txt, Datei &d, std::string &f) {
     std::string k = kv.key().c_str();
     JsonVariant v = kv.value();
     if (k == "verdacht") {
-      if (!v.is<bool>()) { f = "verdacht muss true/false sein"; return false; }
-      d.verdacht = v.as<bool>();
+      // bis v22 der gemeinsame Hauptschalter; seit v23 gibt es ihn nicht mehr. Bewusst NICHT
+      // umgedeutet: true hiess "R1-R4 an", eigene_regeln_an bedeutet etwas anderes.
+      f = "Feld 'verdacht' gibt es seit v23 nicht mehr: R1-R4 einzeln per {\"an\":...}, eigene Regeln per \"eigene_regeln_an\"";
+      return false;
+    } else if (k == "eigene_regeln_an") {
+      if (!v.is<bool>()) { f = "eigene_regeln_an muss true/false sein"; return false; }
+      d.eigene_an = v.as<bool>();
+    } else if (k == "version") {
+      if (!v.is<int>() || v.as<int>() < 0) { f = "version muss eine ganze Zahl >= 0 sein"; return false; }
+      d.version = v.as<int>();
     } else if (k == "max_pro_stunde") {
       if (!v.is<int>() || v.as<int>() < 1 || v.as<int>() > 60) { f = "max_pro_stunde muss 1-60 sein"; return false; }
       d.max_h = v.as<int>();
@@ -154,7 +163,7 @@ inline bool datei_lesen(const std::string &txt, Datei &d, std::string &f) {
       if (!v.is<JsonArray>()) { f = "eigene muss eine Liste [ ... ] sein"; return false; }
       if (!liste_lesen(v.as<JsonArray>(), d.eigene, f)) return false;
       d.hat_eigene = true;
-    } else if (k == "version" || k == "kommentar" || (!k.empty() && k[0] == '_')) {
+    } else if (k == "kommentar" || (!k.empty() && k[0] == '_')) {
       continue;
     } else {
       int i = -1;

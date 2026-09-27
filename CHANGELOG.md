@@ -1,6 +1,14 @@
 # Changelog – ESP-CAN-Brücke Weishaupt (WeAct CAN485, ESPHome)
 
 
+## v23 – 2026-09-27
+- **Kein gemeinsamer Hauptschalter mehr für R1–R4.** Jede feste Regel ist einzeln schaltbar (Weboberfläche, Datei, `cmd/regel`), mit eigenem Mindestabstand; die gemeinsame Obergrenze pro Stunde bleibt. **Vorgaben im Repository: nur R3 an** (= Verhalten bis v21: Heizkreis nachlesen, wenn sich die Statusbits ändern), R1, R2, R4 aus.
+- **Eigene Regeln** sind ein eigener Block „Eigene Regeln (experimentell)“ mit **eigenem Hauptschalter** (Vorgabe aus), der nur für die eigenen Regeln gilt.
+- Weboberfläche: Gruppen „Regeln (R1-R4)“ und „Eigene Regeln (experimentell)“ getrennt; „Regeln aktiv“ zeigt zusätzlich, ob die eigenen Regeln an sind. Umbenannt: „Regeln Protokoll“, „Regeln: hoechstens pro Stunde (alle zusammen)“.
+- **Datei-Format `cmd/regeln` geändert:** `{"version":N, "R1":{"an":…,"abstand_min":…}, …, "max_pro_stunde":6, "eigene_regeln_an":false, "eigene":[…]}`. Das alte Feld `verdacht` wird **mit Meldung abgelehnt** (nicht umgedeutet – `verdacht: true` hieß „R1–R4 an“ und würde sonst still die eigenen Regeln einschalten). `version` wird im Stand zurückgemeldet.
+- `cmd/regel`: Namen `R1`–`R4`, `eigene` (Hauptschalter der eigenen Regeln) und eigene Regeln; `verdacht` wird mit Hinweis abgelehnt. `regeln/stand` im neuen Format.
+- `substitutions` umbenannt: `regel_r1_start` … `regel_r4_start`, `regel_abstand_r1` … `_r4`, `regeln_max_h`, `eigene_regeln_start` (bis v22 `verdacht_…`).
+
 ## v22 – 2026-09-27
 - **Verdachts-Lesen (experimentell), neues Paket `verdacht.yaml`:** die Betriebsarten werden gelesen, wenn das Mithören eine Änderung vermuten lässt – ausschließlich SDO-Leseanfragen an Knoten 1, nie JSON, keine periodische Abfrage, nur bei lebendem Bus und außerhalb der Anlaufpause. **Hauptschalter, Vorgabe AUS.**
 - Feste Regeln, einzeln schaltbar mit Mindestabstand: **R1** WEM-Abfragefolge `2101/0A, 2102/0D, 2102/01` (Warmwasser-Wechsel), **R2** Warmwasserbetrieb trotz bekanntem Aus, **R3** Statusbits `0x1C1` geändert (bisheriger Anlass, jetzt schaltbar, Zustand dauerhaft gespeichert), **R4** Heizanforderung passt nicht zur Betriebsart (Vorgabe aus). Obergrenze für alle zusammen pro Stunde (Vorgabe 6). R1–R4 ruhen 2 min nach eigenen Schaltbefehlen.

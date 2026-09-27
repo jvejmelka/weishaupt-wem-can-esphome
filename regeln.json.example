@@ -1,12 +1,12 @@
 {
-  "_kommentar": "Einstellungen fuer das Verdachts-Lesen. Senden: mosquitto_pub -r -f regeln.json -t <geraet>/cmd/regeln",
+  "_kommentar": "Regeln R1-R4 und eigene Regeln (Vorgaben seit v23). Senden: mosquitto_pub -r -f regeln.json -t <geraet>/cmd/regeln. Das Feld 'verdacht' (bis v22) wird abgelehnt.",
   "version": 1,
-  "verdacht": true,
-  "R1": {"an": true,  "abstand_min": 10},
-  "R2": {"an": true,  "abstand_min": 10},
+  "R1": {"an": false, "abstand_min": 10},
+  "R2": {"an": false, "abstand_min": 10},
   "R3": {"an": true,  "abstand_min": 5},
   "R4": {"an": false, "abstand_min": 30},
   "max_pro_stunde": 6,
+  "eigene_regeln_an": false,
   "eigene": [
     {
       "name": "Portal-Seitenaufruf",

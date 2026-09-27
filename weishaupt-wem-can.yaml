@@ -13,30 +13,30 @@
 #   pakete/homeassistant-api.yaml    native Home-Assistant-API (statt oder neben MQTT)
 #   pakete/wem-schalten.yaml         Heizkreis-Betriebsart ueber die WEM-JSON-Schnittstelle
 #   pakete/warmwasser-schalten.yaml  Warmwasser Ein/Aus ueber WEM (braucht wem-schalten)
-#   pakete/verdacht.yaml             Verdachts-Lesen (experimentell): Betriebsarten nur lesen, wenn das
-#                                    Mithoeren eine Aenderung vermuten laesst; eigene Regeln (braucht warmwasser)
+#   pakete/verdacht.yaml             Regeln: Betriebsarten nur lesen, wenn das Mithoeren eine Aenderung
+#                                    vermuten laesst (R1-R4 einzeln, eigene Regeln experimentell; braucht warmwasser)
 #   pakete/feste-ip.yaml             feste IP statt DHCP (Empfehlung: DHCP + Router-Reservierung)
 #
 substitutions:
   geraet: weact-can485-weishaupt       # Geraetename = MQTT-Praefix
   anzeigename: Weishaupt WTC-GW 15-B
-  firmware: "v22 vom 27.09.2026"
+  firmware: "v23 vom 27.09.2026"
   # Eigene CAN-Leseanfragen beim ersten Start (danach gilt der Schalter in der Weboberflaeche):
   #   RESTORE_DEFAULT_OFF = nur mithoeren (Vorgabe, wenn die Zeile fehlt)
   #   RESTORE_DEFAULT_ON  = eigene Leseanfragen im Weishaupt-Takt
   can_anfragen_start: RESTORE_DEFAULT_OFF
-  # Verdachts-Lesen (Paket verdacht) beim ersten Start - danach gelten Weboberflaeche bzw.
-  # die Regeln-Datei per MQTT (<geraet>/cmd/regeln, siehe regeln.json.example):
-  verdacht_start: RESTORE_DEFAULT_OFF       # Hauptschalter, Vorgabe AUS
-  verdacht_r1_start: RESTORE_DEFAULT_ON     # R1 Warmwasser am Display/Portal umgeschaltet
-  verdacht_r2_start: RESTORE_DEFAULT_ON     # R2 Warmwasserbetrieb trotz bekanntem Aus
-  verdacht_r3_start: RESTORE_DEFAULT_ON     # R3 Statusbits (0x1C1) geaendert
-  verdacht_r4_start: RESTORE_DEFAULT_OFF    # R4 Heizanforderung passt nicht (experimentell)
-  verdacht_abstand_r1: "10"                 # Mindestabstand je Regel in Minuten
-  verdacht_abstand_r2: "10"
-  verdacht_abstand_r3: "5"
-  verdacht_abstand_r4: "30"
-  verdacht_max_h: "6"                       # alle Regeln zusammen hoechstens so oft pro Stunde
+  # Regeln (Paket verdacht) beim ersten Start - danach gelten Weboberflaeche bzw. die
+  # Regeln-Datei per MQTT (<geraet>/cmd/regeln, siehe regeln.json.example). Jede Regel einzeln:
+  regel_r1_start: RESTORE_DEFAULT_OFF       # R1 Warmwasser am Display/Portal umgeschaltet
+  regel_r2_start: RESTORE_DEFAULT_OFF       # R2 Warmwasserbetrieb trotz bekanntem Aus
+  regel_r3_start: RESTORE_DEFAULT_ON        # R3 Statusbits (0x1C1) geaendert = Verhalten bis v21
+  regel_r4_start: RESTORE_DEFAULT_OFF       # R4 Heizanforderung passt nicht (experimentell)
+  regel_abstand_r1: "10"                    # Mindestabstand je Regel in Minuten
+  regel_abstand_r2: "10"
+  regel_abstand_r3: "5"
+  regel_abstand_r4: "30"
+  regeln_max_h: "6"                         # alle Regeln zusammen hoechstens so oft pro Stunde
+  eigene_regeln_start: RESTORE_DEFAULT_OFF  # Hauptschalter NUR fuer die eigenen Regeln (experimentell)
 
 packages:
   kessel: !include pakete/kessel.yaml
@@ -53,7 +53,7 @@ esphome:
   friendly_name: ${anzeigename}
   project:
     name: "jvejmelka.weishaupt-wem-can"
-    version: "22"
+    version: "23"
 
 esp32:
   board: esp32dev

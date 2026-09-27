@@ -14,7 +14,7 @@ Quellen stammt oder nur plausibel ist, steht das dabei.
 - [4. Was auf Anforderung gelesen wird](#4-was-auf-anforderung-gelesen-wird)
 - [5. Schreiben über den WEM (JSON)](#5-schreiben-über-den-wem-json)
 - [6. Weboberfläche: lesen und schreiben](#6-weboberfläche-lesen-und-schreiben)
-- [6a. Verdachts-Lesen (experimentell)](#6a-verdachts-lesen-experimentell)
+- [6a. Regeln: Betriebsarten bei Verdacht lesen](#6a-regeln-betriebsarten-bei-verdacht-lesen)
 - [7. Neue Objekte finden: Scan und Differenz](#7-neue-objekte-finden-scan-und-differenz)
 - [8. Wann sich der WEM aufhängt](#8-wann-sich-der-wem-aufhängt)
 - [9. Beispiel: Heizkreis auf „Zeitprogramm 1“](#9-beispiel-heizkreis-auf-zeitprogramm-1)
@@ -373,7 +373,7 @@ zehn Plätze aus [Abschnitt 8](#8-wann-sich-der-wem-aufhängt).
 | **Heizung: IP-Adresse** | Adresse des WEM für die JSON-Befehle |
 | **Waechter: Neustart nach Minuten ohne Bus (0 = aus)** | startet das Board neu, wenn so lange kein Frame kam (Bus-off-Falle) |
 
-## 6a. Verdachts-Lesen (experimentell)
+## 6a. Regeln: Betriebsarten bei Verdacht lesen
 
 Die Betriebsarten liegen im WEM, nicht im Kessel. Ob jemand am Display, im Portal oder in der
 Weishaupt-App umgeschaltet hat, sieht man am Bus nur indirekt. Paket `verdacht.yaml` wertet diese
@@ -386,20 +386,23 @@ Betriebsarten periodisch abzufragen.
   Warmwasser `0x2A20`, `0x2A2C`, `0x2A39` (je /2) – **ausschließlich SDO-Leseanfragen (`0x40`)
   an Knoten 1 (`0x601`)**. Nie etwas an den Kessel, nie eine WEM-JSON-Anfrage.
 - Nur bei lebendem Bus und außerhalb der Anlaufpause (nach Board-Start 1 min, nach Busausfall 10 min).
-- **Hauptschalter, Vorgabe AUS.** Jede Regel einzeln schaltbar, mit eigenem Mindestabstand.
-  Alle Regeln zusammen höchstens *N* Auslösungen pro Stunde (Vorgabe 6).
+- **Seit v23 ohne gemeinsamen Hauptschalter:** jede feste Regel R1–R4 ist einzeln schaltbar,
+  mit eigenem Mindestabstand. **Vorgabe: nur R3 an** – das entspricht dem Verhalten bis v21
+  (Heizkreis nachlesen, wenn sich die Statusbits ändern). R1, R2 und R4 sind Vorgabe aus.
+- Alle Regeln zusammen (fest und eigene) höchstens *N* Auslösungen pro Stunde (Vorgabe 6).
 - R1–R4 ruhen 2 min nach einem eigenen Schaltbefehl – der liest ohnehin selbst nach.
-- **Mit dem Hauptschalter AUS wird nur noch** nach dem Start, nach eigenen Schaltbefehlen und auf
-  „Status lesen“ gelesen. Der frühere automatische Anlass „Statusbits geändert“ ist seit v22 die
-  schaltbare Regel R3.
+- **Eigene Regeln** (weiter unten) sind ein eigener, experimenteller Block mit **eigenem
+  Hauptschalter, Vorgabe AUS**. Er gilt nur für die eigenen Regeln, nicht für R1–R4.
+- Sind alle Regeln aus, wird nur nach dem Start, nach eigenen Schaltbefehlen und auf „Status lesen“
+  gelesen.
 
 ### Die festen Regeln
 
 | Regel | Auslöser (am Bus) | Warum | liest | Vorgabe |
 |---|---|---|---|---|
-| **R1** Warmwasser umgeschaltet | der WEM fragt den Kessel (`0x602`, Upload `0x40`) nacheinander `2101/0A`, `2102/0D`, `2102/01` ab, innerhalb weniger Sekunden | Diese volle Folge kam in allen Mitschnitten bei **jedem** Warmwasser-Wechsel (7 von 7, Display und JSON, nie bei Heizkreis-Wechseln). Die Kurzform `2101/0A` + `273F/01` kommt auch bei Ladebeginn und zählt nicht. Die Richtung verrät die Folge nicht – deshalb nachlesen. Ruht 5 min nach einem WEM-Neustart (Bootup `0x701` = `00`) | Warmwasser | an, 10 min |
-| **R2** Warmwasserbetrieb trotz Aus | Kesselstatus springt auf 15 (PDO `0x182` Byte 0) oder der WEM schreibt `0x252B` = `0F` (`0x602`, Download) – und bekannt ist „Warmwasser Aus“ | Der Kessel lädt Warmwasser, obwohl es aus sein sollte: vermutlich wurde es eingeschaltet. Nur die Flanke zählt, nicht jeder Frame | Warmwasser | an, 10 min |
-| **R3** Statusbits geändert | PDO `0x1C1` (Objekt `0x274D`) ändert sich, ohne die Bits WW-Ladung (`0x0010`) und Heizbetrieb (`0x0040`). `m = x[3]<<8 \| x[2]`. Der letzte Stand wird dauerhaft gespeichert, damit auch eine Änderung während eines Board-Neustarts auffällt | Der WEM schickt `0x1C1` nur bei Änderung. Standby ↔ Zeitprogramm ist daran sicher erkennbar (9 von 9); zwischen den Zeitprogrammen ändert sich nichts | Heizkreis | an, 5 min |
+| **R1** Warmwasser umgeschaltet | der WEM fragt den Kessel (`0x602`, Upload `0x40`) nacheinander `2101/0A`, `2102/0D`, `2102/01` ab, innerhalb weniger Sekunden | Diese volle Folge kam in allen Mitschnitten bei **jedem** Warmwasser-Wechsel (7 von 7, Display und JSON, nie bei Heizkreis-Wechseln). Die Kurzform `2101/0A` + `273F/01` kommt auch bei Ladebeginn und zählt nicht. Die Richtung verrät die Folge nicht – deshalb nachlesen. Ruht 5 min nach einem WEM-Neustart (Bootup `0x701` = `00`) | Warmwasser | **aus**, 10 min |
+| **R2** Warmwasserbetrieb trotz Aus | Kesselstatus springt auf 15 (PDO `0x182` Byte 0) oder der WEM schreibt `0x252B` = `0F` (`0x602`, Download) – und bekannt ist „Warmwasser Aus“ | Der Kessel lädt Warmwasser, obwohl es aus sein sollte: vermutlich wurde es eingeschaltet. Nur die Flanke zählt, nicht jeder Frame | Warmwasser | **aus**, 10 min |
+| **R3** Statusbits geändert | PDO `0x1C1` (Objekt `0x274D`) ändert sich, ohne die Bits WW-Ladung (`0x0010`) und Heizbetrieb (`0x0040`). `m = x[3]<<8 \| x[2]`. Der letzte Stand wird dauerhaft gespeichert, damit auch eine Änderung während eines Board-Neustarts auffällt | Der WEM schickt `0x1C1` nur bei Änderung. Standby ↔ Zeitprogramm ist daran sicher erkennbar (9 von 9); zwischen den Zeitprogrammen ändert sich nichts | Heizkreis | **an**, 5 min |
 | **R4** Heizanforderung passt nicht | (a) Heizanforderung (`0x252B` = `0A` oder Kesselstatus 10) bei bekanntem Standby/Sommer, oder (b) die aus Vorlaufsoll HZ (PDO `0x241` Bytes 0–1) und Außentemperatur (PDO `0x201`) zurückgerechnete Raumsoll-Stufe passt nicht zu Komfort 21 / Normal 20 / Absenk 18. `RT ≈ (VL − 1,4 + 1,1·AT) / 2,1`, gerundet auf 18/20/21, nur bei VL > 0 | Heizbetriebsarten haben kein eigenes Signal am Bus; die Heizanforderung verrät sie teilweise. Die Rückrechnung ist nur bei AT 12,9–15,2 °C geeicht, Zeitprogramme werden nicht geprüft, derselbe Widerspruch löst nicht zweimal aus | Heizkreis | **aus**, 30 min |
 
 Nicht verwendet, obwohl erwogen: die Bits `0x0004`/`0x0400` in `0x1C1` als „Heizanforderung“ –
@@ -407,8 +410,8 @@ ihre Bedeutung ist nicht eindeutig belegt.
 
 ### Anzeige in der Weboberfläche
 
-Gruppe **Verdachts-Lesen (experimentell)**: Hauptschalter, Obergrenze pro Stunde, **Regeln aktiv**
-(welche Regeln mit welchem Abstand, Auslösungen der letzten Stunde, Anlaufpause), **Verdachts-Lesen
+Gruppe **Regeln (R1-R4)**: Obergrenze pro Stunde, **Regeln aktiv** (welche Regeln mit welchem
+Abstand, ob die eigenen Regeln an sind, Auslösungen der letzten Stunde, Anlaufpause), **Regeln
 Protokoll** (letzte zehn Auslösungen, z. B. `27.09. 09:52 R1: Warmwasser Ein (vorher Aus),
 geaendert: JA`), **Regeln-Datei** (Ergebnis der letzten Datei) und je Regel Schalter, Mindestabstand,
 **„was und warum“** und **„zuletzt ausgelöst“**. Das Protokoll gibt es retained auch unter
@@ -418,21 +421,21 @@ Anlaufpause fiel), steht `keine Antwort` im Protokoll.
 
 ### Einstellen per Datei
 
-1. **Startwerte beim Bauen:** in der Hauptdatei unter `substitutions:` (`verdacht_start`,
-   `verdacht_r1_start` … `verdacht_r4_start`, `verdacht_abstand_r1` … `_r4`, `verdacht_max_h`).
-   Sie gelten nur, solange noch nichts gespeichert ist.
+1. **Startwerte beim Bauen:** in der Hauptdatei unter `substitutions:` (`regel_r1_start` …
+   `regel_r4_start`, `regel_abstand_r1` … `_r4`, `regeln_max_h`, `eigene_regeln_start`; bis v22
+   hießen sie `verdacht_…`). Sie gelten nur, solange noch nichts gespeichert ist.
 2. **Zur Laufzeit:** eine JSON-Datei an `<gerät>/cmd/regeln`, am besten retained
    (Vorlage [`regeln.json.example`](regeln.json.example)):
 
 ```json
 {
   "version": 1,
-  "verdacht": true,
-  "R1": {"an": true,  "abstand_min": 10},
-  "R2": {"an": true,  "abstand_min": 10},
+  "R1": {"an": false, "abstand_min": 10},
+  "R2": {"an": false, "abstand_min": 10},
   "R3": {"an": true,  "abstand_min": 5},
   "R4": {"an": false, "abstand_min": 30},
   "max_pro_stunde": 6,
+  "eigene_regeln_an": false,
   "eigene": []
 }
 ```
@@ -441,12 +444,37 @@ Anlaufpause fiel), steht `keine Antwort` im Protokoll.
 mosquitto_pub -h <broker> -u <konto> -P <passwort> -r -f regeln.json -t <gerät>/cmd/regeln
 ```
 
-Jedes Feld ist optional; was fehlt, bleibt, wie es ist. `abstand_min` 1–1440, `max_pro_stunde`
-1–60. **Ungültiges JSON, unbekannte Felder und Werte außerhalb der Grenzen lehnt das Board ganz ab**
-(„Regeln-Datei: ABGELEHNT: …“) und ändert nichts. Übernommene Werte landen in denselben Schaltern
+| Feld | Inhalt |
+|---|---|
+| `version` | ganze Zahl ≥ 0, frei wählbar; das Board meldet sie im Stand zurück. Hochzählen, wenn eine unveränderte Datei erneut gelten soll |
+| `R1` … `R4` | je `{"an": true/false, "abstand_min": 1–1440}` |
+| `max_pro_stunde` | 1–60, gilt für alle Regeln zusammen |
+| `eigene_regeln_an` | Hauptschalter der eigenen Regeln (`true`/`false`) |
+| `eigene` | Liste der eigenen Regeln, siehe unten |
+| `kommentar`, `_…` | werden ignoriert |
+
+Jedes Feld ist optional; was fehlt, bleibt, wie es ist. **Ungültiges JSON, unbekannte Felder und Werte außerhalb der Grenzen lehnt das Board ganz ab**
+(„Regeln-Datei: ABGELEHNT: …“) und ändert nichts.
+
+**Das Feld `verdacht` (bis v22 der gemeinsame Hauptschalter) wird seit v23 abgelehnt**, mit der
+Meldung, was stattdessen gilt. Es wird bewusst **nicht** auf `eigene_regeln_an` umgedeutet: in alten
+Dateien hieß `"verdacht": true` „R1–R4 an“ – umgedeutet würde es still die experimentellen eigenen
+Regeln einschalten. Alte Dateien also einmal umschreiben: `verdacht` streichen, R1–R4 einzeln setzen,
+bei Bedarf `eigene_regeln_an` ergänzen. Übernommene Werte landen in denselben Schaltern
 und Feldern wie in der Weboberfläche und werden dauerhaft gespeichert; zuletzt geschrieben gilt.
 Den aktiven Stand meldet das Board retained unter `<gerät>/regeln/stand` (beim Start und bei jeder
-Änderung).
+Änderung), im selben Format plus `firmware` und Laufzeitwerten der eigenen Regeln:
+
+```json
+{"firmware":"v23 vom 27.09.2026","version":3,
+ "R1":{"an":true,"abstand_min":10},"R2":{"an":true,"abstand_min":10},
+ "R3":{"an":true,"abstand_min":5},"R4":{"an":true,"abstand_min":30},
+ "max_pro_stunde":6,"eigene_regeln_an":false,"eigene":[]}
+```
+
+**Beispiele:** nur R3 wie bis v21 → `{"R1":{"an":false},"R2":{"an":false},"R3":{"an":true},"R4":{"an":false}}`;
+alle festen Regeln an, eigene aus → `{"R1":{"an":true},"R2":{"an":true},"R3":{"an":true},"R4":{"an":true},"eigene_regeln_an":false}`;
+nur die Obergrenze senken → `{"max_pro_stunde":3}`.
 
 **Wichtig bei retained:** Das Board merkt sich eine Prüfsumme der zuletzt übernommenen Datei. Die
 gleiche Datei nach Neustart oder Wiederverbindung wird deshalb **nicht erneut** angewandt – sonst
@@ -456,12 +484,14 @@ bewusst erneut gelten, `version` hochzählen.
 ### Eigene Regeln: hinzufügen, anzeigen, schalten
 
 Eigene Regeln sind einfache Auslöser ohne Programmierung: *kommt ein Frame mit dieser CAN-ID, dessen
-Datenbytes UND Maske gleich Muster UND Maske sind, dann nach dem Mindestabstand lesen*. Sie gelten
-nur mit Hauptschalter an und zählen gegen dieselbe Obergrenze pro Stunde. Höchstens 8 Regeln.
+Datenbytes UND Maske gleich Muster UND Maske sind, dann nach dem Mindestabstand lesen*. Sie sind
+**experimentell** und gelten nur, wenn ihr eigener Hauptschalter **Eigene Regeln (Hauptschalter)**
+an ist (Vorgabe aus; Datei `eigene_regeln_an`, Befehl `eigene an|aus`). Sie zählen gegen dieselbe
+Obergrenze pro Stunde wie R1–R4. Höchstens 8 Regeln.
 
 | Feld | Inhalt |
 |---|---|
-| `name` | 1–24 Zeichen `A-Z a-z 0-9 - _ .`, eindeutig, nicht `R1`–`R4`/`verdacht` |
+| `name` | 1–24 Zeichen `A-Z a-z 0-9 - _ .`, eindeutig, nicht `R1`–`R4`/`eigene`/`verdacht` |
 | `an` | `true`/`false` (Vorgabe `true`) |
 | `can_id` | `"0x602"` oder Zahl. **`0x601` und `0x581` sind gesperrt** – das sind die eigenen Anfragen des Boards und ihre Antworten; eine Regel darauf würde sich selbst auslösen |
 | `muster` | 1–8 Bytes hex, z. B. `"40 3E 22"` |
@@ -486,7 +516,8 @@ Schlüssel, bleiben die eigenen Regeln unverändert. Beispiel (auch in `regeln.j
 Das Board speichert die eigenen Regeln im Flash; **sie überleben einen Neustart auch ohne Broker**.
 Die retained Datei ist dafür nicht nötig, schadet aber nicht (s. Prüfsumme oben).
 
-**Anzeigen:** Gruppe **Eigene Regeln (experimentell)** in der Weboberfläche, z. B.
+**Anzeigen:** Gruppe **Eigene Regeln (experimentell)** in der Weboberfläche (Hauptschalter, Liste,
+Regel-Befehl), z. B.
 `Portal-Seitenaufruf an: 602 [40 3E 22] -> beide, 30 min, zuletzt 27.09. 14:05:11, 3 x` (nur die
 Bytes mit Maske ≠ 00; Anzahl seit dem letzten Neustart). Vollständig mit Maske und Beschreibung
 unter `<gerät>/regeln/stand`.
@@ -501,11 +532,12 @@ unter `<gerät>/regeln/stand`.
 ```
 mosquitto_pub -h <broker> -u <konto> -P <passwort> -t <gerät>/cmd/regel -m 'Portal-Seitenaufruf aus'
 mosquitto_pub -h <broker> -u <konto> -P <passwort> -t <gerät>/cmd/regel -m 'R3 an'
-mosquitto_pub -h <broker> -u <konto> -P <passwort> -t <gerät>/cmd/regel -m 'verdacht aus'
+mosquitto_pub -h <broker> -u <konto> -P <passwort> -t <gerät>/cmd/regel -m 'eigene an'
 ```
 
-`NAME` darf auch `verdacht` (Hauptschalter) oder `R1`–`R4` sein; diese lassen sich nur an- und
-ausschalten, nicht löschen. Unbekannte Namen oder Befehle werden mit Meldung abgelehnt.
+`NAME` darf auch `R1`–`R4` oder `eigene` (Hauptschalter der eigenen Regeln) sein; diese lassen sich
+nur an- und ausschalten, nicht löschen. `verdacht` gibt es seit v23 nicht mehr und wird mit einem
+Hinweis abgelehnt. Unbekannte Namen oder Befehle werden mit Meldung abgelehnt.
 
 **Broker-Rechte:** Wer `cmd/regeln` oder `cmd/regel` schreiben darf, kann Leseanfragen auslösen –
 nur Lesen an Knoten 1 und gedrosselt, aber Busverkehr. Diese Rechte nur einem Verwaltungskonto
