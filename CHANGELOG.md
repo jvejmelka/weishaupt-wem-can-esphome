@@ -1,6 +1,10 @@
 # Changelog – ESP-CAN-Brücke Weishaupt (WeAct CAN485, ESPHome)
 
 
+## App – 2026-09-27 (nach v30)
+- **Knopf-Rahmen am Handy:** der Maus-über-Effekt der Betriebsart-Knöpfe gilt nur noch bei echter Maus (`@media (hover: hover)`). Auf Touch-Geräten blieb sonst der zuletzt berührte Knopf umrandet und sah aus wie eine zweite aktive Betriebsart. Nach dem Update die App einmal neu laden.
+- **Live erprobt (Firmware v30 + App):** Warmwasser Ein/Aus und Heizkreis Standby/Zeitprogramm 1 aus der App, einzeln und schnell hintereinander. Der zweite Befehl wurde innerhalb der Sperrminute vorgemerkt und danach automatisch gesendet; alle Befehle liefen angenommen → gesendet → WEM bestätigt → am Bus bestätigt. „Status lesen“ holte den geänderten Warmwasser-Sollwert.
+
 ## v30 – 2026-09-27 (intern: R1–R5 als Datenregeln, Verhalten unverändert; Regelformat für eigene Regeln erweitert)
 - **Intern umgebaut, Verhalten unverändert.** Die festen Regeln R1–R5 sind jetzt **vorinstallierte Datenregeln** im selben Format wie die eigenen Regeln und laufen durch **einen** Auswerter ([`regelwerk.h`](components/weishaupt_can/regelwerk.h), `rw::frame`). Bisher hatte jede Regel eigene C++-Funktionen und eigene `on_frame`-Zweige in `verdacht.yaml`; jetzt gibt es dort einen Handler für alle Regeln (plus den unveränderten für die Antworten `0x581`).
 - **Das Format** ([`verdacht.h`](components/weishaupt_can/verdacht.h), erklärt in [REGELN.md, Abschnitt 5](REGELN.md#5-eigene-regeln-experimentell)): je Regel 1–4 Auslöser – **Frame** (CAN-ID, Mindestlänge, Maske, ein oder mehrere Muster), **Folge** (2–4 Frames mit Zeitfenstern, so ist R1 beschrieben), **Flanke** (Wert aus 1–2 Bytes mit Bitmaske ändert sich, optional nur zu bestimmten Werten – R2, R3, R4, R5) und **Baustein** – dazu je Auslöser eine Bedingung auf den bekannten Stand (`wenn`), auf Regelebene `ruhe_nach` (R1: 5 min nach Neustart des WEM) und `unterdrueckt_durch` (R5 nicht zusätzlich, wenn R3 schon liest). Mindestabstand, Obergrenze, Schattenmodus, Ruhe nach eigenem Schaltbefehl, Protokoll und Ereignisse gelten für alle Regeln einheitlich.
