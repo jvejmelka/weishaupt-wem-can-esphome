@@ -1,6 +1,17 @@
 # Changelog – ESP-CAN-Brücke Weishaupt (WeAct CAN485, ESPHome)
 
 
+## v25 – 2026-09-27 (Regeln: Fehler in R1 behoben, R3/R5, Schattenmodus, Ereignisse)
+- **Fehlerbehebung R1: R1 hat in v22–v24 nie ausgelöst.** Der WEM fragt den Kessel mit Kommandobyte **`0xA4`** (SDO Block-Upload) ab, nicht mit `0x40`; R1 hat nur `0x40` ausgewertet. R1 erkennt jetzt beide (Index und Subindex stehen an derselben Stelle). An den Rohmitschnitten nachgeprüft: vorher 0 Treffer, jetzt jede Warmwasser-Umschaltung.
+- **R3 reagiert nur noch auf das Standby-Bit `0x1000`** (Heizung ein ↔ Standby). Das bisherige R3-Verhalten (jede Änderung der übrigen Statusbits) ist die neue **R5**, eigener Schalter und Mindestabstand (Vorgabe aus, 5 min). Beide Zustände werden dauerhaft gespeichert.
+- **Neue Vorgaben:** R1, R2, R3 an; R4, R5 aus; eigene Regeln aus. Mindestabstand R1 und R3 jetzt **1 min** (vorher 10 bzw. 5) – beide Folgen sind je Umschaltung genau einmal da, und mit dem alten Abstand wären in den Mitschnitten schnelle Umschaltungen verpasst worden.
+- **Schattenmodus:** ausgeschaltete Regeln (R1–R5, eigene Regeln einzeln aus oder Hauptschalter aus) prüfen ihre Bedingung weiter. Trifft sie zu, wird **nicht** gelesen, aber im Log (INFO „… waere ausgeloest (Regel aus) - nicht gelesen“) und als Ereignis `waere` gemeldet. Eigener Mindestabstand je Regel, zählt nicht gegen die Obergrenze, steht nicht im Protokoll. R4 und R5 prüfen ihre Bedingung dafür jetzt unabhängig vom Schalter.
+- **Ereignisse an `<gerät>/verdacht/ereignis`** (JSON, nicht retained): `ausgeloest`, `waere`, `ergebnis` (mit `wert` und `geaendert` true/false/null), `keine_antwort` – für Telegraf, Grafana und Home Assistant.
+- **Log:** jede Auslösung und jedes Ergebnis als INFO, jede unterdrückte Auslösung (eigener Befehl, WEM-Neustart, Mindestabstand, Obergrenze, Bus nicht bereit) als DEBUG, Tag `verdacht`.
+- **Eigene Regeln ruhen jetzt ebenfalls 2 min nach einem eigenen Schaltbefehl** (wie R1–R5).
+- Datei `cmd/regeln`, `cmd/regel` und `regeln/stand` kennen `R5`; Weboberfläche: Gruppe „Regeln (R1-R5)“, R3 heißt „R3 Heizung ein oder Standby“, neu „R5 uebrige Statusbits geaendert“. Nach dem Update gilt für R3 und R5 der Startwert aus `substitutions` (der Schalter wurde umbenannt) – mit gespeicherter Regeln-Datei `version` hochzählen und erneut senden.
+- **Neue Dokumentation [REGELN.md](REGELN.md):** jede Regel mit Auslöser, Begründung, Sicherungen, Grenzen und Prüfung an Mitschnitten; Einstellen, Schalten per MQTT, Protokoll und Ereignisse, Telegraf-Beispiel. PROTOKOLL.md Abschnitt 6a verweist nur noch darauf.
+
 ## v24 – 2026-09-27 (Zusatzanzeigen)
 - **Neues Paket `zusatz.yaml` (optional, braucht `mqtt`):** Liste von bis zu 6 Zusatzanzeigen für die Handy-App – Name, MQTT-Topic, Feld (bei JSON, auch verschachtelt `a.b`; leer = Payload ist die Zahl), Einheit, Art `wert` oder `laeuft` (mit Schwelle).
 - **Das Board liest diese Werte nicht selbst** und erzeugt keinen zusätzlichen Busverkehr oder Broker-Verkehr außer der Konfiguration: es speichert die Liste dauerhaft und veröffentlicht sie retained unter `<gerät>/app/zusatz` (beim Start und bei jeder Änderung).

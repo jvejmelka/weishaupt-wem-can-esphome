@@ -58,7 +58,7 @@ Nicht benötigte Zeilen unter `packages:` auskommentieren.
 | `homeassistant-api.yaml` | native ESPHome-API (verschlüsselt) | nein |
 | `wem-schalten.yaml` | Heizkreis schalten, Warteschlange, Protokoll | nein |
 | `warmwasser-schalten.yaml` | Warmwasser Ein/Aus (braucht `wem-schalten` und `warmwasser`) | nein |
-| `verdacht.yaml` | **Regeln:** Betriebsarten nur lesen, wenn das Mithören eine Änderung vermuten lässt; feste Regeln R1–R4 einzeln schaltbar (Vorgabe: nur R3 an = Verhalten bis v21), dazu eigene Regeln (experimentell, eigener Hauptschalter, Vorgabe aus); einstellbar per Web und Datei (braucht `warmwasser`). Details: [PROTOKOLL.md, Abschnitt 6a](PROTOKOLL.md#6a-regeln-betriebsarten-bei-verdacht-lesen) | nein |
+| `verdacht.yaml` | **Regeln:** Betriebsarten nur lesen, wenn das Mithören eine Änderung vermuten lässt; feste Regeln R1–R5 einzeln schaltbar (Vorgabe: R1–R3 an, R4/R5 aus; ausgeschaltete laufen im Schattenmodus weiter), dazu eigene Regeln (experimentell, eigener Hauptschalter, Vorgabe aus); einstellbar per Web, Datei und MQTT (braucht `warmwasser`). Details: [REGELN.md](REGELN.md) | nein |
 | `zusatz.yaml` | **Zusatzanzeigen für die Handy-App:** Liste von bis zu 6 fremden MQTT-Topics (z. B. Raumtemperaturen, „Wärmepumpe läuft“), einstellbar per Web und Datei. Das Board liest diese Werte **nicht** selbst, es verwaltet nur die Liste (braucht `mqtt`). Details: [PROTOKOLL.md, Abschnitt 6b](PROTOKOLL.md#6b-zusatzanzeigen-für-die-handy-app) | nein |
 | `feste-ip.yaml` | feste IP statt DHCP | nein |
 
@@ -91,13 +91,14 @@ bleibt das bisherige WLAN. Letzter Rückweg ist der Notfall-Hotspot mit Captive 
 | `<gerät>/cmd/scan` | `01 2A00 2AFF 3` | Bereich lesen, Antworten in `<gerät>/canraw` |
 | `<gerät>/cmd/stop` | beliebig | Scan abbrechen |
 | `<gerät>/cmd/status` | beliebig | Heizkreis- und Warmwasser-Betriebsart einmal vom Bus lesen (höchstens alle 10 s, nur Leseanfragen); Zeitpunkt in „Status gelesen“ |
-| `<gerät>/cmd/regeln` | JSON-Datei, am besten retained (`mosquitto_pub -r -f regeln.json`) | Regeln einstellen: R1–R4 je an/aus und Abstand, Obergrenze, `eigene_regeln_an`, eigene Regeln (Vorlage `regeln.json.example`; das alte Feld `verdacht` wird seit v23 abgelehnt) |
-| `<gerät>/cmd/regel` | `NAME an` / `NAME aus` / `NAME loeschen` | eine Regel schalten (NAME = `R1`–`R4`, `eigene` = Hauptschalter der eigenen Regeln, oder eine eigene Regel) |
+| `<gerät>/cmd/regeln` | JSON-Datei, am besten retained (`mosquitto_pub -r -f regeln.json`) | Regeln einstellen: R1–R5 je an/aus und Abstand, Obergrenze, `eigene_regeln_an`, eigene Regeln (Vorlage `regeln.json.example`, Erklärung [REGELN.md](REGELN.md#6-einstellen); das alte Feld `verdacht` wird abgelehnt) |
+| `<gerät>/cmd/regel` | `NAME an` / `NAME aus` / `NAME loeschen` | eine Regel schalten (NAME = `R1`–`R5`, `eigene` = Hauptschalter der eigenen Regeln, oder eine eigene Regel), siehe [REGELN.md](REGELN.md#7-per-mqtt-schalten) |
 | `<gerät>/cmd/zusatz` | JSON-Datei, am besten retained (`mosquitto_pub -r -f zusatz.json`) | Zusatzanzeigen der Handy-App einstellen: `{"version":N,"eintraege":[{name, topic, feld, einheit, art, schwelle}]}` (Vorlage `zusatz.json.example`); Ungültiges wird mit Meldung abgelehnt |
 | `<gerät>/app/zusatz` | (retained, vom Board) | aktuelle Liste der Zusatzanzeigen (die App abonniert daraus die Topics) |
 | `<gerät>/schaltprotokoll` | (retained, vom Board) | letzte zehn Befehle, einer je Zeile |
 | `<gerät>/regeln/stand` | (retained, vom Board) | aktiver Stand der Regeln als JSON (Format wie `cmd/regeln`, plus `firmware`), samt eigener Regeln |
 | `<gerät>/verdacht/protokoll` | (retained, vom Board) | letzte zehn Auslösungen: Regel, gelesen, geändert ja/nein |
+| `<gerät>/verdacht/ereignis` | (nicht retained, vom Board) | jedes Regel-Ereignis als JSON: `{"regel","phase":"ausgeloest"\|"waere"\|"ergebnis"\|"keine_antwort","ziel","wert","geaendert"}` – für Telegraf/Grafana, siehe [REGELN.md](REGELN.md#8-protokoll-log-und-ereignisse) |
 
 **Wer `cmd/regeln` oder `cmd/regel` schreiben darf, kann Leseanfragen auslösen** – nur Lesen an
 Knoten 1, gedrosselt durch Mindestabstand und Obergrenze pro Stunde, aber eben Busverkehr. Das
@@ -132,6 +133,7 @@ Die Dokumente im Überblick:
 
 - [INSTALL.md](INSTALL.md) – Schritt für Schritt vom Board bis zur Handy-App
 - [PROTOKOLL.md](PROTOKOLL.md) – CAN-Bus, WEM-JSON, Abbildung und Fehlerbilder
+- [REGELN.md](REGELN.md) – die Regeln R1–R5 und eigene Regeln: wann das Board Betriebsarten nachliest
 - [ANLAGE.md](ANLAGE.md) – Beispielanlage mit Wärmepumpe und PV
 - [IDEEN.md](IDEEN.md) – was sich noch bauen ließe: Datenbank und Grafana, H2-Sperre,
   Raumsensoren, Raumgerät per Funk, Heizkörperventile, Anlage prüfen

@@ -37,6 +37,11 @@ Erst der Verlauf macht Aussagen möglich, die ein Momentwert nie hergibt: wie of
 startet, wie schnell der Speicher abkühlt (Beispiel in [ANLAGE.md](ANLAGE.md#gemessen-ein-nachmittag-und-eine-nacht)),
 wann die Wärmepumpe läuft und ob die Räume bei der eingestellten Heizkurve warm werden.
 
+Auch die **Regel-Ereignisse** des Boards (`<gerät>/verdacht/ereignis`) lassen sich so mitschreiben –
+dann zeigt Grafana, wann eine Regel ausgelöst hat, was die Lesung ergab und wie oft eine
+**ausgeschaltete** Regel angeschlagen hätte. Telegraf-Eingang und Abfrage dafür:
+[REGELN.md, Abschnitt 8](REGELN.md#8-protokoll-log-und-ereignisse).
+
 Ein Telegraf-Eingang für die Board-Werte sieht etwa so aus:
 
 ```toml
@@ -224,8 +229,8 @@ Viele dieser Fragen lassen sich schon heute beantworten, ohne irgendetwas zu sch
 
 ## 7. Eigene Lese-Regeln in Home Assistant oder Node-RED
 
-Das Board kennt feste Regeln (R1–R4, einzeln schaltbar) und einfache eigene Regeln der Form „CAN-ID +
-Maske + Muster“ ([PROTOKOLL.md, Abschnitt 6a](PROTOKOLL.md#6a-regeln-betriebsarten-bei-verdacht-lesen)).
+Das Board kennt feste Regeln (R1–R5, einzeln schaltbar, ausgeschaltete im Schattenmodus) und einfache
+eigene Regeln der Form „CAN-ID + Maske + Muster“ ([REGELN.md](REGELN.md)).
 Was dafür zu verwickelt ist – mehrere Bedingungen, Uhrzeiten, Anwesenheit, Werte anderer Geräte –
 lässt sich außerhalb bauen: eine Automation in Home Assistant oder ein Flow in Node-RED beobachtet
 die MQTT-Werte des Boards (oder `<gerät>/canraw`, wenn der Rohmitschnitt an ist) und schickt bei

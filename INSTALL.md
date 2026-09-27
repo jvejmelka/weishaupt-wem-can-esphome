@@ -179,6 +179,10 @@ gleichnamige Zeile unter *Diagnose*). Das Board fragt dann Kesselwerte wie Druck
 Volumenstrom im Weishaupt-Takt (40 s / 60 s / 5 min) selbst ab – nur lesend, siehe
 [PROTOKOLL.md](PROTOKOLL.md#takt-der-eigenen-anfragen).
 
+Unabhängig davon liest das Board die **Betriebsarten** nach, wenn das Mithören eine Umschaltung
+vermuten lässt (Paket `verdacht`, Regeln R1–R5, Vorgabe R1–R3 an). Was die Regeln tun und wie man
+sie einstellt: [REGELN.md](REGELN.md).
+
 ## 10. MQTT und Home Assistant
 
 **Broker-Konten mit Zugriffsregeln** (Mosquitto `acl_file`). Wer auf `…/cmd/…` schreiben darf, kann
@@ -221,6 +225,10 @@ mosquitto_pub -t weact-can485-weishaupt/cmd/status     -m 1      # Betriebsarten
 ```
 
 Zwischen zwei Befehlen liegt mindestens eine Minute; spätere landen in der Warteschlange.
+
+Regeln per MQTT: `cmd/regel` (z. B. `R4 an`) und `cmd/regeln` (JSON-Datei), Ereignisse unter
+`verdacht/ereignis` – siehe [REGELN.md](REGELN.md#7-per-mqtt-schalten). Diese Rechte nur einem
+Verwaltungskonto geben, nicht dem App-Konto.
 
 ## 11. Handy-App (optional)
 

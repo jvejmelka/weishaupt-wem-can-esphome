@@ -12,24 +12,30 @@
 # Die festen Regeln (Logik in der Firmware, nur an/aus und Abstand einstellbar):
 #   R1  WEM fragt den Kessel 2101/0A, 2102/0D, 2102/01 ab (so bei jedem Warmwasser-Wechsel)  -> WW lesen
 #   R2  Kessel geht in den Warmwasserbetrieb, bekannt ist aber "Warmwasser Aus"             -> WW lesen
-#   R3  Statusbits des WEM (PDO 0x1C1) aendern sich                                        -> HK lesen
+#   R3  Standby-Bit 0x1000 der WEM-Statusbits (PDO 0x1C1) aendert sich (Heizung ein/Standby) -> HK lesen
 #   R4  Heizanforderung passt nicht zur bekannten Heizkreis-Betriebsart                    -> HK lesen
-# R1-R4 ruhen 2 min nach einem eigenen Schaltbefehl (der liest ohnehin selbst nach).
-# Seit v23 hat jede feste Regel ihren eigenen Schalter - es gibt KEINEN gemeinsamen Hauptschalter
-# mehr. Vorgabe: nur R3 an (= Verhalten bis v21: Heizkreis bei Statusbit-Aenderung nachlesen).
+#   R5  uebrige Statusbits (ohne Standby, WW-Ladung, Heizbetrieb) aendern sich               -> HK lesen
+# Der WEM fragt den Kessel mit Kommandobyte 0xA4 (SDO Block-Upload) ab, nicht mit 0x40 - R1
+# erkennt seit v25 beide (bis v24 nur 0x40, deshalb hat R1 in v22-v24 nie ausgeloest).
+# R1-R5 ruhen 2 min nach einem eigenen Schaltbefehl (der liest ohnehin selbst nach).
+# Jede feste Regel hat ihren eigenen Schalter. Vorgabe: R1, R2, R3 an; R4, R5 aus.
 # Eigene Regeln (experimentell): generische Trigger "CAN-ID + Maske + Muster", mit EIGENEM
-# Hauptschalter (Vorgabe aus), der nur fuer die eigenen Regeln gilt. Siehe PROTOKOLL.md.
+# Hauptschalter (Vorgabe aus), der nur fuer die eigenen Regeln gilt. Siehe REGELN.md.
+# Jede Ausloesung und jedes Ergebnis steht im Log (Tag "verdacht", INFO; Unterdrueckungen DEBUG)
+# und geht als JSON (nicht retained) an <geraet>/verdacht/ereignis.
 
 substitutions:
   # Startwerte, solange noch nichts gespeichert ist (danach gelten Weboberflaeche bzw. Datei)
-  regel_r1_start: RESTORE_DEFAULT_OFF
-  regel_r2_start: RESTORE_DEFAULT_OFF
-  regel_r3_start: RESTORE_DEFAULT_ON        # = Verhalten bis v21
+  regel_r1_start: RESTORE_DEFAULT_ON
+  regel_r2_start: RESTORE_DEFAULT_ON
+  regel_r3_start: RESTORE_DEFAULT_ON
   regel_r4_start: RESTORE_DEFAULT_OFF       # Rueckrechnung nur fuer milde Aussentemperaturen geeicht
-  regel_abstand_r1: "10"
+  regel_r5_start: RESTORE_DEFAULT_OFF       # loest bei jedem Heizbedarf-Wechsel aus
+  regel_abstand_r1: "1"         # die Folge kommt genau einmal je Umschaltung
   regel_abstand_r2: "10"
-  regel_abstand_r3: "5"
+  regel_abstand_r3: "1"         # jede Standby-Bit-Aenderung ist ein echtes Ereignis
   regel_abstand_r4: "30"
+  regel_abstand_r5: "5"
   regeln_max_h: "6"
   eigene_regeln_start: RESTORE_DEFAULT_OFF  # Hauptschalter NUR fuer die eigenen Regeln
 
@@ -72,8 +78,13 @@ globals:
     type: int
     restore_value: yes
     initial_value: '-1'
-  # R3: letzter Stand der Statusbits (ohne WW-Ladung/Heizbetrieb), ueberlebt den Neustart
-  - id: vd_bits_vorher
+  # R3: letzter Stand des Standby-Bits 0x1000 (0/1), R5: letzter Stand der uebrigen Statusbits
+  # (ohne 0x1000, WW-Ladung 0x0010, Heizbetrieb 0x0040). Beide ueberleben den Neustart.
+  - id: vd_stby_vorher
+    type: int
+    restore_value: yes
+    initial_value: '-1'
+  - id: vd_rest_vorher
     type: int
     restore_value: yes
     initial_value: '-1'
@@ -86,6 +97,8 @@ globals:
   - id: vd_zeiten              # Ausloesezeitpunkte der letzten Stunde (Obergrenze)
     type: std::vector<uint32_t>
   - id: vd_letzt               # letzte Ausloesung je Regel
+    type: std::map<std::string, uint32_t>
+  - id: vd_letzt_schatten      # letzte "waere ausgeloest"-Meldung je Regel (Schattenmodus)
     type: std::map<std::string, uint32_t>
   - id: vd_protokoll
     type: std::vector<std::string>
@@ -142,7 +155,7 @@ globals:
 web_server:
   sorting_groups:
     - id: g_verdacht
-      name: "Regeln (R1-R4)"
+      name: "Regeln (R1-R5)"
       sorting_weight: 47
     - id: g_eigene
       name: "Eigene Regeln (experimentell)"
@@ -150,6 +163,9 @@ web_server:
 
 script:
   # Gemeinsame Pruefung und Ausloesung. ziel: 1 Heizkreis, 2 Warmwasser, 3 beide.
+  # an = false: SCHATTENMODUS - die Bedingung hat zugetroffen, die Regel ist aber aus. Dann wird
+  # nicht gelesen, nur geloggt (INFO) und als Ereignis "waere" gemeldet; es gilt ein eigener
+  # Mindestabstand je Regel, die Obergrenze pro Stunde und das Protokoll bleiben unberuehrt.
   - id: vd_regel
     mode: queued
     max_runs: 10
@@ -157,9 +173,22 @@ script:
       regel: string
       ziel: int
       abstand: int
+      an: bool
     then:
       - lambda: |-
           uint32_t jetzt = millis();
+          const char *zt = ziel == 1 ? "hk" : (ziel == 2 ? "ww" : "beide");
+          if (!an) {
+            auto &ls = id(vd_letzt_schatten);
+            auto is = ls.find(regel);
+            if (is != ls.end() && jetzt - is->second < (uint32_t) abstand * 60000UL) {
+              ESP_LOGD("verdacht", "%s waere ausgeloest (Regel aus), Mindestabstand %d min - nicht gemeldet", regel.c_str(), abstand); return;
+            }
+            ls[regel] = jetzt;
+            ESP_LOGI("verdacht", "%s waere ausgeloest (Regel aus) - nicht gelesen", regel.c_str());
+            id(vd_ereignis)->execute(regel, std::string("waere"), std::string(zt), std::string(""), -1);
+            return;
+          }
           if (id(bus_seit) == 0 || jetzt - id(letzter_frame) > 30000 || jetzt - id(bus_seit) <= id(pause_ms)) {
             ESP_LOGD("verdacht", "%s: Bus nicht bereit (Anlaufpause/Bus schweigt) - nicht gelesen", regel.c_str()); return;
           }
@@ -171,7 +200,7 @@ script:
           auto &z = id(vd_zeiten);
           z.erase(std::remove_if(z.begin(), z.end(), [jetzt](uint32_t t) { return jetzt - t > 3600000UL; }), z.end());
           if ((int) z.size() >= (int) id(vd_max_h).state) {
-            ESP_LOGW("verdacht", "%s: Obergrenze %d/h erreicht - nicht gelesen", regel.c_str(), (int) id(vd_max_h).state); return;
+            ESP_LOGD("verdacht", "%s: Obergrenze %d/h erreicht - nicht gelesen", regel.c_str(), (int) id(vd_max_h).state); return;
           }
           z.push_back(jetzt);
           l[regel] = jetzt;
@@ -188,11 +217,41 @@ script:
             id(anlass_ww_ms) = (jetzt - 8000) | 1;
           }
           ESP_LOGI("verdacht", "%s ausgeloest -> lese %s", regel.c_str(), ziel == 1 ? "Heizkreis" : (ziel == 2 ? "Warmwasser" : "beide"));
+          id(vd_ereignis)->execute(regel, std::string("ausgeloest"), std::string(ziel == 1 ? "hk" : (ziel == 2 ? "ww" : "beide")), std::string(""), -1);
           if (regel == "R1") id(vd_r1_zul).publish_state(zeit);
           else if (regel == "R2") id(vd_r2_zul).publish_state(zeit);
           else if (regel == "R3") id(vd_r3_zul).publish_state(zeit);
           else if (regel == "R4") id(vd_r4_zul).publish_state(zeit);
+          else if (regel == "R5") id(vd_r5_zul).publish_state(zeit);
           else if (auto *r = vd::finden(regel)) { r->zuletzt = zeit; r->anzahl++; id(vd_stand)->execute(); }
+
+  # Ereignis als JSON (NICHT retained) an <geraet>/verdacht/ereignis - fuer Telegraf/Grafana/HA.
+  # phase: ausgeloest | ergebnis | keine_antwort; ziel: hk | ww | beide; geaendert: -1 = null, 0/1
+  - id: vd_ereignis
+    mode: queued
+    max_runs: 10
+    parameters:
+      regel: string
+      phase: string
+      ziel: string
+      wert: string
+      geaendert: int
+    then:
+      - lambda: |-
+          #ifdef USE_MQTT
+          if (!mqtt::global_mqtt_client->is_connected()) return;
+          JsonDocument d;
+          JsonObject o = d.to<JsonObject>();
+          o["regel"] = regel;
+          o["phase"] = phase;
+          o["ziel"] = ziel;
+          if (!wert.empty()) o["wert"] = wert;
+          if (phase == "ergebnis") { if (geaendert < 0) o["geaendert"] = nullptr; else o["geaendert"] = geaendert == 1; }
+          if (id(uhr).now().is_valid()) o["zeit"] = id(uhr).now().strftime("%Y-%m-%dT%H:%M:%S");
+          std::string s;
+          serializeJson(d, s);
+          mqtt::global_mqtt_client->publish("${geraet}/verdacht/ereignis", s, 0, false);
+          #endif
 
   # Protokoll: neueste zuerst, 10 Eintraege seit dem letzten Neustart
   - id: vd_eintrag
@@ -201,6 +260,7 @@ script:
       text: string
     then:
       - lambda: |-
+          ESP_LOGI("verdacht", "Ergebnis %s", text.c_str());
           std::string z = id(uhr).now().is_valid() ? id(uhr).now().strftime("%d.%m. %H:%M ") : std::string("");
           auto &p = id(vd_protokoll);
           p.insert(p.begin(), z + text);
@@ -225,14 +285,14 @@ script:
           id(vd_eigene_ts).publish_state(vd::anzeige());
           #ifdef USE_MQTT
           if (!mqtt::global_mqtt_client->is_connected()) return;
-          switch_::Switch *sw[] = {id(vd_r1), id(vd_r2), id(vd_r3), id(vd_r4)};
-          number::Number *ab[] = {id(vd_ab_r1), id(vd_ab_r2), id(vd_ab_r3), id(vd_ab_r4)};
-          static const char *rn[] = {"R1", "R2", "R3", "R4"};
+          switch_::Switch *sw[] = {id(vd_r1), id(vd_r2), id(vd_r3), id(vd_r4), id(vd_r5)};
+          number::Number *ab[] = {id(vd_ab_r1), id(vd_ab_r2), id(vd_ab_r3), id(vd_ab_r4), id(vd_ab_r5)};
+          static const char *rn[] = {"R1", "R2", "R3", "R4", "R5"};
           JsonDocument d;
           JsonObject o = d.to<JsonObject>();
           o["firmware"] = "${firmware}";
           if (id(vd_datei_version) >= 0) o["version"] = id(vd_datei_version);
-          for (int i = 0; i < 4; i++) {
+          for (int i = 0; i < 5; i++) {
             JsonObject r = o[rn[i]].to<JsonObject>();
             r["an"] = sw[i]->state;
             r["abstand_min"] = (int) ab[i]->state;
@@ -289,9 +349,9 @@ script:
             }
             id(vd_speichern)->execute();
           }
-          switch_::Switch *sw[] = {id(vd_r1), id(vd_r2), id(vd_r3), id(vd_r4)};
-          number::Number *ab[] = {id(vd_ab_r1), id(vd_ab_r2), id(vd_ab_r3), id(vd_ab_r4)};
-          for (int i = 0; i < 4; i++) {
+          switch_::Switch *sw[] = {id(vd_r1), id(vd_r2), id(vd_r3), id(vd_r4), id(vd_r5)};
+          number::Number *ab[] = {id(vd_ab_r1), id(vd_ab_r2), id(vd_ab_r3), id(vd_ab_r4), id(vd_ab_r5)};
+          for (int i = 0; i < 5; i++) {
             if (d.an[i] == 1) sw[i]->turn_on(); else if (d.an[i] == 0) sw[i]->turn_off();
             if (d.abstand[i] > 0) { auto c = ab[i]->make_call(); c.set_value(d.abstand[i]); c.perform(); }
           }
@@ -299,15 +359,16 @@ script:
           if (d.eigene_an == 1) id(vd_eigene_haupt).turn_on(); else if (d.eigene_an == 0) id(vd_eigene_haupt).turn_off();
           id(vd_datei_hash) = h;
           if (d.version >= 0) id(vd_datei_version) = d.version;
-          char b[128];
-          snprintf(b, sizeof(b), "uebernommen (version %d): R1 %s, R2 %s, R3 %s, R4 %s, eigene %s (%u)", d.version,
+          char b[144];
+          snprintf(b, sizeof(b), "uebernommen (version %d): R1 %s, R2 %s, R3 %s, R4 %s, R5 %s, eigene %s (%u)", d.version,
                    id(vd_r1).state ? "an" : "aus", id(vd_r2).state ? "an" : "aus", id(vd_r3).state ? "an" : "aus",
-                   id(vd_r4).state ? "an" : "aus", id(vd_eigene_haupt).state ? "an" : "aus", (unsigned) vd::eigene().size());
+                   id(vd_r4).state ? "an" : "aus", id(vd_r5).state ? "an" : "aus", id(vd_eigene_haupt).state ? "an" : "aus",
+                   (unsigned) vd::eigene().size());
           id(vd_datei_ts).publish_state(z + b);
           ESP_LOGI("verdacht", "Regeln-Datei %s", b);
           id(vd_stand)->execute();
 
-  # Einzelbefehl "NAME an" / "NAME aus" / "NAME loeschen" (NAME = R1..R4, eigene, eigene Regel)
+  # Einzelbefehl "NAME an" / "NAME aus" / "NAME loeschen" (NAME = R1..R5, eigene, eigene Regel)
   - id: vd_befehl
     mode: queued
     parameters:
@@ -330,11 +391,12 @@ script:
           std::string k = name; for (auto &c : k) c = tolower(c);
           switch_::Switch *sw = nullptr;
           if (k == "verdacht" || k == "hauptschalter") {
-            id(vd_befehl_ts).publish_state(z + "'" + name + "' gibt es seit v23 nicht mehr: R1-R4 einzeln schalten, eigene Regeln mit 'eigene an|aus'"); return;
+            id(vd_befehl_ts).publish_state(z + "'" + name + "' gibt es seit v23 nicht mehr: R1-R5 einzeln schalten, eigene Regeln mit 'eigene an|aus'"); return;
           }
           if (k == "eigene") sw = id(vd_eigene_haupt);
           else if (k == "r1") sw = id(vd_r1); else if (k == "r2") sw = id(vd_r2);
           else if (k == "r3") sw = id(vd_r3); else if (k == "r4") sw = id(vd_r4);
+          else if (k == "r5") sw = id(vd_r5);
           if (sw != nullptr) {
             if (cmd != "an" && cmd != "aus") { id(vd_befehl_ts).publish_state(z + name + " ist eine feste Regel - nur an/aus"); return; }
             if (an) sw->turn_on(); else sw->turn_off();
@@ -342,7 +404,7 @@ script:
             return;
           }
           vd::Regel *r = vd::finden(name);
-          if (r == nullptr) { id(vd_befehl_ts).publish_state(z + "keine Regel '" + name + "' (feste: R1-R4, eigene)"); return; }
+          if (r == nullptr) { id(vd_befehl_ts).publish_state(z + "keine Regel '" + name + "' (feste: R1-R5, eigene)"); return; }
           if (cmd == "an" || cmd == "aus") { r->an = an; id(vd_befehl_ts).publish_state(z + "OK: " + r->name + (an ? " an" : " aus")); }
           else {
             std::string n = r->name;
@@ -361,9 +423,11 @@ interval:
           // offene Lesungen ohne Antwort abschliessen
           if (id(vd_offen_hk) && jetzt - id(vd_offen_hk_ms) > 180000) {
             id(vd_offen_hk) = false; id(vd_eintrag)->execute(id(vd_offen_hk_regel) + ": Heizkreis - keine Antwort");
+            id(vd_ereignis)->execute(id(vd_offen_hk_regel), std::string("keine_antwort"), std::string("hk"), std::string(""), -1);
           }
           if (id(vd_offen_ww) && jetzt - id(vd_offen_ww_ms) > 180000) {
             id(vd_offen_ww) = false; id(vd_eintrag)->execute(id(vd_offen_ww_regel) + ": Warmwasser - keine Antwort");
+            id(vd_ereignis)->execute(id(vd_offen_ww_regel), std::string("keine_antwort"), std::string("ww"), std::string(""), -1);
           }
           #ifdef USE_MQTT
           if (!mqtt::global_mqtt_client->is_connected()) id(vd_stand_gesendet) = false;
@@ -374,6 +438,8 @@ canbus:
   - id: !extend my_can_bus
     on_frame:
       # --- R1/R2/R4: was der WEM an den Kessel schickt (0x602) ---
+      # Lese-Anfragen des WEM kommen als SDO Block-Upload-Initiate (Kommandobyte 0xA4), selten als
+      # Expedited-Upload (0x40). Bei beiden stehen Index (Bytes 1-2, LE) und Subindex (Byte 3) gleich.
       - can_id: 0x602
         then:
           - lambda: |-
@@ -382,7 +448,7 @@ canbus:
               uint16_t idx = (x[2] << 8) | x[1];
               uint8_t sub = x[3];
               bool eigen = id(eigener_befehl_ms) != 0 && j - id(eigener_befehl_ms) < 120000;
-              if (x[0] == 0x40) {
+              if (x[0] == 0xA4 || x[0] == 0x40) {
                 if (idx == 0x2101 && sub == 0x0A) id(vd_r1_a) = j | 1;
                 else if (idx == 0x2102 && sub == 0x0D) id(vd_r1_b) = j | 1;
                 else if (idx == 0x2102 && sub == 0x01) {
@@ -391,17 +457,21 @@ canbus:
                   id(vd_r1_a) = 0; id(vd_r1_b) = 0;
                   bool wem_neu = id(vd_wem_start) != 0 && j - id(vd_wem_start) < 300000;
                   if (folge) {
-                    if (!id(vd_r1).state || eigen || wem_neu) ESP_LOGD("verdacht", "R1-Folge erkannt, ruht (%s)", eigen ? "eigener Befehl" : (wem_neu ? "WEM-Neustart" : "aus"));
-                    else id(vd_regel)->execute("R1", 2, (int) id(vd_ab_r1).state);
+                    if (eigen || wem_neu) ESP_LOGD("verdacht", "R1-Folge erkannt, ruht (%s)", eigen ? "eigener Befehl" : "WEM-Neustart");
+                    else id(vd_regel)->execute("R1", 2, (int) id(vd_ab_r1).state, id(vd_r1).state);
                   }
                 }
               } else if ((x[0] & 0xE0) == 0x20 && idx == 0x252B) {
                 int v = x[4];
                 int vorher = id(vd_252b_vorher);
                 id(vd_252b_vorher) = v;
-                if (v == vorher || eigen) return;
-                if (v == 0x0F && id(vd_r2).state && id(vd_ww_bekannt) == 2) id(vd_regel)->execute("R2", 2, (int) id(vd_ab_r2).state);
-                if (v == 0x0A && id(vd_r4).state && (id(vd_hk_bekannt) == 1 || id(vd_hk_bekannt) == 5)) id(vd_regel)->execute("R4", 1, (int) id(vd_ab_r4).state);
+                if (v == vorher) return;
+                bool r2 = v == 0x0F && id(vd_ww_bekannt) == 2;
+                bool r4 = v == 0x0A && (id(vd_hk_bekannt) == 1 || id(vd_hk_bekannt) == 5);
+                if (r2) { if (eigen) ESP_LOGD("verdacht", "R2 (0x252B=0F) ruht (eigener Befehl)");
+                          else id(vd_regel)->execute("R2", 2, (int) id(vd_ab_r2).state, id(vd_r2).state); }
+                if (r4) { if (eigen) ESP_LOGD("verdacht", "R4 (0x252B=0A) ruht (eigener Befehl)");
+                          else id(vd_regel)->execute("R4", 1, (int) id(vd_ab_r4).state, id(vd_r4).state); }
               }
       # Kesselstatus: 15 Warmwasserbetrieb (R2), 10 Heizbetrieb (R4)
       - can_id: 0x182
@@ -411,22 +481,39 @@ canbus:
               int st = x[0], vorher = id(vd_kstatus_vorher);
               id(vd_kstatus_vorher) = st;
               if (vorher < 0 || st == vorher) return;
-              if (id(eigener_befehl_ms) != 0 && millis() - id(eigener_befehl_ms) < 120000) return;
-              if (st == 15 && id(vd_r2).state && id(vd_ww_bekannt) == 2) id(vd_regel)->execute("R2", 2, (int) id(vd_ab_r2).state);
-              if (st == 10 && id(vd_r4).state && (id(vd_hk_bekannt) == 1 || id(vd_hk_bekannt) == 5)) id(vd_regel)->execute("R4", 1, (int) id(vd_ab_r4).state);
-      # R3: Statusbits des WEM (0x274D) - m = x[3]<<8 | x[2], WW-Ladung/Heizbetrieb ausgeblendet
+              bool eigen = id(eigener_befehl_ms) != 0 && millis() - id(eigener_befehl_ms) < 120000;
+              bool r2 = st == 15 && id(vd_ww_bekannt) == 2;
+              bool r4 = st == 10 && (id(vd_hk_bekannt) == 1 || id(vd_hk_bekannt) == 5);
+              if (r2) { if (eigen) ESP_LOGD("verdacht", "R2 (Kesselstatus 15) ruht (eigener Befehl)");
+                        else id(vd_regel)->execute("R2", 2, (int) id(vd_ab_r2).state, id(vd_r2).state); }
+              if (r4) { if (eigen) ESP_LOGD("verdacht", "R4 (Kesselstatus 10) ruht (eigener Befehl)");
+                        else id(vd_regel)->execute("R4", 1, (int) id(vd_ab_r4).state, id(vd_r4).state); }
+      # R3/R5: Statusbits des WEM (0x274D) - m = x[3]<<8 | x[2] (Rohbytes 00 00 00 10 = m 0x1000)
+      #   R3 nur Standby-Bit 0x1000 (Heizung ein <-> Standby)
+      #   R5 alle uebrigen Bits ohne 0x1000, WW-Ladung 0x0010, Heizbetrieb 0x0040
       - can_id: 0x1C1
         then:
           - lambda: |-
               if (x.size() < 4) return;
               uint16_t m = (x[3] << 8) | x[2];
-              int kern = m & ~0x0050;
-              int vorher = id(vd_bits_vorher);
-              if (kern == vorher) return;
-              id(vd_bits_vorher) = kern;
-              if (vorher < 0 || !id(vd_r3).state) return;
-              if (id(eigener_befehl_ms) != 0 && millis() - id(eigener_befehl_ms) < 120000) return;
-              id(vd_regel)->execute("R3", 1, (int) id(vd_ab_r3).state);
+              int stby = (m & 0x1000) ? 1 : 0;
+              int rest = m & ~0x1050;
+              int sv = id(vd_stby_vorher), rv = id(vd_rest_vorher);
+              bool s_neu = stby != sv, r_neu = rest != rv;
+              if (!s_neu && !r_neu) return;
+              id(vd_stby_vorher) = stby;
+              id(vd_rest_vorher) = rest;
+              bool eigen = id(eigener_befehl_ms) != 0 && millis() - id(eigener_befehl_ms) < 120000;
+              bool r3 = false;
+              if (s_neu && sv >= 0) {
+                if (eigen) ESP_LOGD("verdacht", "R3 Standby-Bit %d -> %d ruht (eigener Befehl)", sv, stby);
+                else { id(vd_regel)->execute("R3", 1, (int) id(vd_ab_r3).state, id(vd_r3).state); r3 = id(vd_r3).state; }
+              }
+              if (r_neu && rv >= 0) {
+                if (eigen) ESP_LOGD("verdacht", "R5 Statusbits 0x%04X -> 0x%04X ruht (eigener Befehl)", rv, rest);
+                else if (r3) ESP_LOGD("verdacht", "R5 Statusbits 0x%04X -> 0x%04X: R3 liest schon", rv, rest);
+                else id(vd_regel)->execute("R5", 1, (int) id(vd_ab_r5).state, id(vd_r5).state);
+              }
       # R4: Aussentemperatur merken
       - can_id: 0x201
         then:
@@ -440,7 +527,8 @@ canbus:
               float vl = (int16_t(x[1] << 8 | x[0])) * 0.1f;
               id(vd_vl) = vl;
               int hk = id(vd_hk_bekannt);
-              if (!id(vd_r4).state || vl <= 0 || isnan(id(vd_at)) || hk < 6 || hk > 8) { id(vd_r4_key) = -1; return; }
+              // Bedingung wird auch bei ausgeschaltetem R4 geprueft (Schattenmodus)
+              if (vl <= 0 || isnan(id(vd_at)) || hk < 6 || hk > 8) { id(vd_r4_key) = -1; return; }
               float rt = (vl - 1.4f + 1.1f * id(vd_at)) / 2.1f;
               int stufe = rt < 19.0f ? 18 : (rt < 20.5f ? 20 : 21);
               int soll = hk == 6 ? 21 : (hk == 7 ? 20 : 18);
@@ -448,9 +536,11 @@ canbus:
               int key = hk * 100 + stufe;
               if (key == id(vd_r4_key)) return;          // gleicher Widerspruch wie zuletzt: nicht erneut
               id(vd_r4_key) = key;
-              if (id(eigener_befehl_ms) != 0 && millis() - id(eigener_befehl_ms) < 120000) return;
+              if (id(eigener_befehl_ms) != 0 && millis() - id(eigener_befehl_ms) < 120000) {
+                ESP_LOGD("verdacht", "R4 (Raumsoll-Stufe %d statt %d) ruht (eigener Befehl)", stufe, soll); return;
+              }
               ESP_LOGI("verdacht", "R4: Vorlaufsoll %.1f, AT %.1f -> Raumsoll ~%.1f (Stufe %d), erwartet %d", vl, id(vd_at), rt, stufe, soll);
-              id(vd_regel)->execute("R4", 1, (int) id(vd_ab_r4).state);
+              id(vd_regel)->execute("R4", 1, (int) id(vd_ab_r4).state, id(vd_r4).state);
       # WEM-Neustart (Bootup-Heartbeat 0x701 = 00): R1 ruht danach 5 min
       - can_id: 0x701
         then:
@@ -472,6 +562,8 @@ canbus:
                   else if (alt == neu) t += ", geaendert: nein";
                   else t += std::string(" (vorher ") + (alt <= 8 ? hn[alt] : "?") + "), geaendert: JA";
                   id(vd_eintrag)->execute(t);
+                  id(vd_ereignis)->execute(id(vd_offen_hk_regel), std::string("ergebnis"), std::string("hk"),
+                                           std::string(neu <= 8 ? hn[neu] : "?"), alt < 0 ? -1 : (alt == neu ? 0 : 1));
                 }
                 id(vd_hk_bekannt) = neu;
               } else if (idx == 0x2A20) {
@@ -485,6 +577,8 @@ canbus:
                   else if (alt == neu) t += ", geaendert: nein";
                   else t += std::string(" (vorher ") + nm(alt) + "), geaendert: JA";
                   id(vd_eintrag)->execute(t);
+                  id(vd_ereignis)->execute(id(vd_offen_ww_regel), std::string("ergebnis"), std::string("ww"),
+                                           std::string(nm(neu)), alt < 0 ? -1 : (alt == neu ? 0 : 1));
                 }
                 id(vd_ww_bekannt) = neu;
               }
@@ -493,16 +587,23 @@ canbus:
         can_id_mask: 0x000
         then:
           - lambda: |-
-              if (!id(vd_eigene_haupt).state || vd::eigene().empty()) return;
+              // Auch ausgeschaltete eigene Regeln (einzeln aus oder Hauptschalter aus) werden
+              // ausgewertet - sie melden dann nur "waere" (Schattenmodus), gelesen wird nicht.
+              if (vd::eigene().empty()) return;
               if (can_id == 0x601 || can_id == 0x581) return;      // eigene Anfragen und ihre Antworten nie
+              bool haupt = id(vd_eigene_haupt).state;
               for (auto &r : vd::eigene()) {
-                if (!r.an || r.can_id != can_id) continue;
+                if (r.can_id != can_id) continue;
                 bool ok = true;
                 for (int i = 0; i < 8 && ok; i++) {
                   uint8_t b = i < (int) x.size() ? x[i] : 0;
                   if ((b & r.maske[i]) != r.muster[i]) ok = false;
                 }
-                if (ok) id(vd_regel)->execute(r.name, (int) r.lesen, (int) r.abstand_min);
+                if (!ok) continue;
+                if (id(eigener_befehl_ms) != 0 && millis() - id(eigener_befehl_ms) < 120000) {
+                  ESP_LOGD("verdacht", "%s ruht (eigener Befehl)", r.name.c_str()); continue;
+                }
+                id(vd_regel)->execute(r.name, (int) r.lesen, (int) r.abstand_min, haupt && r.an);
               }
 
 switch:
@@ -531,7 +632,7 @@ switch:
     on_turn_on: { script.execute: vd_stand }
     on_turn_off: { script.execute: vd_stand }
   - platform: template
-    name: "R3 Statusbits geaendert"
+    name: "R3 Heizung ein oder Standby"
     id: vd_r3
     optimistic: true
     restore_mode: ${regel_r3_start}
@@ -544,6 +645,14 @@ switch:
     optimistic: true
     restore_mode: ${regel_r4_start}
     web_server: { sorting_group_id: g_verdacht, sorting_weight: 40 }
+    on_turn_on: { script.execute: vd_stand }
+    on_turn_off: { script.execute: vd_stand }
+  - platform: template
+    name: "R5 uebrige Statusbits geaendert"
+    id: vd_r5
+    optimistic: true
+    restore_mode: ${regel_r5_start}
+    web_server: { sorting_group_id: g_verdacht, sorting_weight: 50 }
     on_turn_on: { script.execute: vd_stand }
     on_turn_off: { script.execute: vd_stand }
 
@@ -597,6 +706,18 @@ number:
     web_server: { sorting_group_id: g_verdacht, sorting_weight: 41 }
     on_value: { script.execute: vd_stand }
   - platform: template
+    name: "R5 Mindestabstand (min)"
+    id: vd_ab_r5
+    optimistic: true
+    restore_value: true
+    initial_value: ${regel_abstand_r5}
+    min_value: 1
+    max_value: 1440
+    step: 1
+    mode: box
+    web_server: { sorting_group_id: g_verdacht, sorting_weight: 51 }
+    on_value: { script.execute: vd_stand }
+  - platform: template
     name: "Regeln: hoechstens pro Stunde (alle zusammen)"
     id: vd_max_h
     optimistic: true
@@ -635,14 +756,14 @@ text_sensor:
     web_server: { sorting_group_id: g_verdacht, sorting_weight: 3 }
     lambda: |-
       std::string s;
-      switch_::Switch *sw[] = {id(vd_r1), id(vd_r2), id(vd_r3), id(vd_r4)};
-      number::Number *ab[] = {id(vd_ab_r1), id(vd_ab_r2), id(vd_ab_r3), id(vd_ab_r4)};
-      for (int i = 0; i < 4; i++) {
+      switch_::Switch *sw[] = {id(vd_r1), id(vd_r2), id(vd_r3), id(vd_r4), id(vd_r5)};
+      number::Number *ab[] = {id(vd_ab_r1), id(vd_ab_r2), id(vd_ab_r3), id(vd_ab_r4), id(vd_ab_r5)};
+      for (int i = 0; i < 5; i++) {
         if (!sw[i]->state) continue;
         if (!s.empty()) s += ", ";
         s += "R" + to_string(i + 1) + " " + to_string((int) ab[i]->state) + " min";
       }
-      if (s.empty()) s = "R1-R4 aus (gelesen wird nur bei Start, Schaltbefehl und 'Status lesen')";
+      if (s.empty()) s = "R1-R5 aus (gelesen wird nur bei Start, Schaltbefehl und 'Status lesen')";
       int n = 0; for (auto &r : vd::eigene()) if (r.an) n++;
       if (!id(vd_eigene_haupt).state) s += " | eigene Regeln aus";
       else s += " | eigene Regeln an: " + to_string(n) + " aktiv";
@@ -664,7 +785,7 @@ text_sensor:
     name: "R1 was und warum"
     update_interval: 86400s
     web_server: { sorting_group_id: g_verdacht, sorting_weight: 12 }
-    lambda: 'return {"Bei jedem Warmwasser-Wechsel fragt der WEM den Kessel 2101/0A, 2102/0D, 2102/01 ab. Kommt diese Folge ohne eigenen Schaltbefehl (letzte 2 min), wurde am Display, im Portal oder in der Weishaupt-App umgeschaltet -> Warmwasser-Betriebsart lesen. Die Richtung zeigt die Folge nicht."};'
+    lambda: 'return {"Bei jedem Warmwasser-Wechsel fragt der WEM den Kessel 2101/0A, 2102/0D, 2102/01 ab (Kommandobyte A4). Kommt diese Folge ohne eigenen Schaltbefehl (letzte 2 min), wurde am Display, im Portal oder in der Weishaupt-App umgeschaltet -> Warmwasser-Betriebsart lesen. Die Richtung zeigt die Folge nicht."};'
   - platform: template
     name: "R1 zuletzt ausgeloest"
     id: vd_r1_zul
@@ -682,7 +803,7 @@ text_sensor:
     name: "R3 was und warum"
     update_interval: 86400s
     web_server: { sorting_group_id: g_verdacht, sorting_weight: 32 }
-    lambda: 'return {"Der WEM sendet seine Statusbits (PDO 0x1C1) nur bei Aenderung. Aendern sie sich (ohne WW-Ladung/Heizbetrieb-Bit), z.B. Standby <-> Zeitprogramm, -> Heizkreis-Betriebsart lesen. Zwischen den Zeitprogrammen aendert sich nichts."};'
+    lambda: 'return {"Der WEM sendet seine Statusbits (PDO 0x1C1) nur bei Aenderung. Aendert sich das Standby-Bit 0x1000 (Heizung ein <-> Standby), -> Heizkreis-Betriebsart lesen. Wechsel zwischen Zeitprogrammen, Komfort/Normal/Absenk sieht R3 nicht."};'
   - platform: template
     name: "R3 zuletzt ausgeloest"
     id: vd_r3_zul
@@ -696,6 +817,15 @@ text_sensor:
     name: "R4 zuletzt ausgeloest"
     id: vd_r4_zul
     web_server: { sorting_group_id: g_verdacht, sorting_weight: 43 }
+  - platform: template
+    name: "R5 was und warum"
+    update_interval: 86400s
+    web_server: { sorting_group_id: g_verdacht, sorting_weight: 52 }
+    lambda: 'return {"Aendern sich die uebrigen Statusbits des WEM (PDO 0x1C1, ohne Standby, WW-Ladung, Heizbetrieb) - meist wenn Heizbedarf entsteht oder endet -, -> Heizkreis-Betriebsart lesen. Loest oft aus, bestaetigt meist nur den bekannten Stand; deshalb Vorgabe aus."};'
+  - platform: template
+    name: "R5 zuletzt ausgeloest"
+    id: vd_r5_zul
+    web_server: { sorting_group_id: g_verdacht, sorting_weight: 53 }
   - platform: template
     name: "Eigene Regeln"
     id: vd_eigene_ts
