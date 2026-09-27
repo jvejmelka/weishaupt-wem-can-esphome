@@ -145,13 +145,13 @@ Auf dem Startbildschirm installierbar („+ App“).
 | Bereich | Inhalt | Quelle |
 |---|---|---|
 | Kopfzeile | grüner Punkt = letzter Abruf erfolgreich, rot = Problem; oranger Strich = Countdown bis zum nächsten Abruf (30 s) | App |
-| Heizkreis | acht Knöpfe (Standby, ZP 1–3, Sommer, Komfort, Normal, Absenk), **der markierte ist die Vorgabe**; rechts vom Titel „ist: …“ = Heizkreis-Status aus den Statusbits | Board: `heizkreis_betriebsart_code`, `heizkreis_status`; Knopf → `cmd/heizkreis` |
+| Heizkreis | acht Knöpfe (Standby, ZP 1–3, Sommer, Komfort, Normal, Absenk). **Voll markiert = Ist**: die Betriebsart, die das Board am Bus gelesen hat (0x2933/2). Rechts vom Titel **„Zustand: …“** = Laufzustand aus den Statusbits (z. B. „Standby“, „Zeitprogramm, heizt“, „· WW lädt“) | Board: `heizkreis_betriebsart_code`, `heizkreis_status`; Knopf → `cmd/heizkreis` |
 | ↻ (beim Heizkreis) | lässt das Board Heizkreis- und Warmwasser-Betriebsart einmal vom Bus lesen (die liest es sonst nur bei Anlass); die Statuszeile zeigt „angefordert …“ und dann „Status HH:MM:SS gelesen“ | Knopf → `cmd/status`; Board: `status_gelesen` |
-| Warmwasser | Temperatur (Fühler **unten** im Speicher), Knöpfe EIN/AUS – **markiert = Vorgabe**; rechts „ist: lädt gerade / keine Ladung“ | Board: `warmwasser`, `warmwasser_betriebsart`, `warmwasser_aktiv`; Knopf → `cmd/warmwasser` |
-| gestrichelter Knopf | **vorgemerkt** = Wunsch liegt in der Warteschlange des Boards (oder wurde eben gedrückt); **abweichend** = der Heizkreis-Status passt nicht zur Vorgabe. Geprüft wird nur Standby gegen Zeitprogramm – die Statusbits kennen keine Programmnummer und kein Sommer/Komfort/Normal/Absenk | Board: `warteschlange`, `heizkreis_status` |
+| Warmwasser | Temperatur (Fühler **unten** im Speicher), Knöpfe EIN/AUS – **voll markiert = Ist** am Bus (0x2A20/2); rechts **„Zustand: lädt gerade / keine Ladung“** | Board: `warmwasser`, `warmwasser_betriebsart`, `warmwasser_aktiv`; Knopf → `cmd/warmwasser` |
+| Vorgabe (gestrichelt) | **Vorgabe = eigener Schaltbefehl** über das Board, solange er nicht am Bus bestätigt ist: **vorgemerkt** (Warteschlange bzw. eben gedrückt), **gesendet** (Befehl an den WEM raus, Bus-Kontrolle steht aus). Nach „OK“ verschwindet die Strichelung, der Knopf wird voll markiert. **Rot gestrichelt** mit Kurztext: nicht übernommen / abgelehnt (CM=05) / keine Rückmeldung. **„von außen geändert“** am Ist-Knopf: der Bus steht auf etwas anderem als der letzte eigene erfolgreiche Befehl, ohne dass ein Befehl läuft (Display, Portal) | Board: `warteschlange`, `ergebnis_letzter_schaltbefehl`, `schaltprotokoll` |
 | Kessel | Kesseltemperatur groß, daneben Vorlauf / Soll und Rücklauf; rechts **Brenner: aus / Vorlüften / an / Nachlüften** (an in Orange, nur mit Flamme) | Board: `kesseltemperatur`, `vorlauf_vpt`, `vorlauf_soll`, `ruecklauf`, `brennerphase` |
 | Außen | Außentemperatur groß | Board: `aussentemperatur` |
-| Statuszeile | „Aktualisiert HH:MM:SS · Status gelesen HH:MM“, dahinter die Warteschlange des Boards; nach einem Knopfdruck 3 min lang der Fortschritt: vorgemerkt → gesendet → **OK** (grün) oder **NICHT übernommen / abgelehnt (CM=05) / keine Rückmeldung** (rot); Fehler wie „CAN-Board nicht erreichbar“ | Board: `ergebnis_letzter_schaltbefehl`, `warteschlange`, `status_gelesen` |
+| Statuszeile | „Aktualisiert HH:MM:SS · Status gelesen HH:MM“, dahinter „nächster Befehl ab …“, solange die Sperrminute läuft (höchstens zwei Zeilen); nach einem Knopfdruck 3 min lang der Fortschritt: vorgemerkt → gesendet → **OK** (grün) oder **NICHT übernommen / abgelehnt (CM=05) / keine Rückmeldung** (rot); Fehler wie „CAN-Board nicht erreichbar“ | Board: `ergebnis_letzter_schaltbefehl`, `warteschlange`, `status_gelesen` |
 | Fußzeile | Build-Stand als Datum | App |
 
 Messwerte, die länger als 10 min nicht aktualisiert wurden, zeigt die App als „--“ statt eines
@@ -162,7 +162,7 @@ Anlass (nach dem Start, bei geänderten Statusbits, nach Schaltbefehlen).
 
 - **Liest nur MQTT** vom Board (`<gerät>/sensor/+/state`, retained) und spricht **nie mit dem WEM**.
 - **Schalten** geht als MQTT-Befehl an das Board; das Board setzt ihn mit Sperrminute,
-  Warteschlange und Kontrolle am Bus um. Die App zeigt „vorgemerkt“ und danach das Ergebnis.
+  Warteschlange und Kontrolle am Bus um. Die App zeigt „vorgemerkt“, „gesendet“ und danach das Ergebnis der Bus-Kontrolle.
 - Anmeldung mit Benutzer und Passwort aus der `.env` – **ohne beide startet die App nicht**.
   Die Sitzungen liegen in `data/` und überleben einen Neubau.
 - Braucht Board-Firmware **ab v20** (Brennerphase). Ältere Firmware: der Brenner erscheint nur als An/Aus.

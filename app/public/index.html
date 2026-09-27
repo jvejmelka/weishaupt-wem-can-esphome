@@ -48,22 +48,23 @@
     </header>
     <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
 
-    <!-- Heizkreis: Vorgabe = markierter Knopf, "ist" = Heizkreis-Status aus den Statusbits -->
+    <!-- Heizkreis: voll markiert = Ist (am Bus bestaetigt), gestrichelt = eigene Vorgabe noch nicht bestaetigt,
+         rechts "Zustand" = Laufzustand aus den Statusbits -->
     <section class="block" id="hkBlock">
       <div class="block-head">
         <span class="block-title">HEIZKREIS</span>
-        <span class="block-ist">ist: <span id="hkIst">—</span></span>
+        <span class="block-zustand">Zustand: <span id="hkZustand">—</span></span>
         <button id="statusLesenBtn" class="lesen-btn" type="button" title="Heizkreis- und Warmwasser-Betriebsart einmal vom Bus lesen" aria-label="Status lesen">↻</button>
       </div>
       <div id="modes" class="modes-grid"></div>
     </section>
 
-    <!-- Warmwasser: Vorgabe = markierter Knopf, "ist" = laedt gerade / keine Ladung -->
+    <!-- Warmwasser: voll markiert = Ist (am Bus), gestrichelt = eigene Vorgabe, "Zustand" = laedt gerade / keine Ladung -->
     <section class="block" id="wwBlock">
       <div class="block-head">
         <span class="block-title">WARMWASSER</span>
         <span class="block-wert"><span id="wwIst">--,-</span> °C <span class="block-zusatz">unten</span></span>
-        <span class="block-ist">ist: <span id="wwAktiv">—</span></span>
+        <span class="block-zustand">Zustand: <span id="wwAktiv">—</span></span>
       </div>
       <div class="ww-grid">
         <button id="wwEin" class="mode-btn" type="button">EIN</button>
@@ -71,11 +72,13 @@
       </div>
     </section>
 
+    <!-- Kessel und Aussen: im Hochformat untereinander, auf quadratischen/breiten Bildschirmen nebeneinander -->
+    <div class="reihe">
     <!-- Kessel mit Brenner -->
     <section class="block" id="kesselBlock">
       <div class="block-head">
         <span class="block-title">KESSEL</span>
-        <span class="block-ist brenner" id="brennerZeile">Brenner: <span id="brennerText">—</span></span>
+        <span class="block-zustand brenner" id="brennerZeile">Brenner: <span id="brennerText">—</span></span>
       </div>
       <div class="kessel-zeile">
         <span class="kessel-wert"><span id="kesselTemp">--,-</span><span class="einheit">°C</span></span>
@@ -88,6 +91,7 @@
       <div class="block-head"><span class="block-title">AUSSEN</span></div>
       <div class="aussen-wert"><span id="outsideTemp">--,-</span><span class="einheit">°C</span></div>
     </section>
+    </div>
 
     <div id="message" class="message"></div>
     <div class="app-version" id="appVersion">v__VERSION__</div>

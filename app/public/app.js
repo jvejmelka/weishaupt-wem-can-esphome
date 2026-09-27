@@ -106,73 +106,142 @@ function schoen(t) {
 
 const zahlText = v => v != null ? v.toFixed(1).replace('.', ',') : '--,-';
 
-// Lokal vorgemerkte Wuensche (bis das Board sie in seiner Warteschlange meldet oder
-// der Stand erreicht ist) - hoechstens 3 min, danach zaehlt nur noch das Board.
-const lokalWunsch = { hk: null, ww: null };
+// ── Vorgabe / Ist / Zustand ───────────────────────────────────
+// IST     = am Bus bestaetigte Betriebsart (Board liest 0x2933/2 bzw. 0x2A20/2) -> voll markierter Knopf.
+// VORGABE = eigener Schaltbefehl ueber das Board (Warteschlange, laufender Befehl, Schaltprotokoll).
+//           Solange nicht am Bus bestaetigt: gestrichelt "vorgemerkt" (Warteschlange) bzw. "gesendet"
+//           (Befehl raus, Bus-Kontrolle steht aus); meldet das Board "NICHT uebernommen", "abgelehnt
+//           (CM=05)" oder "keine Rueckmeldung": rot gestrichelt mit Kurztext.
+//           Steht der Bus nach einem erfolgreichen eigenen Befehl auf etwas anderem (kein Befehl
+//           unterwegs), wurde am Display/Portal umgestellt -> Hinweis "von außen geändert".
+// ZUSTAND = Laufzustand (Statusbits des WEM bzw. Warmwasser-Ladung), rechts neben dem Titel.
 const HK_NAMEN = ['?', 'Standby', 'Zeitprogramm 1', 'Zeitprogramm 2', 'Zeitprogramm 3', 'Sommer', 'Komfort', 'Normal', 'Absenk'];
+const MERK_KEY = 'wem_befehle';
+// merk.hk / merk.ww = offener Befehl { wert, proto, t } (proto = neuester Protokolleintrag dieses Ziels beim Merken)
+// merk.erg.hk / .ww = { eintrag, wert } - Zielwert zu Protokolleintraegen ohne "-> Wert" (CM=05, keine Rueckmeldung)
+let merk = {};
+try { merk = JSON.parse(localStorage.getItem(MERK_KEY)) || {}; } catch { merk = {}; }
+function merkSichern() { try { localStorage.setItem(MERK_KEY, JSON.stringify(merk)); } catch { /* egal */ } }
+
+const hkCode = name => { const i = HK_NAMEN.indexOf((name || '').trim()); return i > 0 ? i : null; };
+const wertAus = (ziel, s) => ziel === 'hk' ? hkCode(s) : (/^(Ein|Aus)$/.test((s || '').trim()) ? s.trim() : null);
 
 // Warteschlange des Boards: "1. Heizkreis -> Sommer (App) | 2. Warmwasser -> Ein (App) - ..."
 function wunschAusWarteschlange(w) {
   const r = { hk: null, ww: null };
   if (!w || w === 'leer') return r;
   const m1 = w.match(/Heizkreis -> ([A-Za-zäöü]+(?: \d)?)/);
-  if (m1) { const i = HK_NAMEN.indexOf(m1[1]); if (i > 0) r.hk = i; }
+  if (m1) r.hk = hkCode(m1[1]);
   const m2 = w.match(/Warmwasser -> (Ein|Aus)/);
   if (m2) r.ww = m2[1];
   return r;
 }
+// Schaltstatus "vorgemerkt (MQTT): Heizkreis Sommer" / "vorgemerkt: Warmwasser Ein ..." -> Zielwert
+function wunschAusSchaltstatus(s) {
+  const r = { hk: null, ww: null };
+  const m = (s || '').match(/^vorgemerkt[^:]*: (Heizkreis|Warmwasser) ([A-Za-zäöü]+(?: \d)?)/);
+  if (m) { if (m[1] === 'Heizkreis') r.hk = hkCode(m[2]); else r.ww = wertAus('ww', m[2]); }
+  return r;
+}
+// Schaltprotokoll (neueste zuerst): "27.09. 01:22 Warmwasser -> Aus (App): ok | 27.09. 01:21 Heizkreis (App): abgelehnt, CM=05"
+function protokollEintraege(p) {
+  if (!p) return [];
+  return p.split(' | ').map(e => {
+    const m = e.match(/(Heizkreis|Warmwasser)(?: -> (.+?))? \(([^)]*)\): (.*)$/);
+    if (!m) return null;
+    const ziel = m[1] === 'Heizkreis' ? 'hk' : 'ww';
+    const erg = m[4];
+    return {
+      text: e, ziel, wert: m[2] ? wertAus(ziel, m[2]) : null, ok: /^ok/.test(erg),
+      kurz: /NICHT/.test(erg) ? 'nicht übernommen' : /CM=05/.test(erg) ? 'abgelehnt (CM=05)'
+          : /Rueckmeldung/.test(erg) ? 'keine Rückmeldung' : /nicht erreichbar/.test(erg) ? 'WEM nicht erreichbar' : erg
+    };
+  }).filter(Boolean);
+}
+const LAEUFT = /sende an WEM|pruefe (am Bus|trotzdem)|WEM hat bestaetigt|WEM-Antwort unklar/;
+let letzteProtokolle = [];
+const protokollKopf = (prot, ziel) => { const e = prot.find(x => x.ziel === ziel); return e ? e.text : ''; };
+
+// Eigenen Befehl merken (Knopfdruck, Warteschlange oder "vorgemerkt"-Meldung des Boards)
+function merkeBefehl(ziel, wert, prot) {
+  if (wert == null) return;
+  const m = merk[ziel];
+  if (m && m.wert === wert) return;
+  merk[ziel] = { wert, proto: protokollKopf(prot, ziel), t: Date.now() };
+  merkSichern();
+}
+
+// Stand der Vorgabe fuer ein Ziel: null | {art: vorgemerkt|gesendet|fehler|aussen, wert, kurz}
+function vorgabeStand(ziel, ist, data, warte, prot) {
+  const kopf = prot.find(e => e.ziel === ziel) || null;
+  const kopfText = kopf ? kopf.text : '';
+  const laeuft = LAEUFT.test(data.schaltStatus || '');
+  let m = merk[ziel];
+  if (m) {
+    const fertig = kopfText !== m.proto;                          // neuer Protokolleintrag = abgeschlossen
+    const erreicht = !prot.length && !laeuft && ist === m.wert;   // ohne Protokoll: Bus steht auf dem Ziel
+    if (fertig || erreicht || Date.now() - m.t > 300000) {
+      if (fertig) { merk.erg = merk.erg || {}; merk.erg[ziel] = { eintrag: kopfText, wert: m.wert }; }
+      m = merk[ziel] = null; merkSichern();
+    }
+  }
+  if (warte[ziel] != null) return { art: 'vorgemerkt', wert: warte[ziel] };
+  if (m) return { art: laeuft ? 'gesendet' : 'vorgemerkt', wert: m.wert };
+  if (!kopf) return null;
+  const e = merk.erg && merk.erg[ziel];
+  const wert = kopf.wert != null ? kopf.wert : (e && e.eintrag === kopfText ? e.wert : null);
+  if (wert == null) return null;
+  if (!kopf.ok && ist !== wert) return { art: 'fehler', wert, kurz: kopf.kurz };
+  if (kopf.ok && ist != null && ist !== wert) return { art: 'aussen', wert };
+  return null;
+}
 
 // Hinweis-Zeile im Knopf setzen/entfernen
-function markiere(btn, art) {
-  btn.classList.remove('vorgemerkt', 'abweichend', 'mit-hinweis');
+function markiere(btn, klasse, text) {
+  btn.classList.remove('vorgemerkt', 'gesendet', 'fehler', 'aussen', 'mit-hinweis');
   const alt = btn.querySelector('.hinweis'); if (alt) alt.remove();
-  if (!art) return;
-  btn.classList.add(art, 'mit-hinweis');
+  if (!klasse) return;
+  btn.classList.add(klasse, 'mit-hinweis');
   const h = document.createElement('span');
-  h.className = 'hinweis'; h.textContent = art;
+  h.className = 'hinweis'; h.textContent = text;
   btn.appendChild(h);
 }
-
-// Weicht der Heizkreis-Status (Statusbits) von der Vorgabe ab? Die Statusbits kennen nur
-// "Standby" oder "Zeitprogramm" (ohne Nummer) - verglichen wird deshalb nur Standby gegen
-// Zeitprogramm 1-3. Sommer/Komfort/Normal/Absenk lassen sich daraus nicht pruefen.
-function hkAbweichend(code, ist) {
-  if (code == null || !ist) return false;
-  const istStandby = /^Standby/.test(ist);
-  const istZp = /^Zeitprogramm/.test(ist);
-  if (code === 1) return istZp;
-  if (code >= 2 && code <= 4) return istStandby;
-  return false;
-}
-
-function zeigeWuensche(data) {
-  const board = wunschAusWarteschlange(data.warteschlange);
-  const jetzt = Date.now();
-  // lokale Wuensche verfallen nach 3 min oder sobald der Stand erreicht ist
-  if (lokalWunsch.hk && (jetzt - lokalWunsch.hk.t > 180000 || data.modeCode === lokalWunsch.hk.v)) lokalWunsch.hk = null;
-  if (lokalWunsch.ww && (jetzt - lokalWunsch.ww.t > 180000 || data.warmwasser === lokalWunsch.ww.v)) lokalWunsch.ww = null;
-  const hkWunsch = board.hk ?? (lokalWunsch.hk && lokalWunsch.hk.v);
-  const wwWunsch = board.ww ?? (lokalWunsch.ww && lokalWunsch.ww.v);
-
-  document.querySelectorAll('#modes .mode-btn').forEach(btn => {
-    const v = Number(btn.dataset.mode);
-    btn.classList.toggle('active', v === data.modeCode);
-    let art = null;
-    if (hkWunsch && hkWunsch !== data.modeCode && v === hkWunsch) art = 'vorgemerkt';
-    else if (!hkWunsch && v === data.modeCode && hkAbweichend(data.modeCode, data.modeAktuellLabel)) art = 'abweichend';
-    markiere(btn, art);
-  });
-  for (const [id, wert] of [['wwEin', 'Ein'], ['wwAus', 'Aus']]) {
-    const btn = document.getElementById(id);
-    btn.classList.toggle('active', data.warmwasser === wert);
-    markiere(btn, (wwWunsch && wwWunsch !== data.warmwasser && wwWunsch === wert) ? 'vorgemerkt' : null);
+function zeigeKnoepfe(knoepfe, ist, stand) {
+  for (const [btn, wert] of knoepfe) {
+    btn.classList.toggle('active', ist != null && wert === ist);
+    if (stand && stand.art === 'aussen') markiere(btn, wert === ist ? 'aussen' : null, 'von außen geändert');
+    else if (stand && wert === stand.wert) markiere(btn, stand.art, stand.art === 'fehler' ? stand.kurz : stand.art);
+    else markiere(btn, null);
   }
 }
 
-function hkIstText(ist) {
-  if (!ist) return '—';
-  return ist.replace(/\s*\+\s*WW-Ladung/, ' · WW lädt').replace(/\s*\(0x[0-9A-F]+\)/i, '');
+function zeigeWuensche(data) {
+  const prot = protokollEintraege(data.schaltProtokoll);
+  letzteProtokolle = prot;
+  const warte = wunschAusWarteschlange(data.warteschlange);
+  const vorg = wunschAusSchaltstatus(data.schaltStatus);
+  for (const z of ['hk', 'ww']) merkeBefehl(z, warte[z] ?? vorg[z], prot);
+  const hkIst = data.modeCode >= 1 && data.modeCode <= 8 ? data.modeCode : null;
+  const wwIst = /^(Ein|Aus)$/.test(data.warmwasser || '') ? data.warmwasser : null;
+  zeigeKnoepfe([...document.querySelectorAll('#modes .mode-btn')].map(b => [b, Number(b.dataset.mode)]),
+               hkIst, vorgabeStand('hk', hkIst, data, warte, prot));
+  zeigeKnoepfe([[document.getElementById('wwEin'), 'Ein'], [document.getElementById('wwAus'), 'Aus']],
+               wwIst, vorgabeStand('ww', wwIst, data, warte, prot));
 }
+
+// Zustand aus den Statusbits: "Zeitprogramm + WW-Ladung (0x0040)" -> "Zeitprogramm, heizt · WW lädt"
+function hkZustandText(s) {
+  if (!s) return '—';
+  const hex = s.match(/\(0x([0-9A-F]+)\)/i);
+  let t = s.replace(/\s*\(0x[0-9A-F]+\)/i, '').replace(/\s*\+\s*WW-Ladung/, '');
+  if (hex && (parseInt(hex[1], 16) & 0x0040)) t += ', heizt';
+  if (/WW-Ladung/.test(s)) t += ' · WW lädt';
+  return t;
+}
+
+// nach einem Knopfdruck sofort mit dem letzten Stand neu zeichnen
+let letzteDaten = null;
+function refreshKnoepfe() { if (letzteDaten) zeigeWuensche(letzteDaten); }
 
 async function refreshStatus() {
   try {
@@ -191,10 +260,10 @@ async function refreshStatus() {
     setText('vorlaufSoll',   data.vorlaufSollC);
     setText('wwIst',         data.warmwasserC);
 
-    // Ist-Anzeigen rechts neben den Blocktiteln
-    const hkIst = document.getElementById('hkIst');
-    hkIst.textContent = hkIstText(data.modeAktuellLabel);
-    hkIst.parentElement.title = data.modeAktuellLabel || '';
+    // Zustand rechts neben den Blocktiteln (Statusbits bzw. Ladung) - getrennt von Vorgabe/Ist
+    const hkZustand = document.getElementById('hkZustand');
+    hkZustand.textContent = hkZustandText(data.modeAktuellLabel);
+    hkZustand.parentElement.title = data.modeAktuellLabel || '';
     document.getElementById('wwAktiv').textContent =
       data.warmwasserAktiv === 'Ein' ? 'lädt gerade' : data.warmwasserAktiv === 'Aus' ? 'keine Ladung' : '—';
 
@@ -202,6 +271,7 @@ async function refreshStatus() {
     document.getElementById('brennerText').textContent = data.brennerText ? data.brennerText.toLowerCase() : '—';
     document.getElementById('brennerZeile').classList.toggle('an', data.brennerAn === true);
 
+    letzteDaten = data;
     zeigeWuensche(data);
 
     // Rot wenn Gerät hängt (alle Werte null)
@@ -210,7 +280,9 @@ async function refreshStatus() {
     const time = now.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const gm = data.statusGelesen && data.statusGelesen.match(/(\d\d:\d\d)(?::\d\d)?\s+gelesen/);
     const gelesen = gm ? ` · Status gelesen ${gm[1]}` : '';
-    const warte = data.warteschlange && data.warteschlange !== 'leer' ? ` · ${schoen(data.warteschlange)}` : '';
+    // die Warteschlange steht an den Knoepfen - hier nur, ab wann der naechste Befehl geht
+    const ab = (data.warteschlange || '').match(/naechster Befehl ab ([\d:]+)/);
+    const warte = ab ? ` · nächster Befehl ab ${ab[1]}` : '';
     document.getElementById('message').textContent = `Aktualisiert ${time}${gelesen}${warte}`;
     setStatus(allNull ? 'err' : 'ok');
 
@@ -219,7 +291,6 @@ async function refreshStatus() {
       const t = data.schaltStatus;
       const fertig = /OK:|NICHT|abgelehnt|Rueckmeldung|nicht erreichbar/.test(t);
       setStatus(/OK:/.test(t) ? 'ok' : fertig ? 'err' : '');
-      if (fertig) { lokalWunsch.hk = null; lokalWunsch.ww = null; }
       document.getElementById('message').textContent = schoen(t);
     }
     letzterSchaltStatus = data.schaltStatus;
@@ -241,7 +312,7 @@ async function setMode(modeCode, modeLabel) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Fehler');
-    lokalWunsch.hk = { v: modeCode, t: Date.now() };
+    merkeBefehl('hk', modeCode, letzteProtokolle); refreshKnoepfe();
     setStatus('ok');
     document.getElementById('message').textContent = `${modeLabel} vorgemerkt – wird in bis zu einer Minute geschaltet`;
     startBeobachtung();
@@ -262,7 +333,7 @@ async function setWarmwasser(an) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Fehler');
-    lokalWunsch.ww = { v: an ? 'Ein' : 'Aus', t: Date.now() };
+    merkeBefehl('ww', an ? 'Ein' : 'Aus', letzteProtokolle); refreshKnoepfe();
     setStatus('ok');
     document.getElementById('message').textContent = `Warmwasser ${an ? 'Ein' : 'Aus'} vorgemerkt – wird in bis zu einer Minute geschaltet`;
     startBeobachtung();

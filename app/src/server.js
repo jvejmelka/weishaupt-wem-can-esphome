@@ -152,6 +152,7 @@ app.get('/api/status', (req, res) => {
     modeLabel:        text('heizkreis_betriebsart'),
     modeAktuellLabel: text('heizkreis_status'),
     schaltStatus:     text('ergebnis_letzter_schaltbefehl'),
+    schaltProtokoll:  text('schaltprotokoll'),                 // letzte Befehle mit Ergebnis, neueste zuerst (App: Vorgabe)
     warteschlange:    text('warteschlange'),
     statusGelesen:    text('status_gelesen'),                  // "27.09. 14:05:12 gelesen" / "angefordert ..." (ab Firmware v21)
     busAlterS:        letzterFrame,
