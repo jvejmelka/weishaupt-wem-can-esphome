@@ -413,6 +413,29 @@ Firmware mit ESPHome 2026.9.0 und einer Dummy-`secrets.yaml` (aus `secrets.yaml.
 kompiliert – samt Bauteil `weishaupt_can`. Neue Regeln oder Änderungen an bestehenden bitte mit Test – der Fehler aus
 v22–v24 (R1 kannte nur `0x40`, der WEM fragt mit `0xA4`) hätte so nicht passieren können.
 
+### Was die automatische Prüfung macht (GitHub Actions, kurz erklärt)
+
+GitHub prüft jeden Stand dieses Repositorys automatisch auf eigenen Rechnern – niemand muss dafür
+etwas installieren. Das Abzeichen „CI“ ganz oben zeigt das Ergebnis des letzten Laufs:
+**grün** = alles bestanden, **rot** = etwas ist kaputt. Ein Klick darauf öffnet die Liste aller Läufe.
+
+Bei jedem Hochladen (Push) und bei jeder vorgeschlagenen Änderung (Pull Request) laufen vier Prüfungen
+([`.github/workflows/ci.yml`](.github/workflows/ci.yml)):
+
+| Prüfung | was sie sicherstellt |
+|---|---|
+| Tests der Regellogik und des Bauteils | Regeln und Schaltlogik reagieren auf die Beispiel-Telegramme wie erwartet |
+| Registertabelle und erzeugte Dateien | Firmware-Konstanten und Doku-Tabellen passen zu `register.yaml`, keine Leseanfrage geht an den falschen Knoten |
+| Links in den .md-Dateien | alle Verweise in der Dokumentation führen irgendwohin |
+| Firmware kompilieren | die Firmware baut mit ESPHome (mit Platzhalter-Zugangsdaten, echte Geheimnisse braucht es nicht) |
+
+**Für Nachbauer:** Ein grünes Abzeichen heißt, der aktuelle Stand baut und die Regeln bestehen ihre
+Tests. Wer das Repository **forkt** und selbst etwas ändert (etwa für einen anderen Kesseltyp), bekommt
+dieselben Prüfungen im eigenen Fork – gegebenenfalls einmal unter *Actions* freischalten. Die Läufe sind
+für öffentliche Repositorys kostenlos. Die Tests prüfen die Logik mit **ausgedachten** Telegrammen,
+nicht die eigene Anlage: ob Werte und Register an einem anderen Kessel stimmen, zeigt nur der Test am
+echten Bus.
+
 ## Mithelfen
 
 Offene Punkte, die sich nur an anderen Anlagen oder zu anderer Jahreszeit klären lassen:
