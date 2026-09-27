@@ -17,10 +17,12 @@ interval:
     then:
       - lambda: |-
           id(ww_jetzt_lesen) = false;
-          if (id(anlass_ms) == 0 || id(anlass_ms) == id(ww_erledigt)) return;
-          if (millis() - id(anlass_ms) < 8000) return;
+          uint32_t a = id(anlass_ms);
+          if (id(anlass_ww_ms) != 0 && (a == 0 || (int32_t)(id(anlass_ww_ms) - a) > 0)) a = id(anlass_ww_ms);
+          if (a == 0 || a == id(ww_erledigt)) return;
+          if (millis() - a < 8000) return;
           if (millis() - id(letzter_frame) > 30000) return;
-          id(ww_erledigt) = id(anlass_ms); id(ww_jetzt_lesen) = true;
+          id(ww_erledigt) = a; id(ww_jetzt_lesen) = true;
       - if:
           condition:
             lambda: 'return id(ww_jetzt_lesen);'

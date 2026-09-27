@@ -1,0 +1,692 @@
+# Paket VERDACHT (experimentell): Betriebsarten nur dann vom Bus lesen, wenn das Mithoeren
+# einen Verdacht liefert, dass sich etwas geaendert hat. Braucht die Pakete kessel und
+# warmwasser; mit Paket mqtt zusaetzlich einstellbar per Datei (cmd/regeln) und Befehl (cmd/regel).
+#
+# Was die Regeln auf den Bus schicken duerfen: ausschliesslich SDO-LESE-Anfragen (0x40) an
+# Knoten 1 (0x601), ueber dasselbe Anlass-Nachlesen wie "Status lesen":
+#   Heizkreis-Betriebsart 0x2933/2, Warmwasser 0x2A20/2, 0x2A2C/2, 0x2A39/2.
+# Nie etwas an den Kessel (Knoten 2), nie eine WEM-JSON-Anfrage, keine periodische Abfrage.
+# Gesendet wird nur bei lebendem Bus und ausserhalb der Anlaufpause. Jede Regel hat einen
+# Mindestabstand, alle zusammen eine Obergrenze pro Stunde.
+#
+# Die festen Regeln (Logik in der Firmware, nur an/aus und Abstand einstellbar):
+#   R1  WEM fragt den Kessel 2101/0A, 2102/0D, 2102/01 ab (so bei jedem Warmwasser-Wechsel)  -> WW lesen
+#   R2  Kessel geht in den Warmwasserbetrieb, bekannt ist aber "Warmwasser Aus"             -> WW lesen
+#   R3  Statusbits des WEM (PDO 0x1C1) aendern sich                                        -> HK lesen
+#   R4  Heizanforderung passt nicht zur bekannten Heizkreis-Betriebsart                    -> HK lesen
+# R1-R4 ruhen 2 min nach einem eigenen Schaltbefehl (der liest ohnehin selbst nach).
+# Eigene Regeln: generische Trigger "CAN-ID + Maske + Muster", siehe PROTOKOLL.md.
+
+substitutions:
+  # Startwerte, solange noch nichts gespeichert ist (danach gelten Weboberflaeche bzw. Datei)
+  verdacht_start: RESTORE_DEFAULT_OFF       # Hauptschalter
+  verdacht_r1_start: RESTORE_DEFAULT_ON
+  verdacht_r2_start: RESTORE_DEFAULT_ON
+  verdacht_r3_start: RESTORE_DEFAULT_ON
+  verdacht_r4_start: RESTORE_DEFAULT_OFF    # Rueckrechnung nur fuer milde Aussentemperaturen geeicht
+  verdacht_abstand_r1: "10"
+  verdacht_abstand_r2: "10"
+  verdacht_abstand_r3: "5"
+  verdacht_abstand_r4: "30"
+  verdacht_max_h: "6"
+
+esphome:
+  includes:
+    - pakete/verdacht.h
+  on_boot:
+    priority: -100
+    then:
+      - lambda: |-
+          std::string f;
+          if (!vd::aus_speicher(id(vd_speicher).data(), f)) ESP_LOGW("verdacht", "eigene Regeln: %s", f.c_str());
+          ESP_LOGI("verdacht", "%u eigene Regel(n) geladen", (unsigned) vd::eigene().size());
+          id(vd_eigene_ts).publish_state(vd::anzeige());
+          #ifdef USE_MQTT
+          mqtt::global_mqtt_client->subscribe("${geraet}/cmd/regeln", [](const std::string &t, const std::string &p) {
+            id(vd_datei)->execute(p);
+          });
+          mqtt::global_mqtt_client->subscribe("${geraet}/cmd/regel", [](const std::string &t, const std::string &p) {
+            id(vd_befehl)->execute(p);
+          });
+          #endif
+
+# Die Statusbits loesen nicht mehr von selbst aus, sondern als Regel R3
+globals:
+  - id: !extend statusbits_anlass
+    initial_value: 'false'
+  # eigene Regeln in Speicherform (JSON), ueberleben den Neustart
+  - id: vd_speicher
+    type: std::array<char, 2400>
+    restore_value: yes
+  # Pruefsumme der zuletzt uebernommenen Datei: dieselbe (retained) Datei nach Neustart
+  # oder Wiederverbindung wird nicht erneut angewandt - sonst ueberschriebe sie Web-Aenderungen
+  - id: vd_datei_hash
+    type: uint32_t
+    restore_value: yes
+    initial_value: '0'
+  # R3: letzter Stand der Statusbits (ohne WW-Ladung/Heizbetrieb), ueberlebt den Neustart
+  - id: vd_bits_vorher
+    type: int
+    restore_value: yes
+    initial_value: '-1'
+  - id: vd_hk_bekannt          # zuletzt gelesene Betriebsarten (-1 = unbekannt)
+    type: int
+    initial_value: '-1'
+  - id: vd_ww_bekannt
+    type: int
+    initial_value: '-1'
+  - id: vd_zeiten              # Ausloesezeitpunkte der letzten Stunde (Obergrenze)
+    type: std::vector<uint32_t>
+  - id: vd_letzt               # letzte Ausloesung je Regel
+    type: std::map<std::string, uint32_t>
+  - id: vd_protokoll
+    type: std::vector<std::string>
+  - id: vd_offen_hk            # offene Lesung (fuer "geaendert ja/nein")
+    type: bool
+    initial_value: 'false'
+  - id: vd_offen_hk_regel
+    type: std::string
+  - id: vd_offen_hk_alt
+    type: int
+    initial_value: '-1'
+  - id: vd_offen_hk_ms
+    type: uint32_t
+    initial_value: '0'
+  - id: vd_offen_ww
+    type: bool
+    initial_value: 'false'
+  - id: vd_offen_ww_regel
+    type: std::string
+  - id: vd_offen_ww_alt
+    type: int
+    initial_value: '-1'
+  - id: vd_offen_ww_ms
+    type: uint32_t
+    initial_value: '0'
+  - id: vd_r1_a                # R1: Zeitpunkte von 2101/0A und 2102/0D
+    type: uint32_t
+    initial_value: '0'
+  - id: vd_r1_b
+    type: uint32_t
+    initial_value: '0'
+  - id: vd_wem_start           # Bootup-Meldung des WEM (Heartbeat 0x701 = 00)
+    type: uint32_t
+    initial_value: '0'
+  - id: vd_kstatus_vorher      # Kesselstatus (PDO 0x182) fuer Flanken
+    type: int
+    initial_value: '-1'
+  - id: vd_252b_vorher         # letzter vom WEM geschriebener Wert 0x252B
+    type: int
+    initial_value: '-1'
+  - id: vd_vl                  # Vorlaufsoll HZ aus PDO 0x241 und Aussentemperatur (R4)
+    type: float
+    initial_value: 'NAN'
+  - id: vd_at
+    type: float
+    initial_value: 'NAN'
+  - id: vd_r4_key
+    type: int
+    initial_value: '-1'
+  - id: vd_stand_gesendet
+    type: bool
+    initial_value: 'false'
+
+web_server:
+  sorting_groups:
+    - id: g_verdacht
+      name: "Verdachts-Lesen (experimentell)"
+      sorting_weight: 47
+    - id: g_eigene
+      name: "Eigene Regeln (experimentell)"
+      sorting_weight: 48
+
+script:
+  # Gemeinsame Pruefung und Ausloesung. ziel: 1 Heizkreis, 2 Warmwasser, 3 beide.
+  - id: vd_regel
+    mode: queued
+    max_runs: 10
+    parameters:
+      regel: string
+      ziel: int
+      abstand: int
+    then:
+      - lambda: |-
+          uint32_t jetzt = millis();
+          if (!id(vd_haupt).state) return;
+          if (id(bus_seit) == 0 || jetzt - id(letzter_frame) > 30000 || jetzt - id(bus_seit) <= id(pause_ms)) {
+            ESP_LOGD("verdacht", "%s: Bus nicht bereit (Anlaufpause/Bus schweigt) - nicht gelesen", regel.c_str()); return;
+          }
+          auto &l = id(vd_letzt);
+          auto it = l.find(regel);
+          if (it != l.end() && jetzt - it->second < (uint32_t) abstand * 60000UL) {
+            ESP_LOGD("verdacht", "%s: Mindestabstand %d min - nicht gelesen", regel.c_str(), abstand); return;
+          }
+          auto &z = id(vd_zeiten);
+          z.erase(std::remove_if(z.begin(), z.end(), [jetzt](uint32_t t) { return jetzt - t > 3600000UL; }), z.end());
+          if ((int) z.size() >= (int) id(vd_max_h).state) {
+            ESP_LOGW("verdacht", "%s: Obergrenze %d/h erreicht - nicht gelesen", regel.c_str(), (int) id(vd_max_h).state); return;
+          }
+          z.push_back(jetzt);
+          l[regel] = jetzt;
+          std::string zeit = id(uhr).now().is_valid() ? id(uhr).now().strftime("%d.%m. %H:%M:%S") : std::string("seit Start ") + to_string(jetzt / 1000) + " s";
+          if (ziel & 1) {
+            if (id(vd_offen_hk)) id(vd_offen_hk_regel) += "+" + regel;
+            else { id(vd_offen_hk) = true; id(vd_offen_hk_regel) = regel; id(vd_offen_hk_alt) = id(vd_hk_bekannt); id(vd_offen_hk_ms) = jetzt; }
+            id(hk_letzte_lesung) = 0;                 // 2-min-Grenze gilt nicht: die Regel hat ihren eigenen Abstand
+            id(anlass_hk_ms) = (jetzt - 5000) | 1;
+          }
+          if (ziel & 2) {
+            if (id(vd_offen_ww)) id(vd_offen_ww_regel) += "+" + regel;
+            else { id(vd_offen_ww) = true; id(vd_offen_ww_regel) = regel; id(vd_offen_ww_alt) = id(vd_ww_bekannt); id(vd_offen_ww_ms) = jetzt; }
+            id(anlass_ww_ms) = (jetzt - 8000) | 1;
+          }
+          ESP_LOGI("verdacht", "%s ausgeloest -> lese %s", regel.c_str(), ziel == 1 ? "Heizkreis" : (ziel == 2 ? "Warmwasser" : "beide"));
+          if (regel == "R1") id(vd_r1_zul).publish_state(zeit);
+          else if (regel == "R2") id(vd_r2_zul).publish_state(zeit);
+          else if (regel == "R3") id(vd_r3_zul).publish_state(zeit);
+          else if (regel == "R4") id(vd_r4_zul).publish_state(zeit);
+          else if (auto *r = vd::finden(regel)) { r->zuletzt = zeit; r->anzahl++; id(vd_stand)->execute(); }
+
+  # Protokoll: neueste zuerst, 10 Eintraege seit dem letzten Neustart
+  - id: vd_eintrag
+    mode: queued
+    parameters:
+      text: string
+    then:
+      - lambda: |-
+          std::string z = id(uhr).now().is_valid() ? id(uhr).now().strftime("%d.%m. %H:%M ") : std::string("");
+          auto &p = id(vd_protokoll);
+          p.insert(p.begin(), z + text);
+          if (p.size() > 10) p.resize(10);
+          std::string kurz, lang;
+          for (auto &e : p) {
+            if (kurz.size() + e.size() + 3 <= 250) { if (!kurz.empty()) kurz += " | "; kurz += e; }
+            if (!lang.empty()) lang += "\n";
+            lang += e;
+          }
+          id(vd_protokoll_ts).publish_state(kurz);
+          #ifdef USE_MQTT
+          mqtt::global_mqtt_client->publish("${geraet}/verdacht/protokoll", lang, 0, true);
+          #endif
+
+  # aktiven Stand als JSON veroeffentlichen (retained) und Anzeige der eigenen Regeln erneuern
+  - id: vd_stand
+    mode: queued
+    max_runs: 5
+    then:
+      - lambda: |-
+          id(vd_eigene_ts).publish_state(vd::anzeige());
+          #ifdef USE_MQTT
+          if (!mqtt::global_mqtt_client->is_connected()) return;
+          switch_::Switch *sw[] = {id(vd_r1), id(vd_r2), id(vd_r3), id(vd_r4)};
+          number::Number *ab[] = {id(vd_ab_r1), id(vd_ab_r2), id(vd_ab_r3), id(vd_ab_r4)};
+          static const char *rn[] = {"R1", "R2", "R3", "R4"};
+          JsonDocument d;
+          JsonObject o = d.to<JsonObject>();
+          o["firmware"] = "${firmware}";
+          o["verdacht"] = id(vd_haupt).state;
+          for (int i = 0; i < 4; i++) {
+            JsonObject r = o[rn[i]].to<JsonObject>();
+            r["an"] = sw[i]->state;
+            r["abstand_min"] = (int) ab[i]->state;
+          }
+          o["max_pro_stunde"] = (int) id(vd_max_h).state;
+          JsonArray a = o["eigene"].to<JsonArray>();
+          for (auto &r : vd::eigene()) vd::regel_json(a.add<JsonObject>(), r, true);
+          std::string s;
+          serializeJson(d, s);
+          id(vd_stand_gesendet) = mqtt::global_mqtt_client->publish("${geraet}/regeln/stand", s, 0, true);
+          #endif
+
+  # eigene Regeln dauerhaft speichern
+  - id: vd_speichern
+    mode: queued
+    then:
+      - lambda: |-
+          std::string s = vd::speicherform();
+          auto &m = id(vd_speicher);
+          if (s.size() >= m.size()) { ESP_LOGE("verdacht", "eigene Regeln zu gross (%u Byte) - nicht gespeichert", (unsigned) s.size()); return; }
+          m.fill(0);
+          memcpy(m.data(), s.c_str(), s.size());
+
+  # Datei (JSON) uebernehmen - per MQTT cmd/regeln
+  - id: vd_datei
+    mode: queued
+    parameters:
+      txt: string
+    then:
+      - lambda: |-
+          std::string z = id(uhr).now().is_valid() ? id(uhr).now().strftime("%H:%M:%S ") : std::string("");
+          uint32_t h = vd::fnv(txt);
+          if (h == id(vd_datei_hash)) {
+            ESP_LOGI("verdacht", "Regeln-Datei unveraendert (schon uebernommen) - ignoriert");
+            id(vd_stand)->execute();
+            return;
+          }
+          vd::Datei d; std::string f;
+          if (!vd::datei_lesen(txt, d, f)) {
+            id(vd_datei_ts).publish_state(z + "ABGELEHNT: " + f);
+            ESP_LOGW("verdacht", "Regeln-Datei abgelehnt: %s", f.c_str());
+            return;
+          }
+          if (d.hat_eigene) {
+            // Laufzeitwerte (zuletzt, Anzahl) gleichnamiger Regeln behalten
+            for (auto &n : d.eigene) if (auto *alt = vd::finden(n.name)) { n.zuletzt = alt->zuletzt; n.anzahl = alt->anzahl; n.zuletzt_ms = alt->zuletzt_ms; }
+            std::vector<vd::Regel> vorher = vd::eigene();
+            vd::eigene() = d.eigene;
+            if (vd::speicherform().size() >= id(vd_speicher).size()) {
+              vd::eigene() = vorher;
+              id(vd_datei_ts).publish_state(z + "ABGELEHNT: eigene Regeln zu lang (Beschreibungen kuerzen)");
+              return;
+            }
+            id(vd_speichern)->execute();
+          }
+          switch_::Switch *sw[] = {id(vd_r1), id(vd_r2), id(vd_r3), id(vd_r4)};
+          number::Number *ab[] = {id(vd_ab_r1), id(vd_ab_r2), id(vd_ab_r3), id(vd_ab_r4)};
+          for (int i = 0; i < 4; i++) {
+            if (d.an[i] == 1) sw[i]->turn_on(); else if (d.an[i] == 0) sw[i]->turn_off();
+            if (d.abstand[i] > 0) { auto c = ab[i]->make_call(); c.set_value(d.abstand[i]); c.perform(); }
+          }
+          if (d.max_h > 0) { auto c = id(vd_max_h).make_call(); c.set_value(d.max_h); c.perform(); }
+          if (d.verdacht == 1) id(vd_haupt).turn_on(); else if (d.verdacht == 0) id(vd_haupt).turn_off();
+          id(vd_datei_hash) = h;
+          char b[96];
+          snprintf(b, sizeof(b), "uebernommen: Hauptschalter %s, %u eigene Regel(n)", id(vd_haupt).state ? "an" : "aus", (unsigned) vd::eigene().size());
+          id(vd_datei_ts).publish_state(z + b);
+          ESP_LOGI("verdacht", "Regeln-Datei %s", b);
+          id(vd_stand)->execute();
+
+  # Einzelbefehl "NAME an" / "NAME aus" / "NAME loeschen" (NAME = R1..R4, verdacht, eigene Regel)
+  - id: vd_befehl
+    mode: queued
+    parameters:
+      befehl: string
+    then:
+      - lambda: |-
+          std::string z = id(uhr).now().is_valid() ? id(uhr).now().strftime("%H:%M:%S ") : std::string("");
+          std::string b = befehl;
+          while (!b.empty() && isspace((unsigned char) b.back())) b.pop_back();
+          while (!b.empty() && isspace((unsigned char) b.front())) b.erase(0, 1);
+          size_t sp = b.find_last_of(' ');
+          if (sp == std::string::npos) { id(vd_befehl_ts).publish_state(z + "Format: NAME an | NAME aus | NAME loeschen"); return; }
+          std::string name = b.substr(0, sp), cmd = b.substr(sp + 1);
+          while (!name.empty() && name.back() == ' ') name.pop_back();
+          for (auto &c : cmd) c = tolower(c);
+          if (cmd != "an" && cmd != "aus" && cmd != "loeschen" && cmd != "löschen") {
+            id(vd_befehl_ts).publish_state(z + "unbekannt: '" + cmd + "' - erlaubt: an, aus, loeschen"); return;
+          }
+          bool an = cmd == "an";
+          std::string k = name; for (auto &c : k) c = tolower(c);
+          switch_::Switch *sw = nullptr;
+          if (k == "verdacht" || k == "hauptschalter") sw = id(vd_haupt);
+          else if (k == "r1") sw = id(vd_r1); else if (k == "r2") sw = id(vd_r2);
+          else if (k == "r3") sw = id(vd_r3); else if (k == "r4") sw = id(vd_r4);
+          if (sw != nullptr) {
+            if (cmd != "an" && cmd != "aus") { id(vd_befehl_ts).publish_state(z + name + " ist eine feste Regel - nur an/aus"); return; }
+            if (an) sw->turn_on(); else sw->turn_off();
+            id(vd_befehl_ts).publish_state(z + "OK: " + name + (an ? " an" : " aus"));
+            return;
+          }
+          vd::Regel *r = vd::finden(name);
+          if (r == nullptr) { id(vd_befehl_ts).publish_state(z + "keine Regel '" + name + "' (feste: R1-R4, verdacht)"); return; }
+          if (cmd == "an" || cmd == "aus") { r->an = an; id(vd_befehl_ts).publish_state(z + "OK: " + r->name + (an ? " an" : " aus")); }
+          else {
+            std::string n = r->name;
+            auto &v = vd::eigene();
+            v.erase(std::remove_if(v.begin(), v.end(), [&](const vd::Regel &x) { return x.name == n; }), v.end());
+            id(vd_befehl_ts).publish_state(z + "OK: " + n + " geloescht");
+          }
+          id(vd_speichern)->execute();
+          id(vd_stand)->execute();
+
+interval:
+  - interval: 10s
+    then:
+      - lambda: |-
+          uint32_t jetzt = millis();
+          // offene Lesungen ohne Antwort abschliessen
+          if (id(vd_offen_hk) && jetzt - id(vd_offen_hk_ms) > 180000) {
+            id(vd_offen_hk) = false; id(vd_eintrag)->execute(id(vd_offen_hk_regel) + ": Heizkreis - keine Antwort");
+          }
+          if (id(vd_offen_ww) && jetzt - id(vd_offen_ww_ms) > 180000) {
+            id(vd_offen_ww) = false; id(vd_eintrag)->execute(id(vd_offen_ww_regel) + ": Warmwasser - keine Antwort");
+          }
+          #ifdef USE_MQTT
+          if (!mqtt::global_mqtt_client->is_connected()) id(vd_stand_gesendet) = false;
+          else if (!id(vd_stand_gesendet)) id(vd_stand)->execute();
+          #endif
+
+canbus:
+  - id: !extend my_can_bus
+    on_frame:
+      # --- R1/R2/R4: was der WEM an den Kessel schickt (0x602) ---
+      - can_id: 0x602
+        then:
+          - lambda: |-
+              if (x.size() < 5) return;
+              uint32_t j = millis();
+              uint16_t idx = (x[2] << 8) | x[1];
+              uint8_t sub = x[3];
+              bool eigen = id(eigener_befehl_ms) != 0 && j - id(eigener_befehl_ms) < 120000;
+              if (x[0] == 0x40) {
+                if (idx == 0x2101 && sub == 0x0A) id(vd_r1_a) = j | 1;
+                else if (idx == 0x2102 && sub == 0x0D) id(vd_r1_b) = j | 1;
+                else if (idx == 0x2102 && sub == 0x01) {
+                  bool folge = id(vd_r1_a) != 0 && id(vd_r1_b) != 0 && j - id(vd_r1_b) < 10000 && j - id(vd_r1_a) < 15000 &&
+                               (int32_t)(id(vd_r1_b) - id(vd_r1_a)) >= 0;
+                  id(vd_r1_a) = 0; id(vd_r1_b) = 0;
+                  bool wem_neu = id(vd_wem_start) != 0 && j - id(vd_wem_start) < 300000;
+                  if (folge) {
+                    if (!id(vd_r1).state || eigen || wem_neu) ESP_LOGD("verdacht", "R1-Folge erkannt, ruht (%s)", eigen ? "eigener Befehl" : (wem_neu ? "WEM-Neustart" : "aus"));
+                    else id(vd_regel)->execute("R1", 2, (int) id(vd_ab_r1).state);
+                  }
+                }
+              } else if ((x[0] & 0xE0) == 0x20 && idx == 0x252B) {
+                int v = x[4];
+                int vorher = id(vd_252b_vorher);
+                id(vd_252b_vorher) = v;
+                if (v == vorher || eigen) return;
+                if (v == 0x0F && id(vd_r2).state && id(vd_ww_bekannt) == 2) id(vd_regel)->execute("R2", 2, (int) id(vd_ab_r2).state);
+                if (v == 0x0A && id(vd_r4).state && (id(vd_hk_bekannt) == 1 || id(vd_hk_bekannt) == 5)) id(vd_regel)->execute("R4", 1, (int) id(vd_ab_r4).state);
+              }
+      # Kesselstatus: 15 Warmwasserbetrieb (R2), 10 Heizbetrieb (R4)
+      - can_id: 0x182
+        then:
+          - lambda: |-
+              if (x.size() < 1) return;
+              int st = x[0], vorher = id(vd_kstatus_vorher);
+              id(vd_kstatus_vorher) = st;
+              if (vorher < 0 || st == vorher) return;
+              if (id(eigener_befehl_ms) != 0 && millis() - id(eigener_befehl_ms) < 120000) return;
+              if (st == 15 && id(vd_r2).state && id(vd_ww_bekannt) == 2) id(vd_regel)->execute("R2", 2, (int) id(vd_ab_r2).state);
+              if (st == 10 && id(vd_r4).state && (id(vd_hk_bekannt) == 1 || id(vd_hk_bekannt) == 5)) id(vd_regel)->execute("R4", 1, (int) id(vd_ab_r4).state);
+      # R3: Statusbits des WEM (0x274D) - m = x[3]<<8 | x[2], WW-Ladung/Heizbetrieb ausgeblendet
+      - can_id: 0x1C1
+        then:
+          - lambda: |-
+              if (x.size() < 4) return;
+              uint16_t m = (x[3] << 8) | x[2];
+              int kern = m & ~0x0050;
+              int vorher = id(vd_bits_vorher);
+              if (kern == vorher) return;
+              id(vd_bits_vorher) = kern;
+              if (vorher < 0 || !id(vd_r3).state) return;
+              if (id(eigener_befehl_ms) != 0 && millis() - id(eigener_befehl_ms) < 120000) return;
+              id(vd_regel)->execute("R3", 1, (int) id(vd_ab_r3).state);
+      # R4: Aussentemperatur merken
+      - can_id: 0x201
+        then:
+          - lambda: 'if (x.size() >= 3) id(vd_at) = (int16_t(x[2] << 8 | x[1])) * 0.1f;'
+      # R4: Vorlaufsoll HZ (PDO 0x241 Bytes 0-1) gegen die bekannte Raumsoll-Stufe
+      #   Rueckrechnung RT = (VL - 1,4 + 1,1 * AT) / 2,1 (geeicht bei AT 12,9-15,2 C) -> 18 / 20 / 21
+      - can_id: 0x241
+        then:
+          - lambda: |-
+              if (x.size() < 2) return;
+              float vl = (int16_t(x[1] << 8 | x[0])) * 0.1f;
+              id(vd_vl) = vl;
+              int hk = id(vd_hk_bekannt);
+              if (!id(vd_r4).state || vl <= 0 || isnan(id(vd_at)) || hk < 6 || hk > 8) { id(vd_r4_key) = -1; return; }
+              float rt = (vl - 1.4f + 1.1f * id(vd_at)) / 2.1f;
+              int stufe = rt < 19.0f ? 18 : (rt < 20.5f ? 20 : 21);
+              int soll = hk == 6 ? 21 : (hk == 7 ? 20 : 18);
+              if (stufe == soll) { id(vd_r4_key) = -1; return; }
+              int key = hk * 100 + stufe;
+              if (key == id(vd_r4_key)) return;          // gleicher Widerspruch wie zuletzt: nicht erneut
+              id(vd_r4_key) = key;
+              if (id(eigener_befehl_ms) != 0 && millis() - id(eigener_befehl_ms) < 120000) return;
+              ESP_LOGI("verdacht", "R4: Vorlaufsoll %.1f, AT %.1f -> Raumsoll ~%.1f (Stufe %d), erwartet %d", vl, id(vd_at), rt, stufe, soll);
+              id(vd_regel)->execute("R4", 1, (int) id(vd_ab_r4).state);
+      # WEM-Neustart (Bootup-Heartbeat 0x701 = 00): R1 ruht danach 5 min
+      - can_id: 0x701
+        then:
+          - lambda: 'if (x.size() >= 1 && x[0] == 0x00) id(vd_wem_start) = millis() | 1;'
+      # Antworten auf Lesungen (Knoten 1): bekannte Betriebsarten, Protokoll "geaendert ja/nein"
+      - can_id: 0x581
+        then:
+          - lambda: |-
+              if (x.size() < 5 || (x[0] & 0xF0) != 0x40 || x[3] != 2) return;
+              uint16_t idx = (x[2] << 8) | x[1];
+              static const char *hn[] = {"?", "Standby", "Zeitprogramm 1", "Zeitprogramm 2", "Zeitprogramm 3", "Sommer", "Komfort", "Normal", "Absenk"};
+              if (idx == 0x2933) {
+                int neu = x[4];
+                if (id(vd_offen_hk)) {
+                  id(vd_offen_hk) = false;
+                  int alt = id(vd_offen_hk_alt);
+                  std::string t = id(vd_offen_hk_regel) + ": Heizkreis " + (neu <= 8 ? hn[neu] : "?");
+                  if (alt < 0) t += " (vorher unbekannt), geaendert: ?";
+                  else if (alt == neu) t += ", geaendert: nein";
+                  else t += std::string(" (vorher ") + (alt <= 8 ? hn[alt] : "?") + "), geaendert: JA";
+                  id(vd_eintrag)->execute(t);
+                }
+                id(vd_hk_bekannt) = neu;
+              } else if (idx == 0x2A20) {
+                int neu = x[4];
+                auto nm = [](int b) { return b == 1 ? "Ein" : (b == 2 ? "Aus" : "?"); };
+                if (id(vd_offen_ww)) {
+                  id(vd_offen_ww) = false;
+                  int alt = id(vd_offen_ww_alt);
+                  std::string t = id(vd_offen_ww_regel) + ": Warmwasser " + nm(neu);
+                  if (alt < 0) t += " (vorher unbekannt), geaendert: ?";
+                  else if (alt == neu) t += ", geaendert: nein";
+                  else t += std::string(" (vorher ") + nm(alt) + "), geaendert: JA";
+                  id(vd_eintrag)->execute(t);
+                }
+                id(vd_ww_bekannt) = neu;
+              }
+      # Eigene Regeln: CAN-ID gleich und (Daten UND Maske) == Muster
+      - can_id: 0x000
+        can_id_mask: 0x000
+        then:
+          - lambda: |-
+              if (!id(vd_haupt).state || vd::eigene().empty()) return;
+              if (can_id == 0x601 || can_id == 0x581) return;      // eigene Anfragen und ihre Antworten nie
+              for (auto &r : vd::eigene()) {
+                if (!r.an || r.can_id != can_id) continue;
+                bool ok = true;
+                for (int i = 0; i < 8 && ok; i++) {
+                  uint8_t b = i < (int) x.size() ? x[i] : 0;
+                  if ((b & r.maske[i]) != r.muster[i]) ok = false;
+                }
+                if (ok) id(vd_regel)->execute(r.name, (int) r.lesen, (int) r.abstand_min);
+              }
+
+switch:
+  - platform: template
+    name: "Verdachts-Lesen (Hauptschalter)"
+    id: vd_haupt
+    optimistic: true
+    restore_mode: ${verdacht_start}
+    web_server: { sorting_group_id: g_verdacht, sorting_weight: 1 }
+    on_turn_on: { script.execute: vd_stand }
+    on_turn_off: { script.execute: vd_stand }
+  - platform: template
+    name: "R1 Warmwasser am Display oder Portal umgeschaltet"
+    id: vd_r1
+    optimistic: true
+    restore_mode: ${verdacht_r1_start}
+    web_server: { sorting_group_id: g_verdacht, sorting_weight: 10 }
+    on_turn_on: { script.execute: vd_stand }
+    on_turn_off: { script.execute: vd_stand }
+  - platform: template
+    name: "R2 Warmwasserbetrieb trotz Aus"
+    id: vd_r2
+    optimistic: true
+    restore_mode: ${verdacht_r2_start}
+    web_server: { sorting_group_id: g_verdacht, sorting_weight: 20 }
+    on_turn_on: { script.execute: vd_stand }
+    on_turn_off: { script.execute: vd_stand }
+  - platform: template
+    name: "R3 Statusbits geaendert"
+    id: vd_r3
+    optimistic: true
+    restore_mode: ${verdacht_r3_start}
+    web_server: { sorting_group_id: g_verdacht, sorting_weight: 30 }
+    on_turn_on: { script.execute: vd_stand }
+    on_turn_off: { script.execute: vd_stand }
+  - platform: template
+    name: "R4 Heizanforderung passt nicht"
+    id: vd_r4
+    optimistic: true
+    restore_mode: ${verdacht_r4_start}
+    web_server: { sorting_group_id: g_verdacht, sorting_weight: 40 }
+    on_turn_on: { script.execute: vd_stand }
+    on_turn_off: { script.execute: vd_stand }
+
+number:
+  - platform: template
+    name: "R1 Mindestabstand (min)"
+    id: vd_ab_r1
+    optimistic: true
+    restore_value: true
+    initial_value: ${verdacht_abstand_r1}
+    min_value: 1
+    max_value: 1440
+    step: 1
+    mode: box
+    web_server: { sorting_group_id: g_verdacht, sorting_weight: 11 }
+    on_value: { script.execute: vd_stand }
+  - platform: template
+    name: "R2 Mindestabstand (min)"
+    id: vd_ab_r2
+    optimistic: true
+    restore_value: true
+    initial_value: ${verdacht_abstand_r2}
+    min_value: 1
+    max_value: 1440
+    step: 1
+    mode: box
+    web_server: { sorting_group_id: g_verdacht, sorting_weight: 21 }
+    on_value: { script.execute: vd_stand }
+  - platform: template
+    name: "R3 Mindestabstand (min)"
+    id: vd_ab_r3
+    optimistic: true
+    restore_value: true
+    initial_value: ${verdacht_abstand_r3}
+    min_value: 1
+    max_value: 1440
+    step: 1
+    mode: box
+    web_server: { sorting_group_id: g_verdacht, sorting_weight: 31 }
+    on_value: { script.execute: vd_stand }
+  - platform: template
+    name: "R4 Mindestabstand (min)"
+    id: vd_ab_r4
+    optimistic: true
+    restore_value: true
+    initial_value: ${verdacht_abstand_r4}
+    min_value: 1
+    max_value: 1440
+    step: 1
+    mode: box
+    web_server: { sorting_group_id: g_verdacht, sorting_weight: 41 }
+    on_value: { script.execute: vd_stand }
+  - platform: template
+    name: "Verdachts-Lesen: hoechstens pro Stunde"
+    id: vd_max_h
+    optimistic: true
+    restore_value: true
+    initial_value: ${verdacht_max_h}
+    min_value: 1
+    max_value: 60
+    step: 1
+    mode: box
+    web_server: { sorting_group_id: g_verdacht, sorting_weight: 2 }
+    on_value: { script.execute: vd_stand }
+
+text:
+  - platform: template
+    name: "Regel-Befehl (NAME an|aus|loeschen)"
+    id: vd_befehl_eingabe
+    optimistic: true
+    mode: text
+    max_length: 40
+    web_server: { sorting_group_id: g_eigene, sorting_weight: 2 }
+
+button:
+  - platform: template
+    name: "Regel-Befehl ausfuehren"
+    web_server: { sorting_group_id: g_eigene, sorting_weight: 3 }
+    on_press:
+      - script.execute:
+          id: vd_befehl
+          befehl: !lambda 'return id(vd_befehl_eingabe).state;'
+
+text_sensor:
+  - platform: template
+    name: "Regeln aktiv"
+    id: vd_aktiv_ts
+    update_interval: 30s
+    web_server: { sorting_group_id: g_verdacht, sorting_weight: 3 }
+    lambda: |-
+      if (!id(vd_haupt).state) return {"aus (Hauptschalter) - es wird nur bei Start, Schaltbefehl und 'Status lesen' gelesen"};
+      std::string s;
+      switch_::Switch *sw[] = {id(vd_r1), id(vd_r2), id(vd_r3), id(vd_r4)};
+      number::Number *ab[] = {id(vd_ab_r1), id(vd_ab_r2), id(vd_ab_r3), id(vd_ab_r4)};
+      for (int i = 0; i < 4; i++) {
+        if (!sw[i]->state) continue;
+        if (!s.empty()) s += ", ";
+        s += "R" + to_string(i + 1) + " " + to_string((int) ab[i]->state) + " min";
+      }
+      int n = 0; for (auto &r : vd::eigene()) if (r.an) n++;
+      if (n) s += (s.empty() ? "" : ", ") + to_string(n) + " eigene";
+      if (s.empty()) s = "keine Regel an";
+      uint32_t jetzt = millis(); int h = 0;
+      for (auto t : id(vd_zeiten)) if (jetzt - t <= 3600000UL) h++;
+      s += " | max " + to_string((int) id(vd_max_h).state) + "/h, letzte Stunde " + to_string(h);
+      if (id(bus_seit) == 0 || jetzt - id(letzter_frame) > 30000) s += " | Bus schweigt";
+      else if (jetzt - id(bus_seit) <= id(pause_ms)) s += " | Anlaufpause";
+      return {s};
+  - platform: template
+    name: "Verdachts-Lesen Protokoll"
+    id: vd_protokoll_ts
+    web_server: { sorting_group_id: g_verdacht, sorting_weight: 4 }
+  - platform: template
+    name: "Regeln-Datei (MQTT cmd-regeln)"
+    id: vd_datei_ts
+    web_server: { sorting_group_id: g_verdacht, sorting_weight: 5 }
+  - platform: template
+    name: "R1 was und warum"
+    update_interval: 86400s
+    web_server: { sorting_group_id: g_verdacht, sorting_weight: 12 }
+    lambda: 'return {"Bei jedem Warmwasser-Wechsel fragt der WEM den Kessel 2101/0A, 2102/0D, 2102/01 ab. Kommt diese Folge ohne eigenen Schaltbefehl (letzte 2 min), wurde am Display, im Portal oder in der Weishaupt-App umgeschaltet -> Warmwasser-Betriebsart lesen. Die Richtung zeigt die Folge nicht."};'
+  - platform: template
+    name: "R1 zuletzt ausgeloest"
+    id: vd_r1_zul
+    web_server: { sorting_group_id: g_verdacht, sorting_weight: 13 }
+  - platform: template
+    name: "R2 was und warum"
+    update_interval: 86400s
+    web_server: { sorting_group_id: g_verdacht, sorting_weight: 22 }
+    lambda: 'return {"Der Kessel geht in den Warmwasserbetrieb (Status 15 bzw. WEM schreibt 0x252B = 0F), bekannt ist aber Warmwasser Aus. Dann wurde Warmwasser vermutlich eingeschaltet -> Warmwasser-Betriebsart lesen."};'
+  - platform: template
+    name: "R2 zuletzt ausgeloest"
+    id: vd_r2_zul
+    web_server: { sorting_group_id: g_verdacht, sorting_weight: 23 }
+  - platform: template
+    name: "R3 was und warum"
+    update_interval: 86400s
+    web_server: { sorting_group_id: g_verdacht, sorting_weight: 32 }
+    lambda: 'return {"Der WEM sendet seine Statusbits (PDO 0x1C1) nur bei Aenderung. Aendern sie sich (ohne WW-Ladung/Heizbetrieb-Bit), z.B. Standby <-> Zeitprogramm, -> Heizkreis-Betriebsart lesen. Zwischen den Zeitprogrammen aendert sich nichts."};'
+  - platform: template
+    name: "R3 zuletzt ausgeloest"
+    id: vd_r3_zul
+    web_server: { sorting_group_id: g_verdacht, sorting_weight: 33 }
+  - platform: template
+    name: "R4 was und warum"
+    update_interval: 86400s
+    web_server: { sorting_group_id: g_verdacht, sorting_weight: 42 }
+    lambda: 'return {"Heizanforderung (0x252B = 0A bzw. Kessel im Heizbetrieb) obwohl Standby/Sommer bekannt ist, oder die aus Vorlaufsoll und Aussentemperatur zurueckgerechnete Raumsoll-Stufe (18/20/21) passt nicht zu Komfort/Normal/Absenk -> Heizkreis-Betriebsart lesen. Rueckrechnung nur bei milder Aussentemperatur geeicht, deshalb Vorgabe aus."};'
+  - platform: template
+    name: "R4 zuletzt ausgeloest"
+    id: vd_r4_zul
+    web_server: { sorting_group_id: g_verdacht, sorting_weight: 43 }
+  - platform: template
+    name: "Eigene Regeln"
+    id: vd_eigene_ts
+    web_server: { sorting_group_id: g_eigene, sorting_weight: 1 }
+  - platform: template
+    name: "Regel-Befehl Antwort"
+    id: vd_befehl_ts
+    web_server: { sorting_group_id: g_eigene, sorting_weight: 4 }

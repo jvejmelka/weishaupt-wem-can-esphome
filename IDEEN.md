@@ -15,6 +15,7 @@ am selben Speicher, PV mit Hauskraftwerk.
 | [Weishaupt-Raumgerät per Funk (CAN über WLAN)](#4-weishaupt-raumgerät-per-funk-can-über-wlan) | hoch | hoch | technisch denkbar, experimentell |
 | [Einzelraumregelung mit Heizkörperventilen](#5-einzelraumregelung-mit-funk-heizkörperventilen) | mittel bis hoch | gering | eigenständig, ergänzt die Heizung |
 | [Anlage prüfen: ist alles richtig eingestellt?](#6-anlage-prüfen-ist-alles-richtig-eingestellt) | gering | keins | lohnt sich zuerst |
+| [Eigene Lese-Regeln in Home Assistant oder Node-RED](#7-eigene-lese-regeln-in-home-assistant-oder-node-red) | gering | gering | geht heute schon |
 
 Zuerst aber, womit das alles steht und fällt: den Messdaten.
 
@@ -155,3 +156,17 @@ Anlage überprüfen.
 | Wie teuer ist Warmwasser? | Wärmemengen vom Kessel gegen Strom der Wärmepumpe |
 
 Viele dieser Fragen lassen sich schon heute beantworten, ohne irgendetwas zu schalten.
+
+## 7. Eigene Lese-Regeln in Home Assistant oder Node-RED
+
+Das Board kennt feste Verdachts-Regeln (R1–R4) und einfache eigene Regeln der Form „CAN-ID +
+Maske + Muster“ ([PROTOKOLL.md, Abschnitt 6a](PROTOKOLL.md#6a-verdachts-lesen-experimentell)).
+Was dafür zu verwickelt ist – mehrere Bedingungen, Uhrzeiten, Anwesenheit, Werte anderer Geräte –
+lässt sich außerhalb bauen: eine Automation in Home Assistant oder ein Flow in Node-RED beobachtet
+die MQTT-Werte des Boards (oder `<gerät>/canraw`, wenn der Rohmitschnitt an ist) und schickt bei
+Verdacht **`<gerät>/cmd/status`**. Das Board liest dann Heizkreis- und Warmwasser-Betriebsart
+einmal vom Bus (höchstens alle 10 s angenommen, nur Leseanfragen).
+
+Beispiele: nach dem Heimkommen einmal lesen; wenn die Vorlauftemperatur des Heizkreises steigt,
+obwohl Standby gemeldet ist; einmal morgens. Wichtig ist nur, dass die Automation selbst drosselt –
+`cmd/status` ist für Einzelwünsche gebaut, nicht für ein Abfrageraster.

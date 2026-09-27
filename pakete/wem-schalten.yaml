@@ -144,7 +144,7 @@ script:
           if (ziel == 1) snprintf(b, sizeof(b), "0302002533020001%02X", wert);   // MI02 HZK0 Betriebsart
           else           snprintf(b, sizeof(b), "0303002520020001%02X", wert);   // MI03 WW0 Betriebsart
           id(schalt_ziel) = ziel; id(schalt_wert) = wert; id(schalt_quelle) = q; id(schalt_vg) = b;
-          id(letzter_befehl) = millis() | 1;
+          id(letzter_befehl) = millis() | 1; id(eigener_befehl_ms) = id(letzter_befehl);
           id(senden) = true;
       - if:
           condition:
@@ -303,7 +303,7 @@ button:
           char b[40];
           snprintf(b, sizeof(b), "03%02X%02X%04X%02X%04X%s", mi, mx, ox, os, (unsigned) (v.size() / 2), v.c_str());
           id(schalt_vg) = b; id(schalt_ziel) = 3; id(schalt_quelle) = "Web";
-          id(letzter_befehl) = millis() | 1; id(senden) = true;
+          id(letzter_befehl) = millis() | 1; id(eigener_befehl_ms) = id(letzter_befehl); id(senden) = true;
           id(schreib_antwort).publish_state(std::string("sende VG ") + b + " ...");
       - if:
           condition:

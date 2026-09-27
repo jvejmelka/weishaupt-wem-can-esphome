@@ -1,0 +1,22 @@
+{
+  "_kommentar": "Einstellungen fuer das Verdachts-Lesen. Senden: mosquitto_pub -r -f regeln.json -t <geraet>/cmd/regeln",
+  "version": 1,
+  "verdacht": true,
+  "R1": {"an": true,  "abstand_min": 10},
+  "R2": {"an": true,  "abstand_min": 10},
+  "R3": {"an": true,  "abstand_min": 5},
+  "R4": {"an": false, "abstand_min": 30},
+  "max_pro_stunde": 6,
+  "eigene": [
+    {
+      "name": "Portal-Seitenaufruf",
+      "an": false,
+      "can_id": "0x602",
+      "maske":  "FF FF FF 00 00 00 00 00",
+      "muster": "40 3E 22 00 00 00 00 00",
+      "lesen": "beide",
+      "abstand_min": 30,
+      "beschreibung": "WEM fragt den Kessel 0x223E ab - kam einmal beim Oeffnen einer Portalseite; Zusammenhang unbelegt"
+    }
+  ]
+}

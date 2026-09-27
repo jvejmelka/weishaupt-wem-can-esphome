@@ -68,6 +68,22 @@ globals:
   - id: anlass_ms
     type: uint32_t
     initial_value: '0'
+  # Anlass nur fuer den Heizkreis bzw. nur fuer das Warmwasser (Paket verdacht)
+  - id: anlass_hk_ms
+    type: uint32_t
+    initial_value: '0'
+  - id: anlass_ww_ms
+    type: uint32_t
+    initial_value: '0'
+  # millis() des letzten eigenen Schaltbefehls ueber den WEM (Paket wem-schalten setzt ihn)
+  - id: eigener_befehl_ms
+    type: uint32_t
+    initial_value: '0'
+  # geaenderte Statusbits (0x1C1) loesen das Nachlesen aus - das Paket verdacht setzt das auf
+  # false und macht daraus die schaltbare Regel R3
+  - id: statusbits_anlass
+    type: bool
+    initial_value: 'true'
   # Anlaufpause: 1 min nach Board-Start (der Bus lief ohnehin), ${anlaufpause_min} min wenn der
   # Bus waehrend des Betriebs weg war und wiederkommt (Heizung war stromlos, WEM faehrt hoch)
   - id: pause_ms
@@ -189,10 +205,12 @@ interval:
           if (!bus_ok) return;
           if (!id(start_gelesen)) { id(start_gelesen) = true; id(anlass_ms) = (jetzt - 5000) | 1; }
           id(hk_jetzt_lesen) = false;
-          if (id(anlass_ms) == 0 || id(anlass_ms) == id(hk_erledigt)) return;
-          if (jetzt - id(anlass_ms) < 5000) return;
+          uint32_t a = id(anlass_ms);
+          if (id(anlass_hk_ms) != 0 && (a == 0 || (int32_t)(id(anlass_hk_ms) - a) > 0)) a = id(anlass_hk_ms);
+          if (a == 0 || a == id(hk_erledigt)) return;
+          if (jetzt - a < 5000) return;
           if (id(hk_letzte_lesung) != 0 && jetzt - id(hk_letzte_lesung) < 120000) return;
-          id(hk_erledigt) = id(anlass_ms); id(hk_letzte_lesung) = jetzt | 1; id(hk_jetzt_lesen) = true;
+          id(hk_erledigt) = a; id(hk_letzte_lesung) = jetzt | 1; id(hk_jetzt_lesen) = true;
       - if:
           condition:
             lambda: 'return id(hk_jetzt_lesen);'
@@ -320,7 +338,7 @@ canbus:
           - lambda: |-
               uint16_t m = (x[3] << 8) | x[2];
               int kern = m & ~0x0050;
-              if (id(statusbits_vorher) >= 0 && kern != id(statusbits_vorher)) id(anlass_ms) = millis() | 1;
+              if (id(statusbits_anlass) && id(statusbits_vorher) >= 0 && kern != id(statusbits_vorher)) id(anlass_ms) = millis() | 1;
               id(statusbits_vorher) = kern;
               std::string s = (m & 0x1000) ? "Standby" : "Zeitprogramm";
               if (m & 0x0010) s += " + WW-Ladung";

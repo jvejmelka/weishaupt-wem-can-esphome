@@ -14,6 +14,7 @@ Quellen stammt oder nur plausibel ist, steht das dabei.
 - [4. Was auf Anforderung gelesen wird](#4-was-auf-anforderung-gelesen-wird)
 - [5. Schreiben über den WEM (JSON)](#5-schreiben-über-den-wem-json)
 - [6. Weboberfläche: lesen und schreiben](#6-weboberfläche-lesen-und-schreiben)
+- [6a. Verdachts-Lesen (experimentell)](#6a-verdachts-lesen-experimentell)
 - [7. Neue Objekte finden: Scan und Differenz](#7-neue-objekte-finden-scan-und-differenz)
 - [8. Wann sich der WEM aufhängt](#8-wann-sich-der-wem-aufhängt)
 - [9. Beispiel: Heizkreis auf „Zeitprogramm 1“](#9-beispiel-heizkreis-auf-zeitprogramm-1)
@@ -371,6 +372,146 @@ zehn Plätze aus [Abschnitt 8](#8-wann-sich-der-wem-aufhängt).
 | **CAN-Rohmitschnitt nach MQTT** | jeder empfangene Frame als `ID:DATEN` nach `<gerät>/canraw` (Paket `mqtt`); während eines Scans immer an |
 | **Heizung: IP-Adresse** | Adresse des WEM für die JSON-Befehle |
 | **Waechter: Neustart nach Minuten ohne Bus (0 = aus)** | startet das Board neu, wenn so lange kein Frame kam (Bus-off-Falle) |
+
+## 6a. Verdachts-Lesen (experimentell)
+
+Die Betriebsarten liegen im WEM, nicht im Kessel. Ob jemand am Display, im Portal oder in der
+Weishaupt-App umgeschaltet hat, sieht man am Bus nur indirekt. Paket `verdacht.yaml` wertet diese
+indirekten Zeichen aus und liest **nur dann** nach, wenn eine Änderung zu vermuten ist – statt die
+Betriebsarten periodisch abzufragen.
+
+**Grenzen, fest in der Firmware:**
+
+- Gelesen wird nur über das vorhandene Anlass-Nachlesen: Heizkreis-Betriebsart `0x2933`/2 bzw.
+  Warmwasser `0x2A20`, `0x2A2C`, `0x2A39` (je /2) – **ausschließlich SDO-Leseanfragen (`0x40`)
+  an Knoten 1 (`0x601`)**. Nie etwas an den Kessel, nie eine WEM-JSON-Anfrage.
+- Nur bei lebendem Bus und außerhalb der Anlaufpause (nach Board-Start 1 min, nach Busausfall 10 min).
+- **Hauptschalter, Vorgabe AUS.** Jede Regel einzeln schaltbar, mit eigenem Mindestabstand.
+  Alle Regeln zusammen höchstens *N* Auslösungen pro Stunde (Vorgabe 6).
+- R1–R4 ruhen 2 min nach einem eigenen Schaltbefehl – der liest ohnehin selbst nach.
+- **Mit dem Hauptschalter AUS wird nur noch** nach dem Start, nach eigenen Schaltbefehlen und auf
+  „Status lesen“ gelesen. Der frühere automatische Anlass „Statusbits geändert“ ist seit v22 die
+  schaltbare Regel R3.
+
+### Die festen Regeln
+
+| Regel | Auslöser (am Bus) | Warum | liest | Vorgabe |
+|---|---|---|---|---|
+| **R1** Warmwasser umgeschaltet | der WEM fragt den Kessel (`0x602`, Upload `0x40`) nacheinander `2101/0A`, `2102/0D`, `2102/01` ab, innerhalb weniger Sekunden | Diese volle Folge kam in allen Mitschnitten bei **jedem** Warmwasser-Wechsel (7 von 7, Display und JSON, nie bei Heizkreis-Wechseln). Die Kurzform `2101/0A` + `273F/01` kommt auch bei Ladebeginn und zählt nicht. Die Richtung verrät die Folge nicht – deshalb nachlesen. Ruht 5 min nach einem WEM-Neustart (Bootup `0x701` = `00`) | Warmwasser | an, 10 min |
+| **R2** Warmwasserbetrieb trotz Aus | Kesselstatus springt auf 15 (PDO `0x182` Byte 0) oder der WEM schreibt `0x252B` = `0F` (`0x602`, Download) – und bekannt ist „Warmwasser Aus“ | Der Kessel lädt Warmwasser, obwohl es aus sein sollte: vermutlich wurde es eingeschaltet. Nur die Flanke zählt, nicht jeder Frame | Warmwasser | an, 10 min |
+| **R3** Statusbits geändert | PDO `0x1C1` (Objekt `0x274D`) ändert sich, ohne die Bits WW-Ladung (`0x0010`) und Heizbetrieb (`0x0040`). `m = x[3]<<8 \| x[2]`. Der letzte Stand wird dauerhaft gespeichert, damit auch eine Änderung während eines Board-Neustarts auffällt | Der WEM schickt `0x1C1` nur bei Änderung. Standby ↔ Zeitprogramm ist daran sicher erkennbar (9 von 9); zwischen den Zeitprogrammen ändert sich nichts | Heizkreis | an, 5 min |
+| **R4** Heizanforderung passt nicht | (a) Heizanforderung (`0x252B` = `0A` oder Kesselstatus 10) bei bekanntem Standby/Sommer, oder (b) die aus Vorlaufsoll HZ (PDO `0x241` Bytes 0–1) und Außentemperatur (PDO `0x201`) zurückgerechnete Raumsoll-Stufe passt nicht zu Komfort 21 / Normal 20 / Absenk 18. `RT ≈ (VL − 1,4 + 1,1·AT) / 2,1`, gerundet auf 18/20/21, nur bei VL > 0 | Heizbetriebsarten haben kein eigenes Signal am Bus; die Heizanforderung verrät sie teilweise. Die Rückrechnung ist nur bei AT 12,9–15,2 °C geeicht, Zeitprogramme werden nicht geprüft, derselbe Widerspruch löst nicht zweimal aus | Heizkreis | **aus**, 30 min |
+
+Nicht verwendet, obwohl erwogen: die Bits `0x0004`/`0x0400` in `0x1C1` als „Heizanforderung“ –
+ihre Bedeutung ist nicht eindeutig belegt.
+
+### Anzeige in der Weboberfläche
+
+Gruppe **Verdachts-Lesen (experimentell)**: Hauptschalter, Obergrenze pro Stunde, **Regeln aktiv**
+(welche Regeln mit welchem Abstand, Auslösungen der letzten Stunde, Anlaufpause), **Verdachts-Lesen
+Protokoll** (letzte zehn Auslösungen, z. B. `27.09. 09:52 R1: Warmwasser Ein (vorher Aus),
+geaendert: JA`), **Regeln-Datei** (Ergebnis der letzten Datei) und je Regel Schalter, Mindestabstand,
+**„was und warum“** und **„zuletzt ausgelöst“**. Das Protokoll gibt es retained auch unter
+`<gerät>/verdacht/protokoll`. „geändert“ vergleicht den gelesenen Code mit dem vorher bekannten; ist
+der unbekannt, steht dort `?`. Kommt binnen 3 min keine Antwort (etwa weil der Bus in die
+Anlaufpause fiel), steht `keine Antwort` im Protokoll.
+
+### Einstellen per Datei
+
+1. **Startwerte beim Bauen:** in der Hauptdatei unter `substitutions:` (`verdacht_start`,
+   `verdacht_r1_start` … `verdacht_r4_start`, `verdacht_abstand_r1` … `_r4`, `verdacht_max_h`).
+   Sie gelten nur, solange noch nichts gespeichert ist.
+2. **Zur Laufzeit:** eine JSON-Datei an `<gerät>/cmd/regeln`, am besten retained
+   (Vorlage [`regeln.json.example`](regeln.json.example)):
+
+```json
+{
+  "version": 1,
+  "verdacht": true,
+  "R1": {"an": true,  "abstand_min": 10},
+  "R2": {"an": true,  "abstand_min": 10},
+  "R3": {"an": true,  "abstand_min": 5},
+  "R4": {"an": false, "abstand_min": 30},
+  "max_pro_stunde": 6,
+  "eigene": []
+}
+```
+
+```
+mosquitto_pub -h <broker> -u <konto> -P <passwort> -r -f regeln.json -t <gerät>/cmd/regeln
+```
+
+Jedes Feld ist optional; was fehlt, bleibt, wie es ist. `abstand_min` 1–1440, `max_pro_stunde`
+1–60. **Ungültiges JSON, unbekannte Felder und Werte außerhalb der Grenzen lehnt das Board ganz ab**
+(„Regeln-Datei: ABGELEHNT: …“) und ändert nichts. Übernommene Werte landen in denselben Schaltern
+und Feldern wie in der Weboberfläche und werden dauerhaft gespeichert; zuletzt geschrieben gilt.
+Den aktiven Stand meldet das Board retained unter `<gerät>/regeln/stand` (beim Start und bei jeder
+Änderung).
+
+**Wichtig bei retained:** Das Board merkt sich eine Prüfsumme der zuletzt übernommenen Datei. Die
+gleiche Datei nach Neustart oder Wiederverbindung wird deshalb **nicht erneut** angewandt – sonst
+würde sie jede spätere Änderung in der Weboberfläche überschreiben. Soll eine unveränderte Datei
+bewusst erneut gelten, `version` hochzählen.
+
+### Eigene Regeln: hinzufügen, anzeigen, schalten
+
+Eigene Regeln sind einfache Auslöser ohne Programmierung: *kommt ein Frame mit dieser CAN-ID, dessen
+Datenbytes UND Maske gleich Muster UND Maske sind, dann nach dem Mindestabstand lesen*. Sie gelten
+nur mit Hauptschalter an und zählen gegen dieselbe Obergrenze pro Stunde. Höchstens 8 Regeln.
+
+| Feld | Inhalt |
+|---|---|
+| `name` | 1–24 Zeichen `A-Z a-z 0-9 - _ .`, eindeutig, nicht `R1`–`R4`/`verdacht` |
+| `an` | `true`/`false` (Vorgabe `true`) |
+| `can_id` | `"0x602"` oder Zahl. **`0x601` und `0x581` sind gesperrt** – das sind die eigenen Anfragen des Boards und ihre Antworten; eine Regel darauf würde sich selbst auslösen |
+| `muster` | 1–8 Bytes hex, z. B. `"40 3E 22"` |
+| `maske` | 1–8 Bytes hex; fehlt sie, zählen genau die Bytes, die im Muster stehen |
+| `lesen` | `"hk"`, `"ww"` oder `"beide"` (Vorgabe) |
+| `abstand_min` | 1–1440 (Vorgabe 10) |
+| `beschreibung` | warum die Regel existiert, bis 120 Zeichen |
+
+**Hinzufügen oder ändern:** die Liste `eigene` in der Datei. Steht `eigene` in der Datei, ersetzt
+sie die ganze Liste (Zähler und „zuletzt“ gleichnamiger Regeln bleiben erhalten); fehlt der
+Schlüssel, bleiben die eigenen Regeln unverändert. Beispiel (auch in `regeln.json.example`):
+
+```json
+"eigene": [
+  {"name": "Portal-Seitenaufruf", "an": true, "can_id": "0x602",
+   "maske": "FF FF FF 00 00 00 00 00", "muster": "40 3E 22 00 00 00 00 00",
+   "lesen": "beide", "abstand_min": 30,
+   "beschreibung": "WEM fragt den Kessel 0x223E ab - kam einmal beim Oeffnen einer Portalseite"}
+]
+```
+
+Das Board speichert die eigenen Regeln im Flash; **sie überleben einen Neustart auch ohne Broker**.
+Die retained Datei ist dafür nicht nötig, schadet aber nicht (s. Prüfsumme oben).
+
+**Anzeigen:** Gruppe **Eigene Regeln (experimentell)** in der Weboberfläche, z. B.
+`Portal-Seitenaufruf an: 602 [40 3E 22] -> beide, 30 min, zuletzt 27.09. 14:05:11, 3 x` (nur die
+Bytes mit Maske ≠ 00; Anzahl seit dem letzten Neustart). Vollständig mit Maske und Beschreibung
+unter `<gerät>/regeln/stand`.
+
+**Schalten**, drei Wege mit derselben Wirkung:
+
+1. die Datei mit `"an": false` erneut senden,
+2. MQTT `<gerät>/cmd/regel` mit `NAME an`, `NAME aus` oder `NAME loeschen`,
+3. in der Weboberfläche Feld **Regel-Befehl** ausfüllen, dann **Regel-Befehl ausführen**;
+   die Rückmeldung steht in **Regel-Befehl Antwort**.
+
+```
+mosquitto_pub -h <broker> -u <konto> -P <passwort> -t <gerät>/cmd/regel -m 'Portal-Seitenaufruf aus'
+mosquitto_pub -h <broker> -u <konto> -P <passwort> -t <gerät>/cmd/regel -m 'R3 an'
+mosquitto_pub -h <broker> -u <konto> -P <passwort> -t <gerät>/cmd/regel -m 'verdacht aus'
+```
+
+`NAME` darf auch `verdacht` (Hauptschalter) oder `R1`–`R4` sein; diese lassen sich nur an- und
+ausschalten, nicht löschen. Unbekannte Namen oder Befehle werden mit Meldung abgelehnt.
+
+**Broker-Rechte:** Wer `cmd/regeln` oder `cmd/regel` schreiben darf, kann Leseanfragen auslösen –
+nur Lesen an Knoten 1 und gedrosselt, aber Busverkehr. Diese Rechte nur einem Verwaltungskonto
+geben, nicht der Handy-App. Wer eigene Logik braucht, die über „ID + Maske + Muster“ hinausgeht,
+baut sie besser in Home Assistant oder Node-RED und schickt `cmd/status` (siehe
+[IDEEN.md](IDEEN.md#7-eigene-lese-regeln-in-home-assistant-oder-node-red)).
 
 ## 7. Neue Objekte finden: Scan und Differenz
 

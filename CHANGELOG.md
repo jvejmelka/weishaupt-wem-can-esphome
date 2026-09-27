@@ -1,6 +1,14 @@
 # Changelog – ESP-CAN-Brücke Weishaupt (WeAct CAN485, ESPHome)
 
 
+## v22 – 2026-09-27
+- **Verdachts-Lesen (experimentell), neues Paket `verdacht.yaml`:** die Betriebsarten werden gelesen, wenn das Mithören eine Änderung vermuten lässt – ausschließlich SDO-Leseanfragen an Knoten 1, nie JSON, keine periodische Abfrage, nur bei lebendem Bus und außerhalb der Anlaufpause. **Hauptschalter, Vorgabe AUS.**
+- Feste Regeln, einzeln schaltbar mit Mindestabstand: **R1** WEM-Abfragefolge `2101/0A, 2102/0D, 2102/01` (Warmwasser-Wechsel), **R2** Warmwasserbetrieb trotz bekanntem Aus, **R3** Statusbits `0x1C1` geändert (bisheriger Anlass, jetzt schaltbar, Zustand dauerhaft gespeichert), **R4** Heizanforderung passt nicht zur Betriebsart (Vorgabe aus). Obergrenze für alle zusammen pro Stunde (Vorgabe 6). R1–R4 ruhen 2 min nach eigenen Schaltbefehlen.
+- **Eigene Regeln** (bis 8): CAN-ID + Maske + Muster → Heizkreis, Warmwasser oder beide lesen; im Flash gespeichert, schaltbar per Datei, per `cmd/regel` und in der Weboberfläche („Regel-Befehl“). `0x601`/`0x581` sind als Auslöser gesperrt.
+- **Einstellen per Datei:** Startwerte als `substitutions` in der Hauptdatei; zur Laufzeit JSON an `<gerät>/cmd/regeln` (retained), ungültiges wird mit Meldung abgelehnt; aktiver Stand retained unter `<gerät>/regeln/stand`. Vorlage `regeln.json.example`.
+- Weboberfläche: je Regel „was und warum“ und „zuletzt ausgelöst“, Protokoll der letzten zehn Auslösungen (Regel, gelesen, geändert ja/nein), auch retained unter `<gerät>/verdacht/protokoll`.
+- **Geändert:** Mit Hauptschalter AUS löst eine Änderung der Statusbits kein Nachlesen mehr aus (bis v21 geschah das immer). Gelesen wird dann nur beim Start, nach eigenen Schaltbefehlen und auf „Status lesen“. Ohne Paket `verdacht` bleibt das alte Verhalten.
+
 ## v21 – 2026-09-27
 - **Status lesen auf Wunsch:** Knopf „Status lesen“ in der Weboberfläche (Gruppe Betriebsarten) und MQTT-Befehl `<gerät>/cmd/status` (beliebiger Inhalt). Liest einmal die Heizkreis-Betriebsart (Knoten 1 0x2933/2) und – mit Paket warmwasser – Warmwasser-Betriebsart und -Sollwerte (0x2A20/0x2A2C/0x2A39). Nur CAN-Leseanfragen über das vorhandene Anlass-Nachlesen, keine WEM-JSON-Anfrage, keine periodische Abfrage.
 - Die 2-min-Grenze gilt für diese eine Lesung nicht; Wünsche werden höchstens alle 10 s angenommen, gesendet wird nur bei lebendem Bus (in der Anlaufpause erst danach).
