@@ -600,7 +600,7 @@ function inhaltH() { return Math.ceil(appEl.getBoundingClientRect().height); }
 function passeAn() {
   const html = document.documentElement;
   const h = verfuegbarH(), b = verfuegbarB();
-  const oben = Math.min(30, Math.min(b, 460) / 22.5);
+  const oben = Math.min(30, Math.min(b, 520) / 22.5);
   let lo = 11, hi = Math.max(11, oben), n = 0;
   html.style.fontSize = hi + 'px';
   if (inhaltH() > h) {

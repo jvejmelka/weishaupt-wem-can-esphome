@@ -17,14 +17,14 @@
 }
 
 /* ── GROESSE ──
-   Die App ist eine schmale Spalte (hoechstens 460 CSS-px, schwarzer Rand daneben ist gewollt).
+   Die App ist eine schmale Spalte (hoechstens 520 CSS-px, schwarzer Rand daneben ist gewollt).
    Alles ist in rem gebaut; die Grundschrift richtet sich nach Spaltenbreite UND Geraetehoehe:
    - Breite: Spaltenbreite / 22,5  (= 16 px bei 360 px; vier Knoepfe nebeneinander muessen passen)
    - Hoehe:  100dvh / --hoehe (= Hoehe des Inhalts in rem), damit nie gescrollt werden muss
    Der kleinere Wert gewinnt. Das ist nur der Startwert: app.js misst danach den echten Inhalt und
    setzt die Grundschrift so, dass nichts gescrollt werden muss (Fit-to-Screen, s. passeAn()).
    Uebrige Hoehe wird ueber die groessere Schrift genutzt, die Abstaende bleiben klein und fest. */
-:root { --hoehe: 43.5; --spalte: min(100vw, 460px); }
+:root { --hoehe: 43.5; --spalte: min(100vw, 520px); }
 html {
   font-size: clamp(11px, min(calc(var(--spalte) / 22.5), calc(100vh / var(--hoehe))), 24px);
   font-size: clamp(11px, min(calc(var(--spalte) / 22.5), calc(100dvh / var(--hoehe))), 24px);
@@ -100,7 +100,7 @@ html, body {
 
 /* ── LAYOUT ── */
 .app {
-  width: 100%; max-width: 460px; margin: 0 auto;
+  width: 100%; max-width: 520px; margin: 0 auto;
   padding: 0 0 env(safe-area-inset-bottom, 0);
   display: flex; flex-direction: column; gap: .7rem;
 }

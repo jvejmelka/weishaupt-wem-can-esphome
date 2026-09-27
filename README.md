@@ -140,7 +140,7 @@ Die Dokumente im Überblick:
 
 ## Handy-App (optional, Ordner `app/`)
 
-Eine schlanke Web-App (PWA) fürs Handy: eine schmale Spalte (höchstens 460 CSS-px), die die volle Höhe nutzt **ohne Scrollen** – auch auf quadratischen Displays. Die Grundschrift wird dafür nach dem Laden gemessen und angepasst (größte Schrift, bei der alles passt; neu bei Größenänderung oder wenn eine Fortschrittszeile erscheint). Mit `?diag` hinter der Adresse zeigt die Fußzeile Viewport, Pixelverhältnis, gewählte Schrift und Scrollhöhe.
+Eine schlanke Web-App (PWA) fürs Handy: eine schmale Spalte (höchstens 520 CSS-px), die die volle Höhe nutzt **ohne Scrollen** – auch auf quadratischen Displays. Die Grundschrift wird dafür nach dem Laden gemessen und angepasst (größte Schrift, bei der alles passt; neu bei Größenänderung oder wenn eine Fortschrittszeile erscheint). Mit `?diag` hinter der Adresse zeigt die Fußzeile Viewport, Pixelverhältnis, gewählte Schrift und Scrollhöhe.
 Auf dem Startbildschirm installierbar („+ App“).
 
 ### Was sie zeigt
