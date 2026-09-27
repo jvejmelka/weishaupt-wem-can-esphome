@@ -205,11 +205,13 @@ script:
             else { id(vd_offen_hk) = true; id(vd_offen_hk_regel) = regel; id(vd_offen_hk_alt) = id(vd_hk_bekannt); id(vd_offen_hk_ms) = jetzt; }
             id(hk_letzte_lesung) = 0;                 // 2-min-Grenze gilt nicht: die Regel hat ihren eigenen Abstand
             id(anlass_hk_ms) = (jetzt - 5000) | 1;
+            bf::status().anlass("regel " + regel, true, false);
           }
           if (ziel & 2) {
             if (id(vd_offen_ww)) id(vd_offen_ww_regel) += "+" + regel;
             else { id(vd_offen_ww) = true; id(vd_offen_ww_regel) = regel; id(vd_offen_ww_alt) = id(vd_ww_bekannt); id(vd_offen_ww_ms) = jetzt; }
             id(anlass_ww_ms) = (jetzt - 8000) | 1;
+            bf::status().anlass("regel " + regel, false, true);
           }
           ESP_LOGI("verdacht", "%s ausgeloest -> lese %s", regel.c_str(), ziel == 1 ? "Heizkreis" : (ziel == 2 ? "Warmwasser" : "beide"));
           id(vd_ereignis)->execute(regel, std::string("ausgeloest"), std::string(ziel == 1 ? "hk" : (ziel == 2 ? "ww" : "beide")), std::string(""), -1);
@@ -371,36 +373,25 @@ script:
     then:
       - lambda: |-
           std::string z = id(uhr).now().is_valid() ? id(uhr).now().strftime("%H:%M:%S ") : std::string("");
-          std::string b = befehl;
-          while (!b.empty() && isspace((unsigned char) b.back())) b.pop_back();
-          while (!b.empty() && isspace((unsigned char) b.front())) b.erase(0, 1);
-          size_t sp = b.find_last_of(' ');
-          if (sp == std::string::npos) { id(vd_befehl_ts).publish_state(z + "Format: NAME an | NAME aus | NAME loeschen"); return; }
-          std::string name = b.substr(0, sp), cmd = b.substr(sp + 1);
-          while (!name.empty() && name.back() == ' ') name.pop_back();
-          for (auto &c : cmd) c = tolower(c);
-          if (cmd != "an" && cmd != "aus" && cmd != "loeschen" && cmd != "löschen") {
-            id(vd_befehl_ts).publish_state(z + "unbekannt: '" + cmd + "' - erlaubt: an, aus, loeschen"); return;
-          }
-          bool an = cmd == "an";
-          std::string k = name; for (auto &c : k) c = tolower(c);
+          // Zerlegen und Pruefen in verdacht.h (vd::befehl_zerlegen, getestet), hier nur die Folgen
+          vd::RegelBefehl rb = vd::befehl_zerlegen(befehl);
+          if (rb.art == vd::BefehlArt::FEHLER || rb.art == vd::BefehlArt::VERALTET) { id(vd_befehl_ts).publish_state(z + rb.fehler); return; }
+          bool an = rb.aktion == vd::Aktion::AN;
+          std::string name = rb.name;
           switch_::Switch *sw = nullptr;
-          if (k == "verdacht" || k == "hauptschalter") {
-            id(vd_befehl_ts).publish_state(z + "'" + name + "' gibt es seit v23 nicht mehr: R1-R5 einzeln schalten, eigene Regeln mit 'eigene an|aus'"); return;
+          if (rb.art == vd::BefehlArt::HAUPT) sw = id(vd_eigene_haupt);
+          else if (rb.art == vd::BefehlArt::FEST) {
+            switch_::Switch *f[] = {id(vd_r1), id(vd_r2), id(vd_r3), id(vd_r4), id(vd_r5)};
+            sw = f[rb.nr - 1];
           }
-          if (k == "eigene") sw = id(vd_eigene_haupt);
-          else if (k == "r1") sw = id(vd_r1); else if (k == "r2") sw = id(vd_r2);
-          else if (k == "r3") sw = id(vd_r3); else if (k == "r4") sw = id(vd_r4);
-          else if (k == "r5") sw = id(vd_r5);
           if (sw != nullptr) {
-            if (cmd != "an" && cmd != "aus") { id(vd_befehl_ts).publish_state(z + name + " ist eine feste Regel - nur an/aus"); return; }
             if (an) sw->turn_on(); else sw->turn_off();
             id(vd_befehl_ts).publish_state(z + "OK: " + name + (an ? " an" : " aus"));
             return;
           }
           vd::Regel *r = vd::finden(name);
           if (r == nullptr) { id(vd_befehl_ts).publish_state(z + "keine Regel '" + name + "' (feste: R1-R5, eigene)"); return; }
-          if (cmd == "an" || cmd == "aus") { r->an = an; id(vd_befehl_ts).publish_state(z + "OK: " + r->name + (an ? " an" : " aus")); }
+          if (rb.aktion != vd::Aktion::LOESCHEN) { r->an = an; id(vd_befehl_ts).publish_state(z + "OK: " + r->name + (an ? " an" : " aus")); }
           else {
             std::string n = r->name;
             auto &v = vd::eigene();

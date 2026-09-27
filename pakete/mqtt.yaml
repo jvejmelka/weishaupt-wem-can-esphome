@@ -6,12 +6,18 @@
 #                                                     vom Bus (hoechstens alle 10 s), Zeitpunkt in "Status gelesen"
 # Schaltbefehle (cmd/heizkreis, cmd/warmwasser) kommen aus den Schalten-Paketen.
 # Die Befehle koennen nur LESEN: das Kommandobyte ist fest 0x40 (SDO-Upload).
+#
+# Strukturierter Status (ab v27): ${geraet}/status/json, retained, fester Aufbau (befehle.h,
+# TOPICS.md). Veroeffentlicht nur bei Aenderung, hoechstens alle 2 s - reine Buchfuehrung
+# aus dem, was das Board ohnehin mithoert oder liest: KEINE zusaetzliche CAN-Anfrage.
 
 mqtt:
   broker: !secret mqtt_broker
   port: 1883                 # unverschluesselt, nur im LAN
   username: !secret mqtt_user
   password: !secret mqtt_password
+  on_connect:
+    - lambda: 'bf::status().geaendert = true;'   # nach Wiederverbindung frisch veroeffentlichen
   on_message:
     - topic: ${geraet}/cmd/lesen
       then:
@@ -62,6 +68,22 @@ globals:
     initial_value: '0'
 
 interval:
+  # status/json: nur bei Aenderung (bf::Status::geaendert), hoechstens alle 2 s
+  - interval: 1s
+    then:
+      - lambda: |-
+          auto &st = bf::status();
+          uint32_t jetzt = millis();
+          bool lebt = id(bus_seit) != 0 && jetzt - id(letzter_frame) <= 30000;
+          st.setze(st.bus_lebt, lebt);
+          st.setze(st.anlaufpause, lebt && jetzt - id(bus_seit) <= id(pause_ms));
+          if (!bf::senden_faellig(st, jetzt) || !mqtt::global_mqtt_client->is_connected()) return;
+          uint32_t ts = id(uhr).now().is_valid() ? (uint32_t) id(uhr).now().timestamp : 0;
+          long lf = id(letzter_frame) == 0 ? -1 : (long) ((jetzt - id(letzter_frame)) / 1000);
+          std::string j = bf::status_json(st, bf::schaltung(), "${firmware}", ts, lf);
+          if (mqtt::global_mqtt_client->publish("${geraet}/status/json", j, 0, true)) {
+            st.geaendert = false; st.zuletzt_ms = jetzt | 1;
+          }
   # Objektscan: eine Leseanfrage alle 25 ms, nur bei lebendem Bus
   - interval: 25ms
     then:

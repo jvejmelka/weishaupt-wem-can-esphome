@@ -13,7 +13,7 @@ jobs:
     name: Tests der Regellogik
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Tests bauen und ausfuehren
         run: tests/run.sh
 
@@ -21,7 +21,7 @@ jobs:
     name: Links in den .md-Dateien
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Relative Links und Anker pruefen
         run: python3 tests/links.py
 
@@ -31,12 +31,12 @@ jobs:
     env:
       ESPHOME_VERSION: "2026.9.0"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Cache PlatformIO und ESPHome-Build
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.platformio

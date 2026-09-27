@@ -268,4 +268,51 @@ inline uint32_t fnv(const std::string &s) {
   return h | 1;
 }
 
+// Befehl "NAME an|aus|loeschen" (MQTT cmd/regel, Web-Feld "Regel-Befehl"). Nur Zerlegen und
+// Pruefen - das Umschalten macht die YAML. art: FEST = R1-R5 (nr 1-5), HAUPT = "eigene"
+// (Hauptschalter der eigenen Regeln), EIGENE = eine eigene Regel mit diesem Namen,
+// VERALTET = "verdacht"/"hauptschalter" (gibt es seit v23 nicht mehr), FEHLER = ungueltig.
+enum class BefehlArt { FEST, HAUPT, EIGENE, VERALTET, FEHLER };
+enum class Aktion { AN, AUS, LOESCHEN };
+struct RegelBefehl {
+  BefehlArt art = BefehlArt::FEHLER;
+  Aktion aktion = Aktion::AN;
+  int nr = 0;                 // bei FEST: 1-5
+  std::string name;           // wie eingegeben (ohne Leerzeichen am Rand)
+  std::string fehler;         // bei FEHLER/VERALTET: Meldung fuer die Anzeige
+};
+
+inline RegelBefehl befehl_zerlegen(const std::string &roh) {
+  RegelBefehl r;
+  std::string b = roh;
+  while (!b.empty() && isspace((unsigned char) b.back())) b.pop_back();
+  while (!b.empty() && isspace((unsigned char) b.front())) b.erase(0, 1);
+  size_t sp = b.find_last_of(' ');
+  if (sp == std::string::npos) { r.fehler = "Format: NAME an | NAME aus | NAME loeschen"; return r; }
+  r.name = b.substr(0, sp);
+  std::string cmd = b.substr(sp + 1);
+  while (!r.name.empty() && isspace((unsigned char) r.name.back())) r.name.pop_back();
+  for (auto &c : cmd) c = tolower((unsigned char) c);
+  if (cmd == "an") r.aktion = Aktion::AN;
+  else if (cmd == "aus") r.aktion = Aktion::AUS;
+  else if (cmd == "loeschen" || cmd == "l\xc3\xb6schen" || cmd == "l\xc3\x96schen") r.aktion = Aktion::LOESCHEN;
+  else { r.fehler = "unbekannt: '" + cmd + "' - erlaubt: an, aus, loeschen"; return r; }
+  std::string k = r.name;
+  for (auto &c : k) c = tolower((unsigned char) c);
+  if (k == "verdacht" || k == "hauptschalter") {
+    r.art = BefehlArt::VERALTET;
+    r.fehler = "'" + r.name + "' gibt es seit v23 nicht mehr: R1-R5 einzeln schalten, eigene Regeln mit 'eigene an|aus'";
+    return r;
+  }
+  if (k == "eigene") r.art = BefehlArt::HAUPT;
+  else if (k.size() == 2 && k[0] == 'r' && k[1] >= '1' && k[1] <= '5') { r.art = BefehlArt::FEST; r.nr = k[1] - '0'; }
+  else if (!name_ok(r.name)) { r.fehler = "keine Regel '" + r.name + "' (feste: R1-R5, eigene)"; return r; }
+  else r.art = BefehlArt::EIGENE;
+  if (r.art != BefehlArt::EIGENE && r.aktion == Aktion::LOESCHEN) {
+    r.fehler = r.name + (r.art == BefehlArt::FEST ? " ist eine feste Regel - nur an/aus" : " - nur an/aus");
+    r.art = BefehlArt::FEHLER;
+  }
+  return r;
+}
+
 }  // namespace vd

@@ -28,6 +28,12 @@ substitutions:
   # RESTORE_DEFAULT_OFF = nur mithoeren (Vorgabe), RESTORE_DEFAULT_ON = eigene Leseanfragen.
   can_anfragen_start: RESTORE_DEFAULT_OFF
 
+# befehle.h: strukturierter Status (bf::status) - das Paket mqtt veroeffentlicht ihn als
+# ${geraet}/status/json, das Paket wem-schalten fuehrt darin die Schaltbefehle.
+esphome:
+  includes:
+    - pakete/befehle.h
+
 web_server:
   sorting_groups:
     - id: g_kessel
@@ -203,7 +209,7 @@ interval:
           uint32_t jetzt = millis();
           bool bus_ok = millis() - id(letzter_frame) < 30000 && id(bus_seit) != 0 && jetzt - id(bus_seit) > id(pause_ms);
           if (!bus_ok) return;
-          if (!id(start_gelesen)) { id(start_gelesen) = true; id(anlass_ms) = (jetzt - 5000) | 1; }
+          if (!id(start_gelesen)) { id(start_gelesen) = true; id(anlass_ms) = (jetzt - 5000) | 1; bf::status().anlass("start", true, true); }
           id(hk_jetzt_lesen) = false;
           uint32_t a = id(anlass_ms);
           if (id(anlass_hk_ms) != 0 && (a == 0 || (int32_t)(id(anlass_hk_ms) - a) > 0)) a = id(anlass_hk_ms);
@@ -236,6 +242,7 @@ script:
           id(status_manuell_ms) = jetzt | 1;
           id(hk_letzte_lesung) = 0;                  // 2-min-Grenze fuer diese Lesung aufheben
           id(anlass_ms) = (jetzt - 5000) | 1;        // naechster 5-s-Takt liest sofort
+          bf::status().anlass("status", true, true);
           if (jetzt - id(bus_seit) <= id(pause_ms))
             id(status_gelesen).publish_state(z + "angefordert - Anlaufpause, liest danach");
           else
@@ -330,6 +337,7 @@ canbus:
                 case 104: s = "Wartung"; break;
               }
               id(wem_kesselstatus).publish_state(s);
+              bf::status().setze(bf::status().kesselstatus, (int) st);
               id(wem_kesselstatus_code).publish_state((float) st);
 
       # PDO 0x1C1: Statusbits Knoten 1 (Objekt 0x274D) - 0x1000 Heizkreis Standby, 0x0010 WW-Ladung
@@ -338,7 +346,10 @@ canbus:
           - lambda: |-
               uint16_t m = (x[3] << 8) | x[2];
               int kern = m & ~0x0050;
-              if (id(statusbits_anlass) && id(statusbits_vorher) >= 0 && kern != id(statusbits_vorher)) id(anlass_ms) = millis() | 1;
+              if (id(statusbits_anlass) && id(statusbits_vorher) >= 0 && kern != id(statusbits_vorher)) {
+                id(anlass_ms) = millis() | 1; bf::status().anlass("statusbits", true, true);
+              }
+              bf::status().setze(bf::status().hk_bits, (int) m);
               id(statusbits_vorher) = kern;
               std::string s = (m & 0x1000) ? "Standby" : "Zeitprogramm";
               if (m & 0x0010) s += " + WW-Ladung";
@@ -362,6 +373,7 @@ canbus:
                 if (rest) { char b[12]; snprintf(b, sizeof(b), " (0x%04X)", rest); s += b; }
                 id(wem_betriebsart_hk_code).publish_state((float) m);
                 id(wem_betriebsart_hk).publish_state(s);
+                bf::status().setze(bf::status().hk_bits, (int) m);
               } else if (idx == 0x2640 && sub == 3) {
                 id(wem_ww_vlsoll).publish_state((int16_t)((x[5] << 8) | x[4]) * 0.1f);
               } else if (idx == 0x2933 && sub == 2) {
@@ -370,6 +382,7 @@ canbus:
                 static const char* n[] = {"?", "Standby", "Zeitprogramm 1", "Zeitprogramm 2", "Zeitprogramm 3", "Sommer", "Komfort", "Normal", "Absenk"};
                 id(hk_betriebsart_code).publish_state((float) b);
                 id(hk_betriebsart).publish_state(b <= 8 ? n[b] : "unbekannt");
+                bf::status().hk_gelesen(b, (id(uhr).now().is_valid() ? (uint32_t) id(uhr).now().timestamp : 0u));
                 std::string z = id(uhr).now().is_valid() ? id(uhr).now().strftime("%d.%m. %H:%M:%S ") : std::string("");
                 id(status_gelesen).publish_state(z + "gelesen");
               } else if (sub == 2 && (idx == 0x2958 || idx == 0x2907)) {

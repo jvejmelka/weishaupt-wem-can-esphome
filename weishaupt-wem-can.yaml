@@ -21,7 +21,7 @@
 substitutions:
   geraet: weact-can485-weishaupt       # Geraetename = MQTT-Praefix
   anzeigename: Weishaupt WTC-GW 15-B
-  firmware: "v26 vom 27.09.2026"
+  firmware: "v27 vom 27.09.2026"
   # Eigene CAN-Leseanfragen beim ersten Start (danach gilt der Schalter in der Weboberflaeche):
   #   RESTORE_DEFAULT_OFF = nur mithoeren (Vorgabe, wenn die Zeile fehlt)
   #   RESTORE_DEFAULT_ON  = eigene Leseanfragen im Weishaupt-Takt
@@ -58,7 +58,7 @@ esphome:
   friendly_name: ${anzeigename}
   project:
     name: "jvejmelka.weishaupt-wem-can"
-    version: "24"
+    version: "27"
 
 esp32:
   board: esp32dev

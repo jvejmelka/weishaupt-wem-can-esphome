@@ -2,8 +2,11 @@
 //
 //   Lesen:     MQTT-Werte des Boards (<geraet>/sensor/+/state), die das Board am Kesselbus
 //              mithoert oder selbst abfragt.
-//   Schalten:  MQTT-Befehl an das Board (cmd/heizkreis, cmd/warmwasser). Das Board setzt ihn
-//              mit Sperrminute, Warteschlange und Kontrolle am Bus um.
+//   Schalten:  MQTT-Befehl an das Board (cmd/heizkreis, cmd/warmwasser) als JSON mit Kennung
+//              {"id":"app-...","wert":3,"quelle":"App"}. Das Board setzt ihn mit Sperrminute,
+//              Warteschlange und Kontrolle am Bus um und meldet jede Phase auf <geraet>/befehl/status.
+//   Zustand:   <geraet>/status/json (ab Firmware v27): Betriebsarten, Schaltbefehle, Bus - fester
+//              Aufbau, die App deutet keinen Freitext des Boards mehr.
 //   Status:    MQTT-Befehl cmd/status - das Board liest die Betriebsarten einmal vom Bus
 //              (nur CAN-Leseanfragen, kein WEM-JSON).
 //   Zusatz:    Liste fremder MQTT-Topics (Raumtemperaturen, Waermepumpe ...), die das Board unter
@@ -58,6 +61,22 @@ const modeMap = {
 const werte = new Map();     // name -> { v: string, t: ms }
 let mqttVerbunden = false;
 
+// Strukturierter Zustand (Firmware ab v27) und Rueckmeldungen der Schaltbefehle
+const STATUS_TOPIC = `${GERAET}/status/json`;
+const BEFEHL_TOPIC = `${GERAET}/befehl/status`;
+let statusJson = null;                // letzter Inhalt von status/json
+let statusJsonT = 0;
+const befehle = new Map();            // id -> letzte gemeldete Phase (neueste zuletzt eingefuegt)
+function befehlMerken(txt) {
+  let b;
+  try { b = JSON.parse(txt); } catch { return; }
+  if (!b || b.id == null || typeof b.phase !== 'string') return;
+  const id = String(b.id);
+  befehle.delete(id);
+  befehle.set(id, { ...b, empfangen: Date.now() });
+  while (befehle.size > 20) befehle.delete(befehle.keys().next().value);
+}
+
 // Zusatzanzeigen: Liste vom Board, Werte der fremden Topics
 const ZUSATZ_TOPIC = `${GERAET}/app/zusatz`;
 const ZUSATZ_MAX_ALTER_MS = 10 * 60 * 1000;
@@ -111,6 +130,8 @@ client.on('connect', () => {
   mqttVerbunden = true;
   client.subscribe(`${GERAET}/sensor/+/state`);
   client.subscribe(`${GERAET}/status`);
+  client.subscribe(STATUS_TOPIC);
+  client.subscribe(BEFEHL_TOPIC);
   // nach Wiederverbindung: Zusatz-Topics neu abonnieren (die Liste kommt retained ohnehin neu)
   for (const t of zusatzAbos) client.subscribe(t);
   client.subscribe(ZUSATZ_TOPIC);
@@ -120,6 +141,12 @@ client.on('close', () => { mqttVerbunden = false; });
 client.on('error', e => console.log(`MQTT-Fehler: ${e.message}`));
 client.on('message', (topic, payload) => {
   if (topic === ZUSATZ_TOPIC) { zusatzUebernehmen(payload.toString()); return; }
+  // strukturierte Topics NICHT in "werte" ("befehl/status" wuerde sonst "status" = online ueberschreiben)
+  if (topic === STATUS_TOPIC) {
+    try { statusJson = JSON.parse(payload.toString()); statusJsonT = Date.now(); } catch { console.log('status/json: kein gueltiges JSON'); }
+    return;
+  }
+  if (topic === BEFEHL_TOPIC) { befehlMerken(payload.toString()); return; }
   // fremde Topics der Zusatzliste NICHT in "werte" (dort wuerde z.B. "status" ueberschrieben)
   if (zusatzAlle.has(topic)) {
     zusatzWerte.set(topic, { v: payload.toString(), t: Date.now() });
@@ -190,7 +217,11 @@ app.get('/api/status', (req, res) => {
   const flamme = zahl('brenner');
   const phase = zahl('brennerphase');
   const PHASE = ['Aus', 'Vorlüften', 'An', 'An', 'Nachlüften'];
-  const modeCode = zahl('heizkreis_betriebsart_code');
+  const sj = statusJson || {};
+  const hk = sj.heizkreis || null;
+  const ww = sj.warmwasser || null;
+  // Vorgabe aus status/json; aeltere Firmware ohne status/json: Zahlencode des Sensors
+  const modeCode = hk && hk.vorgabe != null ? hk.vorgabe : zahl('heizkreis_betriebsart_code');
   const letzterFrame = zahl('letzter_can-frame_vor');
   // Kesselstatus (PDO 0x182, alle 5 s): 0 Standby, 1 Aus, 10 Heizbetrieb, 15 Warmwasserbetrieb, 101 Kaminfeger, 104 Wartung
   const kstatus = zahl('kesselstatus_code');
@@ -201,7 +232,7 @@ app.get('/api/status', (req, res) => {
   // Heizkreis fordert Waerme an: Statusbit 0x0040 (PDO 0x1C1, nur bei Aenderung - daher ohne Altersgrenze)
   // oder Heizanforderung > 0 (PDO 0x241). Steht der Kessel dabei im Warmwasserbetrieb, wartet die Heizung.
   const hkBitsRoh = werte.get('heizkreis_status_code');
-  const hkBits = hkBitsRoh ? Number(hkBitsRoh.v) : NaN;
+  const hkBits = hk && hk.statusbits != null ? hk.statusbits : (hkBitsRoh ? Number(hkBitsRoh.v) : NaN);
   const heizanf = zahl('heizanforderung');
   const heizungFordert = (Number.isFinite(hkBits) && (Math.round(hkBits) & 0x0040) !== 0) || (heizanf != null && heizanf > 0);
   const gas = kstatus != null ? Math.round(kstatus) === 15 : (wwAktiv === 'Ein' ? true : wwAktiv === 'Aus' ? false : null);
@@ -216,7 +247,7 @@ app.get('/api/status', (req, res) => {
     vorlaufIstC:      zahl('vorlauf_vpt') ?? zahl('vorlauf_heizkreis'),   // passiv; HZK0-Vorlauf nur bei Abfrage
     vorlaufSollC:     zahl('vorlauf_soll'),
     warmwasserC:      zahl('warmwasser'),
-    warmwasser:       text('warmwasser_betriebsart'),          // Vorgabe "Ein" / "Aus" (im WEM, gelesen nach Start und Schalten)
+    warmwasser:       ww && ww.vorgabe_text ? ww.vorgabe_text : text('warmwasser_betriebsart'),   // Vorgabe "Ein" / "Aus"
     warmwasserAktiv:  text('warmwasser_aktiv'),                // Ist: laedt gerade "Ein" / "Aus" (passiv, Kesselstatus)
     ladung:           { gas },                                  // Speicherladung durch den Kessel
     kesselZweck,                                               // Heizung / Warmwasser / Kaminfeger / Wartung / null
@@ -225,12 +256,15 @@ app.get('/api/status', (req, res) => {
     brennerAn:        flamme == null ? null : flamme === 1,
     brennerText:      phase != null && PHASE[phase] ? PHASE[phase] : (flamme == null ? null : (flamme === 1 ? 'An' : 'Aus')),
     modeCode:         modeCode != null ? Math.round(modeCode) : null,
-    modeLabel:        text('heizkreis_betriebsart'),
-    modeAktuellLabel: text('heizkreis_status'),
-    schaltStatus:     text('ergebnis_letzter_schaltbefehl'),
-    schaltProtokoll:  text('schaltprotokoll'),                 // letzte Befehle mit Ergebnis, neueste zuerst (App: Vorgabe)
-    warteschlange:    text('warteschlange'),
-    statusGelesen:    text('status_gelesen'),                  // "27.09. 14:05:12 gelesen" / "angefordert ..." (ab Firmware v21)
+    // aus status/json (fester Aufbau, siehe TOPICS.md im Firmware-Repository); null = Firmware < v27
+    heizkreis:        hk,                                      // {vorgabe, vorgabe_text, ist, heizt, statusbits, quelle, zeit}
+    heizkreisBits:    Number.isFinite(hkBits) ? Math.round(hkBits) : null,   // Statusbits 0x274D; nach Board-Neustart bis zur ersten Aenderung aus dem retained Zahlencode
+    warmwasserStatus: ww,                                      // {vorgabe, vorgabe_text, ladung, soll_aktuell, soll_normal, quelle, zeit}
+    schalten:         sj.schalten || null,                     // {laufend, warteschlange[], frei_ab, letzte{heizkreis, warmwasser}}
+    bus:              sj.bus || null,                          // {lebt, anlaufpause, letzter_frame_s}
+    boardFirmware:    sj.firmware || null,
+    statusJsonAlterS: statusJsonT ? Math.round((Date.now() - statusJsonT) / 1000) : null,
+    befehle:          [...befehle.values()].slice(-10),        // letzte Rueckmeldungen (befehl/status)
     busAlterS:        letzterFrame,
     zusatz:           zusatzListe.map(e => {
       const { wert, alter } = zusatzWert(e);
@@ -254,24 +288,29 @@ app.get('/api/energie', (req, res) => {
   });
 });
 
+// Kennung je Schaltbefehl: das Board meldet damit jede Phase auf befehl/status zurueck
+let befehlZaehler = 0;
+const neueId = () => `app-${Date.now().toString(36)}-${(++befehlZaehler).toString(36)}`;
+function schaltbefehl(res, ziel, wert, extra) {
+  if (!mqttVerbunden) return res.status(503).json({ error: 'MQTT-Broker nicht erreichbar' });
+  const id = neueId();
+  const nutzlast = JSON.stringify({ id, wert, quelle: 'App' });
+  client.publish(`${GERAET}/cmd/${ziel}`, nutzlast, { qos: 1 }, err => {
+    if (err) return res.status(500).json({ error: `Senden fehlgeschlagen: ${err.message}` });
+    res.json({ ok: true, queued: true, id, ...extra });
+  });
+}
+
 app.post('/api/mode', (req, res) => {
   const code = Number((req.body || {}).modeCode);
   if (!modeMap[code]) return res.status(400).json({ error: 'Unbekannte Betriebsart' });
-  if (!mqttVerbunden) return res.status(503).json({ error: 'MQTT-Broker nicht erreichbar' });
-  client.publish(`${GERAET}/cmd/heizkreis`, String(code), { qos: 1 }, err => {
-    if (err) return res.status(500).json({ error: `Senden fehlgeschlagen: ${err.message}` });
-    res.json({ ok: true, queued: true, modeCode: code, modeLabel: modeMap[code], source: 'can-board' });
-  });
+  schaltbefehl(res, 'heizkreis', code, { modeCode: code, modeLabel: modeMap[code], source: 'can-board' });
 });
 
 app.post('/api/warmwasser', (req, res) => {
   const an = (req.body || {}).an;
   if (typeof an !== 'boolean') return res.status(400).json({ error: 'an: true oder false' });
-  if (!mqttVerbunden) return res.status(503).json({ error: 'MQTT-Broker nicht erreichbar' });
-  client.publish(`${GERAET}/cmd/warmwasser`, an ? 'Ein' : 'Aus', { qos: 1 }, err => {
-    if (err) return res.status(500).json({ error: `Senden fehlgeschlagen: ${err.message}` });
-    res.json({ ok: true, queued: true, an });
-  });
+  schaltbefehl(res, 'warmwasser', an ? 'Ein' : 'Aus', { an });
 });
 
 // Betriebsarten einmal vom Bus lesen lassen (Board nimmt das hoechstens alle 10 s an)

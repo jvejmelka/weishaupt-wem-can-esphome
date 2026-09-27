@@ -369,7 +369,9 @@ läuft ausschließlich über JSON; der Bus dient nur zur Kontrolle.
    heißt es „OK“, sonst „NICHT übernommen“. Kommt binnen 10 s keine Antwort, „keine Rückmeldung
    vom Bus – Ergebnis unbekannt“. Auch nach einer leeren oder unklaren WEM-Antwort wird am Bus
    geprüft – es wurde schon beobachtet, dass trotz leerer Antwort geschaltet war.
-6. Ergebnis steht in **„Ergebnis letzter Schaltbefehl“** und im **Schaltprotokoll**.
+6. Ergebnis steht in **„Ergebnis letzter Schaltbefehl“** und im **Schaltprotokoll** (Klartext,
+   veraltet) sowie ab v27 strukturiert auf **`<gerät>/befehl/status`** (jede Phase, mit Kennung)
+   und in **`<gerät>/status/json`** → `schalten` – Aufbau in [TOPICS.md](TOPICS.md).
 
 ## 6. Weboberfläche: lesen und schreiben
 
@@ -402,7 +404,7 @@ Per MQTT: `<gerät>/cmd/status` mit beliebigem Inhalt. Höchstens ein Wunsch all
 | **Heizkreis Betriebsart setzen** | Auswahl Standby … Absenk; zeigt nach jeder Kontroll-Lesung den Wert am Bus |
 | **Warmwasser setzen** | Auswahl Ein / Aus |
 | **Warteschlange** | vorgemerkte Befehle mit Quelle, z. B. `1. Heizkreis -> Zeitprogramm 1 (MQTT) - naechster Befehl ab 14:03:12`, sonst `leer` |
-| **Ergebnis letzter Schaltbefehl** | Fortschritt und Ergebnis, s. [Abschnitt 5](#ablauf-in-der-firmware) |
+| **Ergebnis letzter Schaltbefehl** | Fortschritt und Ergebnis als Klartext, s. [Abschnitt 5](#ablauf-in-der-firmware) (veraltet – strukturiert: `befehl/status`, [TOPICS.md](TOPICS.md)) |
 | **Warteschlange leeren** | verwirft alle vorgemerkten Befehle (wird protokolliert) |
 | **Schaltprotokoll** | die letzten zehn Befehle mit Uhrzeit, Quelle und Ergebnis; per MQTT retained unter `<gerät>/schaltprotokoll`. Nach einem Neustart leer |
 
@@ -587,14 +589,17 @@ einzige vorherige `CM 05`-Antwort, nach einer Leerantwort und einer sofortigen W
 **1. Befehl.** Der Knopf „ZP 1“ in der Handy-App schickt über die App
 
 ```
-MQTT  <gerät>/cmd/heizkreis   2
+MQTT  <gerät>/cmd/heizkreis   {"id":"app-mg3k2-1","wert":2,"quelle":"App"}
 ```
 
-Gleichwertig: `Zeitprogramm 1` als Text per MQTT, oder „Heizkreis Betriebsart setzen“ in der
-Weboberfläche bzw. in Home Assistant. Das Board meldet in „Ergebnis letzter Schaltbefehl“:
+Gleichwertig: `2` oder `Zeitprogramm 1` als Text per MQTT (Kennung vergibt dann das Board), oder
+„Heizkreis Betriebsart setzen“ in der Weboberfläche bzw. in Home Assistant. Auf
+`<gerät>/befehl/status` erscheinen `angenommen` und `vorgemerkt` (mit `warten_s`), später
+`gesendet`, `pruefe_bus` und `bestaetigt` – siehe [TOPICS.md](TOPICS.md#gerätbefehlstatus).
+Das Board meldet zusätzlich (veraltet) in „Ergebnis letzter Schaltbefehl“:
 
 ```
-vorgemerkt (MQTT): Heizkreis Zeitprogramm 1
+vorgemerkt (App): Heizkreis Zeitprogramm 1
 ```
 
 **2. Warteschlange.** Läuft noch die Sperrminute, steht in „Warteschlange“ etwa
@@ -632,9 +637,10 @@ Antwort 0x581  4F 33 29 02 02 00 00 00      1 Byte, Wert 2 = Zeitprogramm 1
 | WEM nicht erreichbar | `WEM nicht erreichbar, pruefe trotzdem am Bus ...`, danach wie oben |
 
 Das Schaltprotokoll bekommt eine Zeile wie
-`27.09. 14:03 Heizkreis -> Zeitprogramm 1 (MQTT): ok`. Die Handy-App zeigt den Text drei Minuten
-lang in der Statuszeile – grün bei „OK“, rot bei „NICHT übernommen“, „abgelehnt“, „keine
-Rückmeldung“ oder „nicht erreichbar“.
+`27.09. 14:03 Heizkreis -> Zeitprogramm 1 (App): ok`. Die Handy-App wertet ab v27 nur noch die
+Phase aus `befehl/status` bzw. `status/json` aus und zeigt sie drei Minuten lang – grün bei
+`bestaetigt`, rot bei `gescheitert` (nicht übernommen, abgelehnt CM=05, keine Rückmeldung) oder
+`abgelehnt` (ungültiger Wert).
 
 Am Bus ändern sich danach die Statusbits im PDO `0x1C1` (Bit `0x1000` Heizkreis Standby fällt weg);
 „Heizkreis Status“ springt von „Standby“ auf „Zeitprogramm“.

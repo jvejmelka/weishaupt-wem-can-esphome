@@ -281,7 +281,7 @@ esphome run weishaupt-wem-can.yaml --device <IP>   # per OTA
 Wer an den Paketen etwas ändert, prüft vor dem Flashen:
 
 ```
-tests/run.sh                                   # Regellogik und Datei-Parser (g++, curl)
+tests/run.sh                                   # Regellogik, Schaltbefehle/Status-JSON, Datei-Parser (g++, curl)
 python3 tests/links.py                         # Links in den .md-Dateien
 esphome compile weishaupt-wem-can.yaml         # Firmware baut
 ```
@@ -295,5 +295,7 @@ Dasselbe läuft bei jedem Push in GitHub Actions, siehe [README](README.md#tests
 | „Letzter CAN-Frame vor“ steigt immer weiter | Heizung aus, Kabel ab, H/L vertauscht; der Bus-Wächter startet das Board nach der eingestellten Zeit neu |
 | Werte da, aber Rücklauf, Druck usw. bleiben leer | „Eigene CAN-Anfragen“ ist aus (Absicht beim Start) – s. Schritt 9 |
 | Schaltbefehl endet mit „abgelehnt (CM=05)“ oder „keine Rückmeldung“ | JSON-Schnittstelle am WEM aus (10.8.1), falsche `wem_ip`, oder der WEM ist gesperrt – dann hilft nur, die Heizung kurz stromlos zu machen. Danach seltener schalten |
+| Schaltbefehl kommt nicht an, `befehl/status` meldet `abgelehnt` | `text` nennt den Grund – meist ein unbekannter Wert oder ein unbekanntes JSON-Feld; siehe [TOPICS.md](TOPICS.md#schaltbefehle-mit-kennung) |
+| Handy-App zeigt keinen Fortschritt | Board-Firmware älter als v27 (kein `status/json`), oder das App-Konto darf `weact-can485-weishaupt/#` nicht lesen |
 | OTA findet das Board nicht | `esphome upload weishaupt-wem-can.yaml --device <IP>` |
 | Weboberfläche fragt nach Passwort | Benutzer `admin`, Passwort `web_password` aus `secrets.yaml` |

@@ -12,8 +12,12 @@
 #   - der WEM wird nie von selbst abgefragt, nur wenn jemand schaltet
 #
 # Schalten per MQTT (braucht Paket mqtt):
-#   ${geraet}/cmd/heizkreis   "1".."8" oder der Name, z.B. "Zeitprogramm 1", "Standby"
-#   ${geraet}/schaltprotokoll (retained) die letzten 10 Befehle, einer je Zeile
+#   ${geraet}/cmd/heizkreis   Klartext "1".."8", Name ("Zeitprogramm 1", "Standby") oder Kurzform "ZP1"
+#                             oder JSON {"id":17,"wert":"ZP2","quelle":"App"} (id und quelle optional)
+#   ${geraet}/befehl/status   (retained) JSON je Phase eines Befehls - siehe TOPICS.md:
+#                             angenommen -> vorgemerkt -> gesendet -> pruefe_bus -> bestaetigt | gescheitert
+#   ${geraet}/schaltprotokoll (retained) die letzten 10 Befehle, einer je Zeile (VERALTET, Klartext)
+# Die Buchfuehrung (Warteschlange, Phasen, JSON) steht in befehle.h (getestet in tests/).
 
 web_server:
   sorting_groups:
@@ -35,11 +39,6 @@ globals:
   - id: schalt_ziel             # laufender Aufruf: 0 keiner, 1 Heizkreis, 2 Warmwasser, 3 Schreibbefehl
     type: int
     initial_value: '0'
-  - id: schalt_wert
-    type: int
-    initial_value: '0'
-  - id: schalt_quelle
-    type: std::string
   - id: schalt_vg
     type: std::string
   - id: senden
@@ -48,16 +47,7 @@ globals:
   - id: pruefen                 # true, sobald die Kontroll-Leseanfrage am Bus raus ist
     type: bool
     initial_value: 'false'
-  - id: wunsch_hk               # Warteschlange: 0 = nichts vorgemerkt
-    type: int
-    initial_value: '0'
-  - id: wunsch_hk_quelle
-    type: std::string
-  - id: wunsch_ww
-    type: int
-    initial_value: '0'
-  - id: wunsch_ww_quelle
-    type: std::string
+  # Warteschlange und Phasen der Befehle: bf::schaltung() in befehle.h
   - id: protokoll
     type: std::vector<std::string>
   - id: letzter_gesehen         # fuer die Anzeige: wann die Sperrminute endet
@@ -73,19 +63,59 @@ esphome:
       - lambda: |-
           #ifdef USE_MQTT
           mqtt::global_mqtt_client->subscribe("${geraet}/cmd/heizkreis", [](const std::string &t, const std::string &p) {
-            const auto &opts = id(hk_setzen).traits.get_options();
-            int code = atoi(p.c_str());
-            if (code < 1 || code > 8) {
-              code = 0;
-              for (size_t i = 0; i < opts.size(); i++) if (p == opts[i]) code = i + 1;
-            }
-            if (code == 0) { id(schalt_status).publish_state("MQTT: unbekannte Heizkreis-Betriebsart '" + p + "'"); return; }
-            id(wunsch_hk) = code; id(wunsch_hk_quelle) = "MQTT";
-            id(schalt_status).publish_state(std::string("vorgemerkt (MQTT): Heizkreis ") + opts[code - 1]);
+            id(befehl_eingang)->execute(1, p, std::string("MQTT"));
           });
           #endif
 
 script:
+  # Schaltwunsch annehmen: ziel 1 Heizkreis, 2 Warmwasser; nutzlast Klartext oder JSON (befehle.h).
+  # Nur Buchfuehrung - gesendet wird erst von befehl_pruefen (hoechstens ein Befehl pro Minute).
+  - id: befehl_eingang
+    mode: queued
+    max_runs: 10
+    parameters:
+      ziel: int
+      nutzlast: string
+      quelle: string
+    then:
+      - lambda: |-
+          auto &s = bf::schaltung();
+          s.uhr = id(uhr).now().is_valid() ? (uint32_t) id(uhr).now().timestamp : 0;
+          bf::Anfrage a; a.quelle = quelle;
+          std::string f;
+          const char *zn = ziel == 1 ? "Heizkreis" : "Warmwasser";
+          if (!bf::anfrage_lesen(ziel, nutzlast, a, f)) {
+            s.ablehnen(ziel, a, f);
+            id(schalt_status).publish_state(a.quelle + ": " + zn + " abgelehnt - " + f);
+          } else {
+            uint32_t seit = millis() - id(letzter_befehl);
+            int warten = id(wem_senden).is_running() ? 60 :
+                         (id(letzter_befehl) != 0 && seit < 60000) ? (int) ((60000 - seit) / 1000) + 1 : 0;
+            if (ziel == 2 && s.hat_wunsch[1] && warten == 0) warten = 60;   // Heizkreis geht vor
+            s.annehmen(ziel, a, warten);
+            id(schalt_status).publish_state("vorgemerkt (" + a.quelle + "): " + zn + " " + bf::wert_text(ziel, a.wert) +
+                                            (warten > 0 ? ", wird in " + to_string(warten) + " s gesendet" : ""));
+          }
+      - script.execute: befehl_melden
+
+  # Phasen der Befehle veroeffentlichen (<geraet>/befehl/status, retained) und loggen
+  - id: befehl_melden
+    mode: queued
+    max_runs: 10
+    then:
+      - lambda: |-
+          auto &s = bf::schaltung();
+          for (auto &e : s.ereignisse) {
+            ESP_LOGI("schalten", "Befehl %s (%s %s): %s%s%s", e.id.c_str(), bf::ziel_name(e.ziel),
+                     e.wert ? bf::wert_text(e.ziel, e.wert) : "-", e.phase.c_str(),
+                     e.grund.empty() ? "" : " - ", e.grund.c_str());
+            #ifdef USE_MQTT
+            mqtt::global_mqtt_client->publish("${geraet}/befehl/status", bf::befehl_json(e), 0, true);
+            #endif
+          }
+          if (!s.ereignisse.empty()) bf::status().geaendert = true;
+          s.ereignisse.clear();
+
   # Eintrag ins Schaltprotokoll (neueste zuerst, 10 Eintraege, seit dem letzten Neustart)
   - id: protokoll_eintrag
     mode: queued
@@ -120,13 +150,14 @@ script:
             if (t.is_valid()) { t = ESPTime::from_epoch_local(t.timestamp + 60); id(frei_ab) = t.strftime("%H:%M:%S"); }
             else id(frei_ab) = "";
           }
+          auto &s = bf::schaltung();
+          s.uhr = id(uhr).now().is_valid() ? (uint32_t) id(uhr).now().timestamp : 0;
           {
-            static const char* n[] = {"?", "Standby", "Zeitprogramm 1", "Zeitprogramm 2", "Zeitprogramm 3", "Sommer", "Komfort", "Normal", "Absenk"};
             std::string w;
-            if (id(wunsch_hk)) w = std::string("1. Heizkreis -> ") + n[id(wunsch_hk)] + " (" + id(wunsch_hk_quelle) + ")";
-            if (id(wunsch_ww)) {
+            if (s.hat_wunsch[1]) w = std::string("1. Heizkreis -> ") + bf::hk_text(s.wunsch[1].wert) + " (" + s.wunsch[1].quelle + ")";
+            if (s.hat_wunsch[2]) {
               if (!w.empty()) w += " | 2. "; else w = "1. ";
-              w += std::string("Warmwasser -> ") + (id(wunsch_ww) == 1 ? "Ein" : "Aus") + " (" + id(wunsch_ww_quelle) + ")";
+              w += std::string("Warmwasser -> ") + bf::ww_text(s.wunsch[2].wert) + " (" + s.wunsch[2].quelle + ")";
             }
             bool gesperrt = id(wem_senden).is_running() || (id(letzter_befehl) != 0 && millis() - id(letzter_befehl) < 60000);
             if (w.empty()) w = "leer";
@@ -136,16 +167,20 @@ script:
           id(senden) = false;
           if (id(wem_senden).is_running()) return;
           if (id(letzter_befehl) != 0 && millis() - id(letzter_befehl) < 60000) return;
-          int ziel = 0, wert = 0; std::string q;
-          if (id(wunsch_hk)) { ziel = 1; wert = id(wunsch_hk); q = id(wunsch_hk_quelle); id(wunsch_hk) = 0; }
-          else if (id(wunsch_ww)) { ziel = 2; wert = id(wunsch_ww); q = id(wunsch_ww_quelle); id(wunsch_ww) = 0; }
-          else return;
+          if (s.laeuft) {                          // Sicherung: WEM-Aufruf fertig, Befehl aber noch offen
+            if (id(schalt_ziel) == 0) s.keine_rueckmeldung();
+            return;
+          }
+          bf::Befehl bb;
+          if (!s.naechster(bb)) return;
           char b[24];
-          if (ziel == 1) snprintf(b, sizeof(b), "0302002533020001%02X", wert);   // MI02 HZK0 Betriebsart
-          else           snprintf(b, sizeof(b), "0303002520020001%02X", wert);   // MI03 WW0 Betriebsart
-          id(schalt_ziel) = ziel; id(schalt_wert) = wert; id(schalt_quelle) = q; id(schalt_vg) = b;
+          if (bb.ziel == 1) snprintf(b, sizeof(b), "0302002533020001%02X", bb.wert);   // MI02 HZK0 Betriebsart
+          else              snprintf(b, sizeof(b), "0303002520020001%02X", bb.wert);   // MI03 WW0 Betriebsart
+          id(schalt_ziel) = bb.ziel; id(schalt_vg) = b;
           id(letzter_befehl) = millis() | 1; id(eigener_befehl_ms) = id(letzter_befehl);
+          bf::status().setze(bf::status().frei_ab, s.uhr ? s.uhr + 60 : 0u);
           id(senden) = true;
+      - script.execute: befehl_melden
       - if:
           condition:
             lambda: 'return id(senden);'
@@ -197,14 +232,21 @@ script:
                     id(protokoll_eintrag)->execute("Schreibbefehl " + id(schalt_vg) + ": " + t);
                     id(schalt_ziel) = 0;
                   } else if (ziel == 1 || ziel == 2) {
+                    auto &s = bf::schaltung();
+                    s.uhr = id(uhr).now().is_valid() ? (uint32_t) id(uhr).now().timestamp : 0;
+                    std::string q = s.lauf.quelle;
                     if (cm == "05") {
+                      s.wem_antwort(bf::Wem::CM05, "VG " + rvg);
                       id(schalt_status).publish_state(zeit + "abgelehnt (CM=05) - VG " + rvg);
-                      id(protokoll_eintrag)->execute(std::string(ziel == 1 ? "Heizkreis" : "Warmwasser") + " (" + id(schalt_quelle) + "): abgelehnt, CM=05");
+                      id(protokoll_eintrag)->execute(std::string(ziel == 1 ? "Heizkreis" : "Warmwasser") + " (" + q + "): abgelehnt, CM=05");
                       id(schalt_ziel) = 0;
                     } else {
+                      s.wem_antwort(ok ? bf::Wem::BESTAETIGT : bf::Wem::UNKLAR,
+                                    ok ? std::string("") : "HTTP " + to_string(response->status_code) + (rvg.empty() ? "" : ", VG " + rvg));
                       id(schalt_status).publish_state(ok ? "WEM hat bestaetigt, pruefe am Bus ..." :
                                                            "WEM-Antwort unklar (HTTP " + to_string(response->status_code) + "), pruefe am Bus ...");
                     }
+                    id(befehl_melden)->execute();
                   }
           on_error:
             then:
@@ -216,7 +258,11 @@ script:
                     id(protokoll_eintrag)->execute("Schreibbefehl " + id(schalt_vg) + ": WEM nicht erreichbar");
                     id(schalt_ziel) = 0;
                   } else if (ziel == 1 || ziel == 2) {
+                    auto &s = bf::schaltung();
+                    s.uhr = id(uhr).now().is_valid() ? (uint32_t) id(uhr).now().timestamp : 0;
+                    s.wem_antwort(bf::Wem::NICHT_ERREICHBAR, "WEM nicht erreichbar");
                     id(schalt_status).publish_state("WEM nicht erreichbar, pruefe trotzdem am Bus ...");
+                    id(befehl_melden)->execute();
                   }
       # Der Bus entscheidet, nicht die WEM-Antwort (auch nach einer leeren Antwort
       # wurde schon geschaltet). Nach 3 s das Zielobjekt am Bus lesen.
@@ -225,14 +271,20 @@ script:
           if (id(schalt_ziel) != 1 && id(schalt_ziel) != 2) return;
           uint16_t idx = id(schalt_ziel) == 1 ? 0x2933 : 0x2A20;
           id(pruefen) = true;
+          bf::status().anlass("schaltbefehl", id(schalt_ziel) == 1, id(schalt_ziel) == 2);
           std::vector<uint8_t> d = {0x40, (uint8_t)(idx & 0xFF), (uint8_t)(idx >> 8), 0x02, 0, 0, 0, 0};
           id(my_can_bus)->send_data(0x601, false, d);
       - delay: 10s
       - lambda: |-
           if (id(schalt_ziel) != 1 && id(schalt_ziel) != 2) return;
+          auto &s = bf::schaltung();
+          s.uhr = id(uhr).now().is_valid() ? (uint32_t) id(uhr).now().timestamp : 0;
+          std::string q = s.lauf.quelle;
+          s.keine_rueckmeldung();
           id(schalt_status).publish_state("keine Rueckmeldung vom Bus - Ergebnis unbekannt");
-          id(protokoll_eintrag)->execute(std::string(id(schalt_ziel) == 1 ? "Heizkreis" : "Warmwasser") + " (" + id(schalt_quelle) + "): keine Rueckmeldung vom Bus");
+          id(protokoll_eintrag)->execute(std::string(id(schalt_ziel) == 1 ? "Heizkreis" : "Warmwasser") + " (" + q + "): keine Rueckmeldung vom Bus");
           id(schalt_ziel) = 0; id(pruefen) = false;
+          id(befehl_melden)->execute();
 
 interval:
   - interval: 1s
@@ -249,12 +301,17 @@ canbus:
               static const char* n[] = {"?", "Standby", "Zeitprogramm 1", "Zeitprogramm 2", "Zeitprogramm 3", "Sommer", "Komfort", "Normal", "Absenk"};
               if (b >= 1 && b <= 8) id(hk_setzen).publish_state(n[b]);
               if (id(schalt_ziel) != 1 || !id(pruefen)) return;
+              auto &s = bf::schaltung();
+              s.uhr = id(uhr).now().is_valid() ? (uint32_t) id(uhr).now().timestamp : 0;
+              int soll = s.lauf.wert; std::string q = s.lauf.quelle;
+              s.bus_wert(1, b);
               std::string zeit = id(uhr).now().is_valid() ? id(uhr).now().strftime("%H:%M:%S ") : std::string("");
-              bool ok = b == id(schalt_wert);
+              bool ok = b == soll;
               std::string ist = b <= 8 ? n[b] : "?";
               id(schalt_status).publish_state(zeit + (ok ? "OK: Heizkreis steht auf " + ist : "NICHT uebernommen, Heizkreis steht auf " + ist));
-              id(protokoll_eintrag)->execute("Heizkreis -> " + std::string(n[id(schalt_wert)]) + " (" + id(schalt_quelle) + "): " + (ok ? "ok" : "NICHT uebernommen, steht auf " + ist));
+              id(protokoll_eintrag)->execute("Heizkreis -> " + std::string(bf::hk_text(soll)) + " (" + q + "): " + (ok ? "ok" : "NICHT uebernommen, steht auf " + ist));
               id(schalt_ziel) = 0; id(pruefen) = false;
+              id(befehl_melden)->execute();
 
 select:
   - platform: template
@@ -264,16 +321,11 @@ select:
     optimistic: false
     web_server: { sorting_group_id: g_schalten, sorting_weight: 1 }
     set_action:
-      - lambda: |-
-          const auto &opts = id(hk_setzen).traits.get_options();
-          int code = 0;
-          for (size_t i = 0; i < opts.size(); i++) if (x == opts[i]) code = i + 1;
-          if (code == 0) return;
-          id(wunsch_hk) = code; id(wunsch_hk_quelle) = "Web/HA";
-          uint32_t seit = millis() - id(letzter_befehl);
-          if (id(wem_senden).is_running() || (id(letzter_befehl) != 0 && seit < 60000))
-            id(schalt_status).publish_state("vorgemerkt: Heizkreis " + x + ", wird in " +
-              to_string(id(wem_senden).is_running() ? 60 : (int)((60000 - seit) / 1000) + 1) + " s gesendet");
+      - script.execute:
+          id: befehl_eingang
+          ziel: 1
+          nutzlast: !lambda 'return x;'
+          quelle: "Web/HA"
       - script.execute: befehl_pruefen
 
 button:
@@ -302,8 +354,9 @@ button:
           if (v.size() % 2) v = "0" + v;
           char b[40];
           snprintf(b, sizeof(b), "03%02X%02X%04X%02X%04X%s", mi, mx, ox, os, (unsigned) (v.size() / 2), v.c_str());
-          id(schalt_vg) = b; id(schalt_ziel) = 3; id(schalt_quelle) = "Web";
+          id(schalt_vg) = b; id(schalt_ziel) = 3;
           id(letzter_befehl) = millis() | 1; id(eigener_befehl_ms) = id(letzter_befehl); id(senden) = true;
+          if (id(uhr).now().is_valid()) bf::status().setze(bf::status().frei_ab, (uint32_t) id(uhr).now().timestamp + 60);
           id(schreib_antwort).publish_state(std::string("sende VG ") + b + " ...");
       - if:
           condition:
@@ -317,10 +370,12 @@ button:
     web_server: { sorting_group_id: g_schalten, sorting_weight: 5 }
     on_press:
       - lambda: |-
-          if (!id(wunsch_hk) && !id(wunsch_ww)) return;
-          id(wunsch_hk) = 0; id(wunsch_ww) = 0;
+          auto &s = bf::schaltung();
+          s.uhr = id(uhr).now().is_valid() ? (uint32_t) id(uhr).now().timestamp : 0;
+          if (s.leeren() == 0) return;
           id(schalt_status).publish_state("Warteschlange geleert");
           id(protokoll_eintrag)->execute(std::string("Warteschlange von Hand geleert"));
+      - script.execute: befehl_melden
 text:
   - platform: template
     name: "Heizung: IP-Adresse"

@@ -57,11 +57,12 @@ canbus:
                 uint8_t b = x[4];
                 id(ww_betriebsart_code).publish_state((float) b);
                 id(ww_betriebsart).publish_state(b == 1 ? "Ein" : (b == 2 ? "Aus" : "unbekannt"));
+                bf::status().ww_gelesen(b, (id(uhr).now().is_valid() ? (uint32_t) id(uhr).now().timestamp : 0u));
               } else if (idx == 0x2A2C || idx == 0x2A39) {
                 int16_t v = (int16_t)((x[5] << 8) | x[4]);
                 if (v == (int16_t) 0x8000) return;
-                if (idx == 0x2A2C) id(ww_soll_akt).publish_state(v * 0.1f);
-                else id(ww_soll_normal).publish_state(v * 0.1f);
+                if (idx == 0x2A2C) { id(ww_soll_akt).publish_state(v * 0.1f); bf::status().setze_f(bf::status().ww_soll_akt, v * 0.1f); }
+                else { id(ww_soll_normal).publish_state(v * 0.1f); bf::status().setze_f(bf::status().ww_soll_normal, v * 0.1f); }
               }
 
 switch:

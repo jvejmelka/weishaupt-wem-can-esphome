@@ -1,11 +1,12 @@
-// Tests der Regellogik (pakete/regellogik.h) und der Datei-Parser (pakete/verdacht.h,
-// pakete/zusatz.h) - laeuft auf dem PC, ohne ESPHome, ohne Board, ohne Bus.
+// Tests der Regellogik (pakete/regellogik.h), der Datei-Parser (pakete/verdacht.h,
+// pakete/zusatz.h) und der Schaltbefehle/Status-JSON (pakete/befehle.h) - laeuft auf dem PC, ohne ESPHome, ohne Board, ohne Bus.
 // Alle Frames sind AUSGEDACHT nach den Mustern in PROTOKOLL.md, keine Mitschnitte.
 //
 // Bauen und starten: tests/run.sh
 #include "../pakete/regellogik.h"
 #include "../pakete/verdacht.h"
 #include "../pakete/zusatz.h"
+#include "../pakete/befehle.h"
 #include <cstdio>
 #include <fstream>
 #include <sstream>
@@ -479,6 +480,247 @@ TEST(zusatz_speicher_rundreise) {
   PRUEFE(s.size() < 1600);                                   // passt in zs-Speicher
   zs::liste().clear();
   PRUEFE(zs::aus_speicher(s.c_str(), f) && zs::liste().size() == 3 && zs::speicherform() == s);
+}
+
+// ---------------------------------------------------------------- cmd/regel (NAME an|aus|loeschen)
+
+TEST(regel_befehl_feste_regeln) {
+  auto r = vd::befehl_zerlegen("R3 aus");
+  PRUEFE(r.art == vd::BefehlArt::FEST && r.nr == 3 && r.aktion == vd::Aktion::AUS);
+  r = vd::befehl_zerlegen("  r1   AN  ");
+  PRUEFE(r.art == vd::BefehlArt::FEST && r.nr == 1 && r.aktion == vd::Aktion::AN && r.name == "r1");
+  r = vd::befehl_zerlegen("R5 loeschen");                       // feste Regel: nur an/aus
+  PRUEFE(r.art == vd::BefehlArt::FEHLER && enthaelt(r.fehler, "nur an/aus"));
+  r = vd::befehl_zerlegen("R6 an");                             // R6 gibt es nicht -> eigene Regel "R6"
+  PRUEFE(r.art == vd::BefehlArt::EIGENE && r.name == "R6");
+}
+
+TEST(regel_befehl_hauptschalter_und_eigene) {
+  auto r = vd::befehl_zerlegen("eigene an");
+  PRUEFE(r.art == vd::BefehlArt::HAUPT && r.aktion == vd::Aktion::AN);
+  r = vd::befehl_zerlegen("Eigene loeschen");
+  PRUEFE(r.art == vd::BefehlArt::FEHLER);
+  r = vd::befehl_zerlegen("meine-regel.1 L\xc3\xb6schen");
+  PRUEFE(r.art == vd::BefehlArt::EIGENE && r.aktion == vd::Aktion::LOESCHEN && r.name == "meine-regel.1");
+  r = vd::befehl_zerlegen("verdacht an");                       // gibt es seit v23 nicht mehr
+  PRUEFE(r.art == vd::BefehlArt::VERALTET && enthaelt(r.fehler, "seit v23"));
+  r = vd::befehl_zerlegen("Hauptschalter aus");
+  PRUEFE(r.art == vd::BefehlArt::VERALTET);
+}
+
+TEST(regel_befehl_ungueltig) {
+  PRUEFE(vd::befehl_zerlegen("").art == vd::BefehlArt::FEHLER);
+  PRUEFE(enthaelt(vd::befehl_zerlegen("R1").fehler, "Format"));
+  PRUEFE(enthaelt(vd::befehl_zerlegen("R1 umschalten").fehler, "erlaubt: an, aus, loeschen"));
+  PRUEFE(vd::befehl_zerlegen("zwei worte an").art == vd::BefehlArt::FEHLER);   // Leerzeichen im Namen
+  PRUEFE(vd::befehl_zerlegen("ein-sehr-langer-regelname-xyz an").art == vd::BefehlArt::FEHLER);
+}
+
+// ---------------------------------------------------------------- Schaltbefehle (befehle.h)
+
+TEST(befehl_klartext_wie_bisher) {
+  bf::Anfrage a; std::string f;
+  PRUEFE(bf::anfrage_lesen(bf::ZIEL_HK, "3", a, f) && a.wert == 3 && a.id.empty() && a.quelle == "MQTT");
+  bf::Anfrage b;
+  PRUEFE(bf::anfrage_lesen(bf::ZIEL_HK, "Zeitprogramm 2", b, f) && b.wert == 3);
+  bf::Anfrage c;
+  PRUEFE(bf::anfrage_lesen(bf::ZIEL_HK, " zp 1 ", c, f) && c.wert == 2);
+  bf::Anfrage d;
+  PRUEFE(bf::anfrage_lesen(bf::ZIEL_HK, "Standby", d, f) && d.wert == 1);
+  bf::Anfrage e;
+  PRUEFE(bf::anfrage_lesen(bf::ZIEL_WW, "Ein", e, f) && e.wert == 1);
+  bf::Anfrage g;
+  PRUEFE(bf::anfrage_lesen(bf::ZIEL_WW, "off", g, f) && g.wert == 2);
+  bf::Anfrage h;
+  PRUEFE(!bf::anfrage_lesen(bf::ZIEL_HK, "9", h, f) && enthaelt(f, "unbekannt"));
+  bf::Anfrage i;
+  PRUEFE(!bf::anfrage_lesen(bf::ZIEL_WW, "vielleicht", i, f));
+  bf::Anfrage j;
+  PRUEFE(!bf::anfrage_lesen(bf::ZIEL_HK, "   ", j, f));
+}
+
+TEST(befehl_json_mit_kennung) {
+  bf::Anfrage a; std::string f;
+  PRUEFE(bf::anfrage_lesen(bf::ZIEL_HK, "{\"id\":17,\"wert\":\"ZP2\"}", a, f) && a.wert == 3 && a.id == "17" && a.id_zahl);
+  bf::Anfrage b;
+  PRUEFE(bf::anfrage_lesen(bf::ZIEL_HK, "{\"id\":\"app-4\",\"wert\":6,\"quelle\":\"App\"}", b, f) &&
+         b.wert == 6 && b.id == "app-4" && !b.id_zahl && b.quelle == "App");
+  bf::Anfrage c;
+  PRUEFE(bf::anfrage_lesen(bf::ZIEL_WW, "{\"wert\":false}", c, f) && c.wert == 2 && c.id.empty());
+  bf::Anfrage d;   // ungueltiger Wert: Kennung bleibt fuer die Ablehnung erhalten
+  PRUEFE(!bf::anfrage_lesen(bf::ZIEL_HK, "{\"id\":5,\"wert\":12}", d, f) && d.id == "5" && enthaelt(f, "1-8"));
+  bf::Anfrage e;
+  PRUEFE(!bf::anfrage_lesen(bf::ZIEL_HK, "{\"id\":5,\"wert\":true}", e, f));
+  bf::Anfrage g;
+  PRUEFE(!bf::anfrage_lesen(bf::ZIEL_HK, "{\"id\":5}", g, f) && enthaelt(f, "wert fehlt"));
+  bf::Anfrage h;
+  PRUEFE(!bf::anfrage_lesen(bf::ZIEL_HK, "{\"wert\":3,\"farbe\":1}", h, f) && enthaelt(f, "unbekanntes Feld"));
+  bf::Anfrage i;
+  PRUEFE(!bf::anfrage_lesen(bf::ZIEL_HK, "{\"wert\":3", i, f));
+  bf::Anfrage j;
+  PRUEFE(!bf::anfrage_lesen(bf::ZIEL_HK, "{\"id\":\"\",\"wert\":3}", j, f));
+  bf::Anfrage k;
+  PRUEFE(!bf::anfrage_lesen(bf::ZIEL_HK, "{\"wert\":3,\"quelle\":\"a;b\"}", k, f));
+  bf::Anfrage l;
+  PRUEFE(bf::anfrage_lesen(bf::ZIEL_HK, "{\"wert\":3,\"_kommentar\":\"x\"}", l, f));
+}
+
+static std::vector<std::string> phasen(bf::Schaltung &s) {
+  std::vector<std::string> v;
+  for (auto &e : s.ereignisse) v.push_back(e.id + ":" + e.phase);
+  s.ereignisse.clear();
+  return v;
+}
+
+TEST(befehl_phasen_erfolg) {
+  bf::Schaltung s;
+  s.uhr = 1790000000;
+  bf::Anfrage a; a.id = "17"; a.id_zahl = true; a.wert = 3;
+  s.annehmen(bf::ZIEL_HK, a, 42);
+  PRUEFE(s.ereignisse.size() == 2 && s.ereignisse[1].warten_s == 42);
+  PRUEFE((phasen(s) == std::vector<std::string>{"17:angenommen", "17:vorgemerkt"}));
+  bf::Befehl b;
+  PRUEFE(s.naechster(b) && b.ziel == bf::ZIEL_HK && b.wert == 3 && s.laeuft);
+  PRUEFE(!s.naechster(b));                                    // laeuft schon
+  s.wem_antwort(bf::Wem::BESTAETIGT, "");
+  PRUEFE(!s.bus_wert(bf::ZIEL_WW, 1));                        // anderes Ziel: nichts
+  PRUEFE(s.bus_wert(bf::ZIEL_HK, 3) && !s.laeuft);
+  auto p = phasen(s);
+  PRUEFE((p == std::vector<std::string>{"17:gesendet", "17:pruefe_bus", "17:bestaetigt"}));
+  PRUEFE(s.hat_letzte[bf::ZIEL_HK] && s.letzte[bf::ZIEL_HK].phase == "bestaetigt" && s.letzte[bf::ZIEL_HK].ist == 3);
+  PRUEFE(s.letzte[bf::ZIEL_HK].wem == "bestaetigt" && s.letzte[bf::ZIEL_HK].zeit == 1790000000u);
+}
+
+TEST(befehl_phasen_fehlschlaege) {
+  bf::Schaltung s;
+  bf::Anfrage a; a.wert = 2;
+  s.annehmen(bf::ZIEL_WW, a, 0);
+  bf::Befehl b;
+  s.naechster(b);
+  s.wem_antwort(bf::Wem::CM05, "VG 05...");
+  PRUEFE(!s.laeuft && s.letzte[bf::ZIEL_WW].phase == "gescheitert" && s.letzte[bf::ZIEL_WW].grund == "cm05");
+  PRUEFE(!s.bus_wert(bf::ZIEL_WW, 2));                        // nach CM=05 keine Buspruefung mehr
+  s.ereignisse.clear();
+  s.annehmen(bf::ZIEL_WW, a, 0);
+  s.naechster(b);
+  s.wem_antwort(bf::Wem::NICHT_ERREICHBAR, "");
+  PRUEFE(s.laeuft && s.lauf.phase == "pruefe_bus" && s.lauf.wem == "nicht_erreichbar");
+  PRUEFE(s.bus_wert(bf::ZIEL_WW, 1));                         // steht auf Ein, gewuenscht Aus
+  PRUEFE(s.letzte[bf::ZIEL_WW].grund == "nicht_uebernommen" && s.letzte[bf::ZIEL_WW].ist == 1 &&
+         enthaelt(s.letzte[bf::ZIEL_WW].text, "Ein"));
+  s.annehmen(bf::ZIEL_WW, a, 0);
+  s.naechster(b);
+  s.wem_antwort(bf::Wem::UNKLAR, "HTTP 200, VG leer");
+  s.keine_rueckmeldung();
+  PRUEFE(!s.laeuft && s.letzte[bf::ZIEL_WW].grund == "keine_rueckmeldung" && s.letzte[bf::ZIEL_WW].wem == "unklar");
+  // Kennungen ohne mitgeschickte id sind fortlaufend
+  PRUEFE(s.ereignisse.front().id == "b2" && s.ereignisse.back().id == "b3");
+}
+
+TEST(befehl_neuester_wunsch_gewinnt_und_reihenfolge) {
+  bf::Schaltung s;
+  bf::Anfrage ww; ww.id = "w1"; ww.wert = 1;
+  bf::Anfrage h1; h1.id = "h1"; h1.wert = 2;
+  bf::Anfrage h2; h2.id = "h2"; h2.wert = 4;
+  s.annehmen(bf::ZIEL_WW, ww, 30);
+  s.annehmen(bf::ZIEL_HK, h1, 30);
+  s.ereignisse.clear();
+  s.annehmen(bf::ZIEL_HK, h2, 30);
+  auto p = phasen(s);
+  PRUEFE((p == std::vector<std::string>{"h2:angenommen", "h1:ersetzt", "h2:vorgemerkt"}));
+  PRUEFE(!s.hat_letzte[bf::ZIEL_HK]);                         // ersetzt zaehlt nicht als "letzte"
+  bf::Befehl b;
+  PRUEFE(s.naechster(b) && b.id == "h2");                     // Heizkreis zuerst
+  s.wem_antwort(bf::Wem::BESTAETIGT, "");
+  s.bus_wert(bf::ZIEL_HK, 4);
+  PRUEFE(s.naechster(b) && b.id == "w1");
+  s.ereignisse.clear();
+  s.annehmen(bf::ZIEL_HK, h1, 60);
+  PRUEFE(s.leeren() == 1 && !s.hat_wunsch[bf::ZIEL_HK]);
+  PRUEFE(s.ereignisse.back().phase == "gescheitert" && s.ereignisse.back().grund == "geleert");
+}
+
+TEST(befehl_abgelehnt_vor_dem_senden) {
+  bf::Schaltung s;
+  bf::Anfrage a; std::string f;
+  PRUEFE(!bf::anfrage_lesen(bf::ZIEL_HK, "{\"id\":99,\"wert\":\"Turbo\"}", a, f));
+  s.ablehnen(bf::ZIEL_HK, a, f);
+  PRUEFE(s.ereignisse.size() == 1 && s.ereignisse[0].phase == "abgelehnt" && s.ereignisse[0].id == "99");
+  bf::Befehl b;
+  PRUEFE(!s.hat_wunsch[bf::ZIEL_HK] && !s.naechster(b));     // nichts vorgemerkt -> nichts an den WEM
+  std::string j = bf::befehl_json(s.ereignisse[0]);
+  JsonDocument d;
+  PRUEFE(!deserializeJson(d, j));
+  PRUEFE(d["id"].is<long>() && d["id"].as<long>() == 99 && d["phase"] == "abgelehnt" && d["grund"] == "ungueltig");
+  PRUEFE(d["ziel"] == "heizkreis" && d["wert"].isNull() && d["ende"] == true && d["zeit"].isNull());
+}
+
+TEST(befehl_json_felder_fest) {
+  bf::Schaltung s;
+  s.uhr = 1790000100;
+  bf::Anfrage a; a.id = "x-1"; a.wert = 7; a.quelle = "App";
+  s.annehmen(bf::ZIEL_HK, a, 12);
+  JsonDocument d;
+  PRUEFE(!deserializeJson(d, bf::befehl_json(s.ereignisse.back())));
+  const char *felder[] = {"id", "ziel", "wert", "wert_text", "quelle", "phase", "ende", "grund", "text", "wem",
+                          "ist", "ist_text", "warten_s", "ersetzt_durch", "zeit"};
+  for (auto k : felder) PRUEFE(!d[k].isUnbound());
+  PRUEFE(d["id"] == "x-1" && d["wert_text"] == "Normal" && d["quelle"] == "App" && d["warten_s"] == 12);
+  PRUEFE(d["phase"] == "vorgemerkt" && d["ende"] == false && d["zeit"] == 1790000100u);
+}
+
+TEST(status_json_aufbau) {
+  bf::Status st;
+  bf::Schaltung s;
+  JsonDocument d;
+  PRUEFE(!deserializeJson(d, bf::status_json(st, s, "v27", 0, -1)));
+  PRUEFE(d["v"] == 1 && d["firmware"] == "v27" && d["zeit"].isNull());
+  PRUEFE(d["heizkreis"]["vorgabe"].isNull() && d["heizkreis"]["ist"].isNull() && !d["heizkreis"]["quelle"].isUnbound());
+  PRUEFE(d["warmwasser"]["ladung"].isNull() && d["bus"]["lebt"] == false && d["bus"]["letzter_frame_s"].isNull());
+  PRUEFE(d["schalten"]["laufend"].isNull() && d["schalten"]["warteschlange"].size() == 0);
+  PRUEFE(d["schalten"]["letzte"]["heizkreis"].isNull() && d["schalten"]["frei_ab"].isNull());
+
+  st.anlass("regel R3", true, false);
+  st.hk_gelesen(3, 1790000000);
+  st.hk_bits = 0x0040;
+  st.ww_gelesen(2, 1790000005);
+  st.ww_soll_akt = 8.04f;
+  st.kesselstatus = 15;
+  st.bus_lebt = true;
+  st.frei_ab = 1790000030;
+  bf::Anfrage a; a.id = "17"; a.id_zahl = true; a.wert = 1;
+  s.annehmen(bf::ZIEL_WW, a, 20);
+  JsonDocument e;
+  PRUEFE(!deserializeJson(e, bf::status_json(st, s, "v27", 1790000010, 1)));
+  PRUEFE(e["heizkreis"]["vorgabe"] == 3 && e["heizkreis"]["vorgabe_text"] == "Zeitprogramm 2");
+  PRUEFE(e["heizkreis"]["ist"] == "zeitprogramm" && e["heizkreis"]["heizt"] == true && e["heizkreis"]["quelle"] == "regel R3");
+  PRUEFE(e["warmwasser"]["vorgabe_text"] == "Aus" && e["warmwasser"]["quelle"] == "lesung" && e["warmwasser"]["ladung"] == true);
+  PRUEFE(std::fabs(e["warmwasser"]["soll_aktuell"].as<double>() - 8.0) < 1e-9);
+  PRUEFE(e["kessel"]["status_text"] == "Warmwasserbetrieb" && e["bus"]["letzter_frame_s"] == 1);
+  PRUEFE(e["schalten"]["warteschlange"].size() == 1 && e["schalten"]["warteschlange"][0]["id"] == 17);
+  PRUEFE(e["schalten"]["frei_ab"] == 1790000030u);
+  PRUEFE(st.grund_hk.empty());                                // Anlass bei der Lesung verbraucht
+  JsonDocument g;                                             // Sperrminute vorbei: frei_ab null
+  PRUEFE(!deserializeJson(g, bf::status_json(st, s, "v27", 1790000031, 1)) && g["schalten"]["frei_ab"].isNull());
+}
+
+TEST(status_json_drossel) {
+  bf::Status st;
+  PRUEFE(bf::senden_faellig(st, 1000));                       // Start: einmal senden
+  st.geaendert = false; st.zuletzt_ms = 1000;
+  PRUEFE(!bf::senden_faellig(st, 1500));                      // nichts geaendert
+  st.setze(st.kesselstatus, 10);
+  PRUEFE(st.geaendert && !bf::senden_faellig(st, 2500));      // geaendert, aber < 2 s
+  PRUEFE(bf::senden_faellig(st, 3000));
+  st.geaendert = false;
+  st.setze(st.kesselstatus, 10);                              // gleicher Wert: keine Aenderung
+  PRUEFE(!st.geaendert);
+  st.setze_f(st.ww_soll_akt, 50.0f);
+  PRUEFE(st.geaendert);
+  st.geaendert = false;
+  st.setze_f(st.ww_soll_akt, 50.01f);                         // Rauschen unter 0,05 K
+  PRUEFE(!st.geaendert);
+  PRUEFE(bf::senden_faellig(bf::Status(), 0xFFFFFFF0u));      // millis()-Ueberlauf egal
 }
 
 int main() {
