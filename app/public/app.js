@@ -91,6 +91,20 @@ function startProgress() {
 
 let currentModeCode = null;
 
+// ── Ergebnis eines Schaltbefehls verfolgen ────────────────────
+// Nach einem Knopfdruck 3 min lang alle 10 s abfragen und das "Ergebnis letzter
+// Schaltbefehl" des Boards zeigen: vorgemerkt -> sende an WEM -> OK / NICHT uebernommen.
+let letzterSchaltStatus = null;
+let schaltBeobachtung = null;
+function startBeobachtung() {
+  schaltBeobachtung = { seit: Date.now(), vorher: letzterSchaltStatus };
+  for (let i = 1; i <= 18; i++) setTimeout(refreshStatus, i * 10000);
+}
+function schoen(t) {
+  return t.replace(/uebernommen/g, 'übernommen').replace(/Rueckmeldung/g, 'Rückmeldung')
+          .replace(/bestaetigt/g, 'bestätigt').replace(/pruefe/g, 'prüfe').replace(/naechster/g, 'nächster');
+}
+
 function abbrevMode(label) {
   if (!label) return '—';
   if (/zeitprogramm\s*1/i.test(label)) return 'Z1';
@@ -147,6 +161,15 @@ async function refreshStatus() {
     const warte = data.warteschlange && data.warteschlange !== 'leer' ? ` · ${data.warteschlange}` : '';
     document.getElementById('message').textContent = `Aktualisiert ${time}${warte}`;
     setStatus(allNull ? 'err' : 'ok');
+
+    if (schaltBeobachtung && Date.now() - schaltBeobachtung.seit < 180000 &&
+        data.schaltStatus && data.schaltStatus !== schaltBeobachtung.vorher) {
+      const t = data.schaltStatus;
+      const fertig = /OK:|NICHT|abgelehnt|Rueckmeldung|nicht erreichbar/.test(t);
+      setStatus(/OK:/.test(t) ? 'ok' : fertig ? 'err' : '');
+      document.getElementById('message').textContent = schoen(t);
+    }
+    letzterSchaltStatus = data.schaltStatus;
     startProgress();
   } catch (err) {
     setStatus('err');
@@ -166,7 +189,7 @@ async function setMode(modeCode, modeLabel) {
     if (!res.ok) throw new Error(data.error || 'Fehler');
     setStatus('ok');
     document.getElementById('message').textContent = `${modeLabel} vorgemerkt – wird in bis zu einer Minute geschaltet`;
-    setTimeout(refreshStatus, 15000);
+    startBeobachtung();
   } catch (err) {
     setStatus('err');
   }
@@ -185,7 +208,7 @@ async function setWarmwasser(an) {
     if (!res.ok) throw new Error(data.error || 'Fehler');
     setStatus('ok');
     document.getElementById('message').textContent = `Warmwasser ${an ? 'Ein' : 'Aus'} vorgemerkt – wird in bis zu einer Minute geschaltet`;
-    setTimeout(refreshStatus, 15000);
+    startBeobachtung();
   } catch (err) {
     setStatus('err');
     document.getElementById('message').textContent = err.message || 'Fehler';
