@@ -265,6 +265,8 @@ billiger, aber **ohne** galvanische Trennung.
 
 ## Kontakt
 
+**Autor:** Juergen Vejmelka
+
 Fragen, Fehlermeldungen und Rückmeldungen von anderen Anlagen bitte als
 [GitHub-Issue](https://github.com/jvejmelka/weishaupt-wem-can-esphome/issues).
 
