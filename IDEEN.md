@@ -53,8 +53,50 @@ Ein Telegraf-Eingang für die Board-Werte sieht etwa so aus:
     tags  = "_/_/messwert/_"
 ```
 
-Zahlen und Texte kommen dabei gemischt an. Wer nur Zahlen speichern will, filtert die Texte mit
-einem Prozessor heraus oder wandelt sie in Grafana um.
+**Warum `data_type = "string"`:** ESPHome veröffentlicht Textsensoren (Betriebsart, Schaltstatus …)
+**auch** unter `sensor/+/state`. Mit `float` wäre jeder davon ein Parsefehler im Log – bei uns rund
+40 pro Minute. Deshalb als Text einlesen und nur Zahlen durchlassen:
+
+```toml
+[[processors.starlark]]
+  namepass = ["heizung_can"]
+  source = '''
+def apply(metric):
+    v = metric.fields.get("value")
+    if type(v) != "string":
+        return metric
+    t = v.strip()
+    u = t[1:] if t.startswith("-") else t
+    if u == "" or u.count(".") > 1 or not u.replace(".", "").isdigit():
+        return None          # Text: verwerfen
+    metric.fields["value"] = float(t)
+    return metric
+'''
+```
+
+> **Änderungen erst an einer Kopie prüfen.** Eine fehlerhafte Datei in `telegraf.d/` hält den
+> ganzen Dienst an, nicht nur diesen Eingang:
+> `telegraf --config /etc/telegraf/telegraf.conf --config-directory <kopie> --test`
+
+### Alarme
+
+Eine Datenfluss-Regel („kommen noch Werte?“) merkt einen toten Bus **nicht**: das Board sendet auch
+dann weiter (Laufzeit, WLAN, „Letzter CAN-Frame vor“). Dafür eine eigene Regel auf das Alter des
+letzten Frames, in Grafana mit Schwelle **> 300 s**:
+
+```
+from(bucket: "<bucket>")
+  |> range(start: -15m)
+  |> filter(fn: (r) => r._measurement == "heizung_can" and r.messwert == "letzter_can-frame_vor" and r._field == "value")
+  |> last()
+  |> group()
+  |> keep(columns: ["_time", "_value"])
+```
+
+`group()` und `keep()` sind Pflicht: ohne sie bleiben die Tag-Spalten stehen, Grafana bekommt eine
+„long series“ und die Regel steht dauerhaft im Fehler. `execErrState` auf **Error** setzen (nicht
+Alerting) – sonst meldet ein Abfragefehler einen stillen Bus. Ist das Board selbst weg (keine
+Daten), meldet das die Datenfluss-Regel.
 
 ## 1. Warmwasser-Sperre per JSON (H2-Ersatz ohne Kabel)
 

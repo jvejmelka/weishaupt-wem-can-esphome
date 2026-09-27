@@ -94,9 +94,16 @@ Welche das sind, steht in [Abschnitt 3](#3-was-mitgehört-wird).
 
 ### Takt der eigenen Anfragen
 
-Das WEM-Portal lässt für seinen Datenlogger höchstens alle 40 s je Wert abfragen; die
-Datenpunktliste des WEM-Modbus-Gateways nennt Mindestabstände von 30 s / 60 s / 10 min. Die
-Firmware fragt deshalb keinen Wert öfter als alle 40 s:
+Die Zahlen stammen von Weishaupt selbst:
+
+| Quelle | Angabe |
+|---|---|
+| WEM-Portal, Datenlogger | kürzestes wählbares Intervall **40 s** je Wert |
+| Registertabelle (Datenpunktliste des WEM-Modbus-Gateways) | Aktualisierungsklassen **s / m / l = 30 s / 60 s / 10 min** je Objekt |
+| WEM-Modbus-Gateway | fragt den WEM selbst im **30-s-Takt** ab – schließt dafür aber das WEM-Portal aus |
+
+Regelmäßige Abfragen sind also nicht an sich das Problem, wohl aber mehrere Abfrager zugleich (s.
+[Abschnitt 8](#8-wann-sich-der-wem-aufhängt)). Die Firmware fragt keinen Wert öfter als alle 40 s:
 
 | Werte | Takt |
 |---|---|
@@ -146,7 +153,14 @@ den WEM nur zum Schalten ansprechen.**
 
 Nach CANopen-Konvention stammen PDOs auf `0x180 + n` vom Knoten *n*; `0x182` ist damit vom Kessel,
 `0x1C1` vom WEM. Welche Werte bei einem vollständigen WEM-Ausfall tatsächlich weiterlaufen, ist
-**nicht getestet**. Mit eingeschalteten eigenen Anfragen liest das Board die Kesselwerte aus
+**nicht getestet**. Die Erwartung:
+
+| bleiben voraussichtlich (PDOs, s. [Abschnitt 3](#3-was-mitgehört-wird)) | fallen weg |
+|---|---|
+| Außentemperatur, Vorlaufsoll/„Heizanforderung“, Warmwasser, Uhrzeit, Kesselstatus | alles, was nur als Antwort auf **Fragen des WEM** mitgehört wird (Druck, Leistung, Wärmemengen …) und die WEM-Schreibtelegramme |
+
+Die Kesseltemperatur steht zusätzlich in PDO `0x241`, Bytes 2–3 – sie lässt sich also auch ohne
+WEM-Anfragen mithören. Wer welches der PDOs sendet, ist nicht in jedem Fall geklärt. Mit eingeschalteten eigenen Anfragen liest das Board die Kesselwerte aus
 [Abschnitt 4](#4-was-auf-anforderung-gelesen-wird) selbst und ist damit vom WEM unabhängig.
 
 ## 3. Was mitgehört wird
@@ -154,18 +168,24 @@ Nach CANopen-Konvention stammen PDOs auf `0x180 + n` vom Knoten *n*; `0x182` ist
 **Stand:** *belegt* = an der Anlage gegen Kesseldisplay oder eine unabhängige Quelle geprüft;
 *plausibel* = Werte passen, aber nicht gegengeprüft; *unbestätigt* = Deutung aus fremden Quellen.
 
+> **Was als Gegenprobe zählt – und was nicht:** Eine App oder das Portal, die dieselben Register
+> lesen, bestätigen nur die gemeinsame Annahme (Zirkelschluss). Unabhängig sind das
+> **Kesseldisplay**, ein **Wetterdienst** für die Außentemperatur und physikalische Kriterien,
+> etwa **Vorlauf > Kessel > Rücklauf** bei laufendem Brenner.
+
 ### PDOs und Schreibtelegramme
 
 | CAN-ID | Bytes | Inhalt | Faktor | Name in der Firmware | Stand |
 |---|---|---|---|---|---|
 | `0x201` | 1–2 | Außentemperatur, int16 | 0,1 °C | Aussentemperatur | **belegt** (Display, Wetterdienst) |
 | `0x201` | 0 | Systembetriebsart: 0 Aus, 1 Standby, 2 Sommer, 3 Automatik | – | Systembetriebsart | plausibel |
-| `0x241` | 0–1 | Heizanforderung, int16 | 0,1 °C | Heizanforderung | plausibel (0 bei „Heizkreise inaktiv“) |
+| `0x241` | 0–1 | **Vorlaufsoll Heizkreis**, int16 – derselbe Wert, den der WEM in `0x252C` schreibt (s. `0x602`); 0 = keine Anforderung | 0,1 °C | Heizanforderung *(Name historisch)* | plausibel (0 bei „Heizkreise inaktiv“) |
 | `0x241` | 2–3 | Kesseltemperatur (gleich `0x2532`) | 0,1 °C | Kesseltemperatur | plausibel |
 | `0x241` | 6–7 | Warmwassertemperatur | 0,1 °C | Warmwasser | **belegt** (Display) |
 | `0x181` | 0–5 | Stunde, Minute, Jahr − 2000, Monat, Tag, Wochentag | – | Uhrzeit Heizung | **belegt** |
 | `0x182` | 0 | Kesselstatus: 0 Standby, 1 Aus, 10 Heizbetrieb, 15 Warmwasserbetrieb, 101 Kaminfeger, 104 Wartung | – | Kesselstatus, Warmwasser aktiv (Status 15) | **belegt** für den Ruhezustand |
-| `0x1C1` | 2–3 | Statusbits Knoten 1 (Objekt `0x274D`): `0x1000` Heizkreis Standby, `0x0040` Heizbetrieb, `0x0010` Warmwasser-Ladung | – | Heizkreis Status | plausibel |
+| `0x1C1` | 2–3 | Statusbits Knoten 1 (Objekt `0x274D`): `0x1000` Heizkreis Standby, `0x0040` Heizbetrieb, `0x0010` Warmwasser-Ladung ¹ | – | Heizkreis Status | plausibel |
+| `0x602` | SDO-Schreibtelegramme **des WEM an den Kessel** | `0x252B`: 01 keine Anforderung, 0A Heizen, 0F Warmwasser · `0x252C`: Vorlaufsoll Heizkreis · `0x252D`: steigt beim Warmwasserladen rampenförmig (auf 50 °C beobachtet) · `0x2709`: 0x64 Heizanforderung aktiv, 0x32 Nachlauf | – | nicht ausgewertet | plausibel |
 | `0x6C2` | SDO-Schreibtelegramm, Objekt `0x2699`/1 | Rücklauftemperatur VPT | 0,1 °C | Ruecklauf | plausibel |
 | `0x6C2` | Objekt `0x2697`/1 | Vorlauftemperatur VPT | 0,1 °C | Vorlauf VPT | plausibel |
 | `0x6C2` | Objekt `0x2698`/1 | Sollleistung | 0,01 % | Sollleistung | plausibel |
@@ -177,6 +197,10 @@ bestätigt auf `0x682`. Die Objektbedeutung stammt aus
 `0x2694`/1 und `0x2695`/1 – nicht ausgewertet.
 
 Nicht ausgewertet werden außerdem die PDOs `0x1C2` und `0x082` sowie die Heartbeats `0x701`/`0x702`.
+
+¹ `0x1C1` kommt **nur bei Änderung**, nicht zyklisch – die Firmware speichert den letzten Stand.
+Vorsicht bei der Schreibweise: die Bytes 2–3 sind little-endian. Rohbytes `00 00 10 00` ergeben
+m = `0x0010` (Warmwasser-Ladung), Rohbytes `00 00 00 10` ergeben m = `0x1000` (Standby).
 
 ### SDO-Antworten auf Fragen des WEM
 
@@ -203,6 +227,21 @@ geronet1 die Rücklauftemperatur VPT – an der Anlage **noch nicht geprüft**.
 
 Wie oft der WEM ein Objekt abfragt, schwankt stark; „selten“ heißt: deutlich seltener als einmal
 pro Minute. Die Liste stammt aus einem Mitschnitt im Sommerbetrieb und ist nicht vollständig.
+
+### Passiv erkennen: was geht und was nicht
+
+Betriebsarten liegen im WEM und kommen nie als eigener Wert über den Bus. Aus Mitschnitten
+von Umschaltungen am Display und per JSON (Heizkreis und Warmwasser, je mehrfach) ergibt sich:
+
+| Umschaltung | passiv erkennbar? | woran |
+|---|---|---|
+| Heizkreis Standby ↔ Zeitprogramm | **ja** | `0x1C1`, Bit `0x1000` |
+| Zeitprogramm 1 ↔ 2 ↔ 3, Sommer, Komfort, Normal, Absenk untereinander | **nein** – kein eigenes Signal | sichtbar ist nur, ob gerade eine Heizanforderung besteht (`0x252B`, `0x252C`, `0x2709`). ZP 2 ↔ ZP 3 per JSON erzeugte **null** Busverkehr; Zeitprogramme unterscheiden sich nur über ihre Schaltzeiten |
+| Raumsoll-Stufe (bei Heizbedarf) | eingeschränkt | Vorlaufsoll aus `0x241` B0–1: Komfort liegt etwa 2,2 K Vorlauf über Normal. Rückrechnung RT ≈ (VL − 1,4 + 1,1 · AT) / 2,1, nur für AT 12,9–15,2 °C geeicht. Absenk fordert erst unter AT ≈ RT − 4,5 an; Sommer sieht bei mildem Wetter aus wie Absenk |
+| Warmwasser Ein ↔ Aus | **dass** umgeschaltet wurde: ja · **wohin**: nein | der WEM liest vom Kessel die Folge `2101/0A, 2102/0D, 2102/01, 2101/0A, 273F/01`, 4–13 s später noch einmal `2101/0A, 273F/01`. Spezifisch ist nur die volle Folge mit `2102/0D` + `2102/01` (die Kurzform kommt auch bei Ladebeginn; die volle Folge ohne `273F` einmal beim Neustart des WEM). Die Richtung zeigt sich nur, wenn eine Ladung einsetzt: `0x252B` = 0F, Rampe in `0x252D`, `0x1C1`-Bit `0x0010` |
+
+**Offen:** Umschaltungen über das WEM-Portal oder die WEM-App wurden nie mitgeschnitten – ob dort
+dieselben Folgen entstehen, ist unbekannt. Die Rückrechnung braucht Winterdaten (AT 0–8 °C).
 
 ## 4. Was auf Anforderung gelesen wird
 
@@ -281,6 +320,21 @@ dort nicht; sie wurde per Scan und Differenz gefunden (s. [Abschnitt 7](#7-neue-
 
 Über das Schreibfeld der Weboberfläche lassen sich weitere Objekte schreiben, aber nur in den
 Modulen MI 01, 02 und 03 (s. [Abschnitt 6](#6-weboberfläche-lesen-und-schreiben)).
+
+### Belegte Leseobjekte: Wärmemengen
+
+Die Firmware liest nichts über JSON. Wer es dennoch tut: diese Objekte antworten an der
+WTC-GW 15-B mit `CM 02` (alle **MI 09 / MX 01**, OS `02`, 4 Byte):
+
+| OX | Inhalt | Faktor | am Bus |
+|---|---|---|---|
+| `0x2628` | Wärmemenge Vortag gesamt | 0,01 kWh | Knoten 2 `0x2728`/2 |
+| `0x2626` | Wärmemenge Vortag Heizung | 0,01 kWh | Knoten 2 `0x2726`/2 |
+| `0x2627` | Wärmemenge Vortag Warmwasser | 0,01 kWh | Knoten 2 `0x2727`/2 |
+| `0x2631` | Wärmeleistung aktuell | 0,01 kW | Knoten 2 `0x2731`/2 |
+
+Unter **MI 07 / MX 00** liefern dieselben OX `CM 05` – s. das Warnbeispiel in
+[Abschnitt 8](#regeln-die-daraus-folgen).
 
 ### Abbildung JSON-Objekt → CAN-Objekt
 
@@ -617,7 +671,10 @@ wenn nötig.
 
 - HTTP 200 mit leerem Körper statt JSON („Leerantwort“),
 - oder `CM 05` auf **alle** Register, auch auf solche, die vorher antworteten,
-- das WEM-Portal zeigt eingefrorene Werte, obwohl sein Zeitstempel frisch ist,
+- das WEM-Portal zeigt eingefrorene Werte, obwohl sein Zeitstempel frisch ist. Portalwerte sind
+  ohnehin ein **Cloud-Cache** mit Minuten Verzug, einzelne Werte bleiben auch im Normalbetrieb
+  stehen. Echtheitstest: die Außentemperatur gegen einen Wetterdienst halten – folgt sie dem
+  Tagesgang nicht, ist sie eingefroren,
 - der CAN-Bus läuft währenddessen normal weiter: der WEM fragt den Kessel weiter ab, der Kessel
   antwortet, das Board liest unverändert.
 
@@ -662,11 +719,20 @@ einzige vorherige `CM 05`-Antwort, nach einer Leerantwort und einer sofortigen W
 ### Regeln, die daraus folgen
 
 1. **Nur Objekte ansprechen, deren Existenz belegt ist.** Unbekannte Objekte vorher am Bus lesen.
+   Warnbeispiel: die Wärmemengen „zur Sicherheit unter beiden Modulen“ abzufragen (MI 09/01 **und**
+   MI 07/00, s. [Abschnitt 5](#belegte-leseobjekte-wärmemengen)) kostet bei jedem Aufruf vier
+   `CM 05` – nach wenigen Aufrufen sind die zehn Plätze verbraucht.
 2. **Mindestens eine Minute zwischen zwei JSON-Befehlen**, besser mehr.
 3. **Kein Polling über JSON.** Werte am Bus lesen.
-4. **Ein Client** an der JSON-Schnittstelle. Diese Firmware spricht den WEM nur an, wenn jemand
-   schaltet.
-5. Nach einer Leerantwort **nicht sofort wiederholen**.
+4. **Ein Client** an der JSON-Schnittstelle. Wer mehrere Nutzer hat (App, Automation), führt alle
+   über **eine** Stelle mit einer Sperre (Mutex). Diese Firmware spricht den WEM nur an, wenn
+   jemand schaltet.
+5. **Höchstens sechs Register pro Anfrage** – mehr erzeugt sporadisch `CM 05`
+   ([kraiz #15](https://github.com/kraiz/hassio-weishaupt/issues/15)).
+6. Nach einer Leerantwort oder reinem `CM 05` **nicht sofort wiederholen**, sondern gestuft
+   pausieren: 2 → 4 → 8 → 16 → 30 min; die erste gesunde Antwort setzt zurück.
+7. **Keep-Alive bringt nichts:** der WEM schließt jede TCP-Verbindung nach der Antwort selbst.
+   Der einzige Hebel ist die Zahl der Anfragen.
 
 ## 9. Beispiel: Heizkreis auf „Zeitprogramm 1“
 

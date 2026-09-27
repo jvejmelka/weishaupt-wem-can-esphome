@@ -116,6 +116,8 @@ wählen (Linux meist `/dev/ttyACM0`, Windows `COMx`).
 - Alternative ohne lokales Flashen: `esphome compile …`, dann die Datei
   `.esphome/build/<geraet>/build/firmware.factory.bin` im Browser mit
   https://web.esphome.io an Adresse 0 schreiben.
+- `esphome run` endet nach dem Kompilieren manchmal mit Exitcode 1, ohne hochzuladen. Dann in
+  zwei Schritten: `esphome compile …` und `esphome upload … --device <IP oder Port>`.
 - Debians eigenes `esptool`-Paket bringt teils die Stub-Dateien nicht mit
   (`FileNotFoundError … stub_flasher_32.json`). Dann `--no-stub` anhängen oder esptool per pip
   installieren.
@@ -127,10 +129,24 @@ Nach dem Start verbindet sich das Board mit dem WLAN.
 1. IP im Router nachsehen (Gerätename wie `geraet`) und dort **fest reservieren**.
    Geht das nicht, Paket `feste-ip` einschalten und die `feste_ip_*`-Werte eintragen.
 2. Weboberfläche öffnen: `http://<IP>`, Benutzer `admin`, Passwort `web_password`.
-3. Ab jetzt braucht das Board kein USB mehr – ans Netzteil, Updates gehen per OTA.
+3. Ab jetzt braucht das Board kein USB mehr – ans Netzteil (**ab 1 A**, sonst Neustarts bei
+   WLAN-Sendespitzen), Updates gehen per OTA.
 
 Findet es kein WLAN, macht das Board nach etwa einer Minute den Hotspot **Weishaupt-WEM-CAN** auf
 (Passwort `ap_password`); darüber lässt sich ein anderes WLAN eintragen.
+
+**Bekannte Fallen:**
+
+- **Lebenszeichen am Broker oder in der Weboberfläche prüfen, nicht an der Konsole.** Mit
+  abgeschaltetem UART-Log (`logger: baud_rate: 0`, in manchen Vorlagen) bleibt die serielle
+  Konsole still, obwohl das Board läuft.
+- **Die LED ist die Datenverkehrs-LED des USB-Wandlers**, kein Betriebsanzeiger – am Netzteil
+  bleibt sie dunkel.
+- Die Weboberfläche bringt ihre Skripte mit (`web_server: local: true`) und funktioniert ohne
+  Internet.
+- **Web-API:** Entitäten werden über ihren **Namen** angesprochen (URL-kodiert), mit Basic Auth;
+  POST braucht einen (leeren) Körper, sonst HTTP 411:
+  `curl -u admin:<pw> -X POST -d '' "http://<IP>/switch/CAN-Rohmitschnitt%20nach%20MQTT/turn_on"`
 
 ## 8. An den Bus anschließen
 
@@ -181,6 +197,16 @@ topic readwrite homeassistant/#
 # nur wenn Home Assistant schalten soll:
 topic write weact-can485-weishaupt/cmd/#
 ```
+
+**Regeln testen – aber richtig:** MQTT 3.1.1 verwirft eine verbotene Veröffentlichung **still**,
+`mosquitto_pub` endet trotzdem mit Exitcode 0. Erst MQTT 5 meldet den Fehler:
+
+```
+mosquitto_pub -V 5 -q 1 -u homeassistant -P <pw> -t weact-can485-weishaupt/cmd/status -m 1
+# ohne Schreibrecht: "Publish 1 failed: Not authorized."
+```
+
+Ein neuer Benutzer **ohne** `topic`-Zeile darf nichts – auch nicht lesen.
 
 Home Assistant findet das Board per **MQTT-Discovery** automatisch
 (Einstellungen → Geräte → MQTT). Mit dem Paket `homeassistant-api` stattdessen über die

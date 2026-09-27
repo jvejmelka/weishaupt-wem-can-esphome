@@ -202,6 +202,11 @@ vergeben: bei manchen Geräten (z. B. Shelly) lässt sich über ein benachbartes
 ### Hinweise
 
 - **Von außen nur hinter einem Reverse Proxy mit TLS.** Die App selbst spricht HTTP.
+- **Kein Forward-Auth-Portal davor** (Authelia & Co.): die App holt ihre Werte per `fetch`; läuft
+  die Portal-Sitzung ab, bekommt sie eine Weiterleitung statt JSON und zeigt nur noch Fehler.
+  Besser Basic Auth am Proxy oder Zugriff über VPN.
+- **Keine Sicherungskopien in `app/public/` ablegen** – alles dort landet im Image und wird
+  ausgeliefert, auch `*.bak`.
 - **Cloudflare & Co. cachen Stil- und Skriptdateien** (bei uns 4 h). Deshalb hängt der Build
   an `style.css` und `app.js` eine Versionsnummer an – nach einem Update genügt einmal Neuladen.
 - **Warum die App den WEM nicht selbst fragt:** Eine frühere Fassung las ihre Werte bei jedem
@@ -277,6 +282,21 @@ billiger, aber **ohne** galvanische Trennung.
   [WLAN inkl. `wifi.configure`](https://esphome.io/components/wifi/),
   [HTTP Request](https://esphome.io/components/http_request/),
   [MQTT](https://esphome.io/components/mqtt/), [Web Server](https://esphome.io/components/web_server/).
+
+## Mithelfen
+
+Offene Punkte, die sich nur an anderen Anlagen oder zu anderer Jahreszeit klären lassen:
+
+| Frage | was helfen würde |
+|---|---|
+| Heizkreis-Codes 6–8 (Komfort, Normal, Absenk) wurden nie am Bus gesehen | Mitschnitt einer Umschaltung auf diese Betriebsarten |
+| Umschaltungen über WEM-Portal oder WEM-App wurden nie mitgeschnitten | Rohmitschnitt während einer Portal-Umschaltung (s. [PROTOKOLL.md](PROTOKOLL.md#passiv-erkennen-was-geht-und-was-nicht)) |
+| Rücklauf-Kandidat `0x2533`/2 ist ungeprüft | Werte bei laufendem Brenner neben dem Display |
+| Rückrechnung der Raumsoll-Stufe nur für AT 12,9–15,2 °C geeicht | Winterdaten (AT 0–8 °C, je Betriebsart 10–15 min stationär) |
+| Was sendet ein Weishaupt-Raumgerät? | Mitschnitte, s. [IDEEN.md, Idee 4](IDEEN.md#gesucht-jemand-mit-weishaupt-raumgerät-am-bus) |
+
+Bitte als [GitHub-Issue](https://github.com/jvejmelka/weishaupt-wem-can-esphome/issues), mit
+Zusammenfassung statt Rohdateien (die können Seriennummern und Gerätekennungen enthalten).
 
 ## Kontakt
 
