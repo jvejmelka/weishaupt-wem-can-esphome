@@ -145,8 +145,10 @@ async function refreshStatus() {
     document.getElementById('wwAus').classList.toggle('active', data.warmwasser === 'Aus');
 
     const brennerBar = document.getElementById('brennerBar');
+    // An/Aus mit "BRENNER —", die Lueftungsphasen allein (sonst zu breit fuers Handy)
+    const bt = data.brennerText ? data.brennerText.toUpperCase() : '?';
     document.getElementById('brennerLabel').textContent =
-      data.brennerAn === true ? 'BRENNER — AN' : 'BRENNER — AUS';
+      (bt === 'AN' || bt === 'AUS' || bt === '?') ? 'BRENNER — ' + bt : bt;
     brennerBar.classList.toggle('active', data.brennerAn === true);
 
     document.getElementById('modeBadge').textContent   = abbrevMode(data.modeLabel);

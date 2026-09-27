@@ -180,6 +180,7 @@ html, body {
   background: #1a1200;
   border-color: var(--amber);
 }
+#brennerLabel { white-space: nowrap; }
 .brenner-icon {
   font-size: 1rem; color: var(--muted);
   transition: color .4s;

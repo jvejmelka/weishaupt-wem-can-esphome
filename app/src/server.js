@@ -120,7 +120,11 @@ app.post('/api/login', (req, res) => {
 // ── API ───────────────────────────────────────────────────────
 app.get('/api/status', (req, res) => {
   const online = text('status') === 'online';
-  const brenner = text('brenner_status');
+  // Brenner aus den ZAHLEN (mit Altersgrenze): "brenner" 1 = Flamme an, "brennerphase" 0-4.
+  // Bis Firmware v19 gab es keine Brennerphase - dann nur an/aus.
+  const flamme = zahl('brenner');
+  const phase = zahl('brennerphase');
+  const PHASE = ['Aus', 'Vorlüften', 'An', 'An', 'Nachlüften'];
   const modeCode = zahl('heizkreis_betriebsart_code');
   const letzterFrame = zahl('letzter_can-frame_vor');
   if (!mqttVerbunden || !online) {
@@ -136,7 +140,8 @@ app.get('/api/status', (req, res) => {
     warmwasserC:      zahl('warmwasser'),
     warmwasser:       text('warmwasser_betriebsart'),          // Vorgabe "Ein" / "Aus" (im WEM, gelesen nach Start und Schalten)
     warmwasserAktiv:  text('warmwasser_aktiv'),                // Ist: laedt gerade "Ein" / "Aus" (passiv, Kesselstatus)
-    brennerAn:        brenner === 'Ein' ? true : brenner === 'Aus' ? false : null,
+    brennerAn:        flamme == null ? null : flamme === 1,
+    brennerText:      phase != null && PHASE[phase] ? PHASE[phase] : (flamme == null ? null : (flamme === 1 ? 'An' : 'Aus')),
     modeCode:         modeCode != null ? Math.round(modeCode) : null,
     modeLabel:        text('heizkreis_betriebsart'),
     modeAktuellLabel: text('heizkreis_status'),

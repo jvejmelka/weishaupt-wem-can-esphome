@@ -345,9 +345,14 @@ canbus:
               else if (idx == 0x2532 && sub == 0) id(wem_kessel).publish_state(v * 0.1f);
               else if (idx == 0x2545 && sub == 0) id(wem_vorlauf_soll).publish_state(v * 0.1f);
               else if (idx == 0x2541 && sub == 0) {
-                int b = (v != 0) ? 1 : 0;
+                // Betriebsphase Brenner (Weishaupt-Registertabelle): 0 aus, 1 Vorbelueftung,
+                // 2 Steuerbetrieb, 3 Regelbetrieb, 4 Nachbelueftung. "Ein" nur mit Flamme (2/3).
+                int ph = v & 0xFF;
+                static const char* n[] = {"Aus", "Vorlueften", "Ein", "Ein", "Nachlueften"};
+                int b = (ph == 2 || ph == 3) ? 1 : 0;
+                id(wem_brennerphase).publish_state((float) ph);
                 id(wem_brenner).publish_state((float) b);
-                id(wem_brenner_text).publish_state(b ? "Ein" : "Aus");
+                id(wem_brenner_text).publish_state(ph <= 4 ? n[ph] : "unbekannt");
                 if (b == 1 && id(brenner_vorher) == 0) {
                   id(brenner_starts) += 1;
                   id(wem_brennerstarts).publish_state((float) id(brenner_starts));
@@ -506,7 +511,7 @@ switch:
     on_turn_off:
       - lambda: |-
           for (auto *s : {id(wem_kessel), id(wem_abgas), id(wem_vorlauf), id(wem_leistung), id(wem_drehzahl),
-                          id(wem_brenner), id(wem_vorlauf_soll), id(wem_volumenstrom), id(wem_druck),
+                          id(wem_brenner), id(wem_brennerphase), id(wem_vorlauf_soll), id(wem_volumenstrom), id(wem_druck),
                           id(hk_vorlauf), id(wem_ww_vlsoll), id(hk_raumsoll_akt)})
             s->publish_state(NAN);
           id(wem_brenner_text).publish_state("unbekannt");
@@ -708,7 +713,12 @@ sensor:
     web_server: { sorting_group_id: g_energie, sorting_weight: 3 }
   # --- Zahlencodes (Text steht jeweils daneben; Zahlen fuer Grafana/InfluxDB) ---
   - platform: template
-    name: "Brenner"                  # 0 = aus, 1 = an; aus den Flanken rechnet Grafana die Taktung
+    name: "Brennerphase"             # 0 aus, 1 Vorbelueftung, 2 Steuer-, 3 Regelbetrieb, 4 Nachbelueftung
+    id: wem_brennerphase
+    update_interval: never
+    web_server: { sorting_group_id: g_codes, sorting_weight: 1 }
+  - platform: template
+    name: "Brenner"                  # 1 = Flamme an (Phase 2/3), sonst 0; aus den Flanken rechnet Grafana die Taktung
     id: wem_brenner
     update_interval: never
     web_server: { sorting_group_id: g_codes, sorting_weight: 1 }

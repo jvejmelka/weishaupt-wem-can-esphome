@@ -1,6 +1,9 @@
 # Changelog – ESP-CAN-Brücke Weishaupt (WeAct CAN485, ESPHome)
 
 
+## v20 – 2026-09-27
+- **Brenner nach Betriebsphase** (0x2541: 0 aus, 1 Vorbelüftung, 2 Steuer-, 3 Regelbetrieb, 4 Nachbelüftung). „Brenner Status“ zeigt jetzt Aus / Vorlüften / Ein / Nachlüften; „Brenner“ (0/1) und der Startzähler zählen nur noch mit Flamme (Phase 2/3), nicht mehr schon beim Vorlüften. Neuer Zahlenwert „Brennerphase“.
+
 ## Handy-App – 2026-09-27
 - Die Web-App liegt jetzt im Ordner `app/`. Ihre frühere Fassung fragte den WEM direkt über JSON ab und hat ihn damit mehrfach gesperrt; jetzt liest sie nur noch MQTT vom Board und schaltet über dessen `cmd`-Topics – kein Zugriff mehr auf den WEM. Neu: Warmwasser mit Vorgabe/Ist und Ein/Aus, Betriebsarten vierspaltig, echter Rücklauf, Datum statt Build-Nummer.
 
