@@ -18,6 +18,10 @@ das am CAN-Bus einer Weishaupt-Brennwertheizung mit **WEM-Systemgerät** (z. B. 
   WLAN-Wechsel ohne neues Flashen.
 - **MQTT** für Messwerte, Lese-, Scan- und Schaltbefehle; wahlweise native Home-Assistant-API.
 
+> **Hinweis:** Privates Projekt ohne Verbindung zu Weishaupt. Nutzung auf eigene Gefahr –
+> das Board spricht mit der Steuerung einer Gasheizung. Arbeiten an der Anlage selbst
+> (Klemmen im Kessel, Fachmann-Parameter) gehören in fachkundige Hände.
+
 ## Sicherheitsregeln – bitte lesen
 
 1. **Auf den Kessel (Knoten 2) wird nie geschrieben.** Die Firmware schickt am Bus nur
@@ -272,5 +276,11 @@ Fragen, Fehlermeldungen und Rückmeldungen von anderen Anlagen bitte als
 
 ## Herkunft
 
-Ausgangspunkt war [MenkeC/Weishaupt-C3supermini](https://github.com/MenkeC/Weishaupt-C3supermini).
-Verwendung auf eigene Gefahr; keine Verbindung zu Weishaupt.
+Ausgangspunkt war [MenkeC/Weishaupt-C3supermini](https://github.com/MenkeC/Weishaupt-C3supermini)
+(ohne Lizenz veröffentlicht). Übernommen sind Protokollangaben – Busgeschwindigkeit, Knotennummern,
+PDOs, einzelne Register mit Faktoren; der Code dieses Repositorys ist neu geschrieben.
+Registerwissen stammt außerdem aus den unter „Quellen“ genannten Projekten.
+
+## Lizenz
+
+[MIT](LICENSE) – © 2026 Juergen Vejmelka. Verwendung auf eigene Gefahr; keine Verbindung zu Weishaupt.
