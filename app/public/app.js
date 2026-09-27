@@ -89,7 +89,6 @@ function startProgress() {
 }
 
 
-let currentModeCode = null;
 
 // ── Ergebnis eines Schaltbefehls verfolgen ────────────────────
 // Nach einem Knopfdruck 3 min lang alle 10 s abfragen und das "Ergebnis letzter
@@ -102,15 +101,77 @@ function startBeobachtung() {
 }
 function schoen(t) {
   return t.replace(/uebernommen/g, 'übernommen').replace(/Rueckmeldung/g, 'Rückmeldung')
-          .replace(/bestaetigt/g, 'bestätigt').replace(/pruefe/g, 'prüfe').replace(/naechster/g, 'nächster');
+          .replace(/bestaetigt/g, 'bestätigt').replace(/pruefe/g, 'prüfe').replace(/naechster/g, 'nächster').replace(/ -> /g, ' → ');
 }
 
-function abbrevMode(label) {
-  if (!label) return '—';
-  if (/zeitprogramm\s*1/i.test(label)) return 'Z1';
-  if (/zeitprogramm\s*2/i.test(label)) return 'Z2';
-  if (/zeitprogramm\s*3/i.test(label)) return 'Z3';
-  return label.slice(0, 2).toUpperCase();
+const zahlText = v => v != null ? v.toFixed(1).replace('.', ',') : '--,-';
+
+// Lokal vorgemerkte Wuensche (bis das Board sie in seiner Warteschlange meldet oder
+// der Stand erreicht ist) - hoechstens 3 min, danach zaehlt nur noch das Board.
+const lokalWunsch = { hk: null, ww: null };
+const HK_NAMEN = ['?', 'Standby', 'Zeitprogramm 1', 'Zeitprogramm 2', 'Zeitprogramm 3', 'Sommer', 'Komfort', 'Normal', 'Absenk'];
+
+// Warteschlange des Boards: "1. Heizkreis -> Sommer (App) | 2. Warmwasser -> Ein (App) - ..."
+function wunschAusWarteschlange(w) {
+  const r = { hk: null, ww: null };
+  if (!w || w === 'leer') return r;
+  const m1 = w.match(/Heizkreis -> ([A-Za-zäöü]+(?: \d)?)/);
+  if (m1) { const i = HK_NAMEN.indexOf(m1[1]); if (i > 0) r.hk = i; }
+  const m2 = w.match(/Warmwasser -> (Ein|Aus)/);
+  if (m2) r.ww = m2[1];
+  return r;
+}
+
+// Hinweis-Zeile im Knopf setzen/entfernen
+function markiere(btn, art) {
+  btn.classList.remove('vorgemerkt', 'abweichend', 'mit-hinweis');
+  const alt = btn.querySelector('.hinweis'); if (alt) alt.remove();
+  if (!art) return;
+  btn.classList.add(art, 'mit-hinweis');
+  const h = document.createElement('span');
+  h.className = 'hinweis'; h.textContent = art;
+  btn.appendChild(h);
+}
+
+// Weicht der Heizkreis-Status (Statusbits) von der Vorgabe ab? Die Statusbits kennen nur
+// "Standby" oder "Zeitprogramm" (ohne Nummer) - verglichen wird deshalb nur Standby gegen
+// Zeitprogramm 1-3. Sommer/Komfort/Normal/Absenk lassen sich daraus nicht pruefen.
+function hkAbweichend(code, ist) {
+  if (code == null || !ist) return false;
+  const istStandby = /^Standby/.test(ist);
+  const istZp = /^Zeitprogramm/.test(ist);
+  if (code === 1) return istZp;
+  if (code >= 2 && code <= 4) return istStandby;
+  return false;
+}
+
+function zeigeWuensche(data) {
+  const board = wunschAusWarteschlange(data.warteschlange);
+  const jetzt = Date.now();
+  // lokale Wuensche verfallen nach 3 min oder sobald der Stand erreicht ist
+  if (lokalWunsch.hk && (jetzt - lokalWunsch.hk.t > 180000 || data.modeCode === lokalWunsch.hk.v)) lokalWunsch.hk = null;
+  if (lokalWunsch.ww && (jetzt - lokalWunsch.ww.t > 180000 || data.warmwasser === lokalWunsch.ww.v)) lokalWunsch.ww = null;
+  const hkWunsch = board.hk ?? (lokalWunsch.hk && lokalWunsch.hk.v);
+  const wwWunsch = board.ww ?? (lokalWunsch.ww && lokalWunsch.ww.v);
+
+  document.querySelectorAll('#modes .mode-btn').forEach(btn => {
+    const v = Number(btn.dataset.mode);
+    btn.classList.toggle('active', v === data.modeCode);
+    let art = null;
+    if (hkWunsch && hkWunsch !== data.modeCode && v === hkWunsch) art = 'vorgemerkt';
+    else if (!hkWunsch && v === data.modeCode && hkAbweichend(data.modeCode, data.modeAktuellLabel)) art = 'abweichend';
+    markiere(btn, art);
+  });
+  for (const [id, wert] of [['wwEin', 'Ein'], ['wwAus', 'Aus']]) {
+    const btn = document.getElementById(id);
+    btn.classList.toggle('active', data.warmwasser === wert);
+    markiere(btn, (wwWunsch && wwWunsch !== data.warmwasser && wwWunsch === wert) ? 'vorgemerkt' : null);
+  }
+}
+
+function hkIstText(ist) {
+  if (!ist) return '—';
+  return ist.replace(/\s*\+\s*WW-Ladung/, ' · WW lädt').replace(/\s*\(0x[0-9A-F]+\)/i, '');
 }
 
 async function refreshStatus() {
@@ -119,47 +180,38 @@ async function refreshStatus() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Fehler');
 
-    const setCard = (id, value) => {
+    const setText = (id, value) => {
       const el = document.getElementById(id);
-      if (el) el.textContent = value != null ? value.toFixed(1) : '--,-';
+      if (el) el.textContent = zahlText(value);
     };
+    setText('outsideTemp',   data.outsideTempC);
+    setText('kesselTemp',    data.kesselTempC);
+    setText('ruecklaufTemp', data.ruecklaufTempC);
+    setText('vorlaufIst',    data.vorlaufIstC);
+    setText('vorlaufSoll',   data.vorlaufSollC);
+    setText('wwIst',         data.warmwasserC);
 
-    setCard('outsideTemp', data.outsideTempC);
-    setCard('kesselTemp',  data.kesselTempC);
-    setCard('ruecklaufTemp', data.ruecklaufTempC);
-    setCard('vorlaufIst',  data.vorlaufIstC);
-    setCard('vorlaufSoll', data.vorlaufSollC);
+    // Ist-Anzeigen rechts neben den Blocktiteln
+    const hkIst = document.getElementById('hkIst');
+    hkIst.textContent = hkIstText(data.modeAktuellLabel);
+    hkIst.parentElement.title = data.modeAktuellLabel || '';
+    document.getElementById('wwAktiv').textContent =
+      data.warmwasserAktiv === 'Ein' ? 'lädt gerade' : data.warmwasserAktiv === 'Aus' ? 'keine Ladung' : '—';
 
-    const ww = document.getElementById('wwIst');
-    ww.textContent = data.warmwasserC != null ? data.warmwasserC.toFixed(1) : '--,-';
-    document.getElementById('wwVorgabe').textContent = data.warmwasser ? data.warmwasser.toUpperCase() : '—';
-    document.getElementById('wwAktiv').textContent = data.warmwasserAktiv ? data.warmwasserAktiv.toUpperCase() : '—';
-    document.getElementById('wwEin').classList.toggle('active', data.warmwasser === 'Ein');
-    document.getElementById('wwAus').classList.toggle('active', data.warmwasser === 'Aus');
+    // Brenner im Kessel-Block: Aus / Vorlüften / An / Nachlüften
+    document.getElementById('brennerText').textContent = data.brennerText ? data.brennerText.toLowerCase() : '—';
+    document.getElementById('brennerZeile').classList.toggle('an', data.brennerAn === true);
 
-    const brennerBar = document.getElementById('brennerBar');
-    // An/Aus mit "BRENNER —", die Lueftungsphasen allein (sonst zu breit fuers Handy)
-    const bt = data.brennerText ? data.brennerText.toUpperCase() : '?';
-    document.getElementById('brennerLabel').textContent =
-      (bt === 'AN' || bt === 'AUS' || bt === '?') ? 'BRENNER — ' + bt : bt;
-    brennerBar.classList.toggle('active', data.brennerAn === true);
-
-    document.getElementById('modeBadge').textContent   = abbrevMode(data.modeLabel);
-    document.getElementById('modeAktuell').textContent = abbrevMode(data.modeAktuellLabel);
-
-    if (currentModeCode !== data.modeCode) {
-      currentModeCode = data.modeCode;
-      document.querySelectorAll('.mode-btn').forEach(btn => {
-        btn.classList.toggle('active', Number(btn.dataset.mode) === data.modeCode);
-      });
-    }
+    zeigeWuensche(data);
 
     // Rot wenn Gerät hängt (alle Werte null)
     const allNull = data.outsideTempC == null && data.kesselTempC == null && data.ruecklaufTempC == null;
     const now = new Date();
     const time = now.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    const warte = data.warteschlange && data.warteschlange !== 'leer' ? ` · ${data.warteschlange}` : '';
-    document.getElementById('message').textContent = `Aktualisiert ${time}${warte}`;
+    const gm = data.statusGelesen && data.statusGelesen.match(/(\d\d:\d\d)(?::\d\d)?\s+gelesen/);
+    const gelesen = gm ? ` · Status gelesen ${gm[1]}` : '';
+    const warte = data.warteschlange && data.warteschlange !== 'leer' ? ` · ${schoen(data.warteschlange)}` : '';
+    document.getElementById('message').textContent = `Aktualisiert ${time}${gelesen}${warte}`;
     setStatus(allNull ? 'err' : 'ok');
 
     if (schaltBeobachtung && Date.now() - schaltBeobachtung.seit < 180000 &&
@@ -167,6 +219,7 @@ async function refreshStatus() {
       const t = data.schaltStatus;
       const fertig = /OK:|NICHT|abgelehnt|Rueckmeldung|nicht erreichbar/.test(t);
       setStatus(/OK:/.test(t) ? 'ok' : fertig ? 'err' : '');
+      if (fertig) { lokalWunsch.hk = null; lokalWunsch.ww = null; }
       document.getElementById('message').textContent = schoen(t);
     }
     letzterSchaltStatus = data.schaltStatus;
@@ -188,11 +241,13 @@ async function setMode(modeCode, modeLabel) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Fehler');
+    lokalWunsch.hk = { v: modeCode, t: Date.now() };
     setStatus('ok');
     document.getElementById('message').textContent = `${modeLabel} vorgemerkt – wird in bis zu einer Minute geschaltet`;
     startBeobachtung();
   } catch (err) {
     setStatus('err');
+    document.getElementById('message').textContent = err.message || 'Fehler';
   }
 }
 
@@ -207,6 +262,7 @@ async function setWarmwasser(an) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Fehler');
+    lokalWunsch.ww = { v: an ? 'Ein' : 'Aus', t: Date.now() };
     setStatus('ok');
     document.getElementById('message').textContent = `Warmwasser ${an ? 'Ein' : 'Aus'} vorgemerkt – wird in bis zu einer Minute geschaltet`;
     startBeobachtung();
@@ -301,7 +357,6 @@ document.addEventListener('visibilitychange', () => {
 });
 
 async function init() {
-  currentModeCode = null;
   try { await loadMeta(); } catch (e) { console.warn('loadMeta failed:', e); }
   await refreshStatus();
 

@@ -136,12 +136,13 @@ Auf dem Startbildschirm installierbar („+ App“).
 | Bereich | Inhalt | Quelle |
 |---|---|---|
 | Kopfzeile | grüner Punkt = letzter Abruf erfolgreich, rot = Problem; oranger Strich = Countdown bis zum nächsten Abruf (30 s) | App |
-| Brenner | **Aus / Vorlüften / An / Nachlüften** (An nur mit Flamme); VORGABE = eingestellte Heizkreis-Betriebsart, IST = Heizkreis-Status aus den Statusbits | Board: `brennerphase`, `heizkreis_betriebsart`, `heizkreis_status` |
-| Betriebsart | acht Knöpfe (Standby, ZP 1–3, Sommer, Komfort, Normal, Absenk), die aktive ist hervorgehoben | Knopf → `cmd/heizkreis` |
-| STATUS LESEN | Knopf neben „Betriebsart“: lässt das Board Heizkreis- und Warmwasser-Betriebsart einmal vom Bus lesen (die liest es sonst nur bei Anlass); die Statuszeile zeigt „angefordert …“ und dann „Status HH:MM:SS gelesen“ | Knopf → `cmd/status`; Board: `status_gelesen` |
-| Warmwasser | Temperatur, Knöpfe EIN/AUS, VORGABE = eingestellte Betriebsart, IST = lädt gerade | Board: `warmwasser`, `warmwasser_betriebsart`, `warmwasser_aktiv`; Knopf → `cmd/warmwasser` |
-| Messwerte | Außentemperatur, Kessel, Rücklauf, Vorlauf Ist, Vorlauf Soll | Board, überwiegend passiv mitgelesen |
-| Statuszeile | „Aktualisiert HH:MM:SS“, dahinter die Warteschlange des Boards; nach einem Knopfdruck 3 min lang der Fortschritt: vorgemerkt → gesendet → **OK** (grün) oder **NICHT übernommen / abgelehnt (CM=05) / keine Rückmeldung** (rot); Fehler wie „CAN-Board nicht erreichbar“ | Board: `ergebnis_letzter_schaltbefehl`, `warteschlange` |
+| Heizkreis | acht Knöpfe (Standby, ZP 1–3, Sommer, Komfort, Normal, Absenk), **der markierte ist die Vorgabe**; rechts vom Titel „ist: …“ = Heizkreis-Status aus den Statusbits | Board: `heizkreis_betriebsart_code`, `heizkreis_status`; Knopf → `cmd/heizkreis` |
+| ↻ (beim Heizkreis) | lässt das Board Heizkreis- und Warmwasser-Betriebsart einmal vom Bus lesen (die liest es sonst nur bei Anlass); die Statuszeile zeigt „angefordert …“ und dann „Status HH:MM:SS gelesen“ | Knopf → `cmd/status`; Board: `status_gelesen` |
+| Warmwasser | Temperatur (Fühler **unten** im Speicher), Knöpfe EIN/AUS – **markiert = Vorgabe**; rechts „ist: lädt gerade / keine Ladung“ | Board: `warmwasser`, `warmwasser_betriebsart`, `warmwasser_aktiv`; Knopf → `cmd/warmwasser` |
+| gestrichelter Knopf | **vorgemerkt** = Wunsch liegt in der Warteschlange des Boards (oder wurde eben gedrückt); **abweichend** = der Heizkreis-Status passt nicht zur Vorgabe. Geprüft wird nur Standby gegen Zeitprogramm – die Statusbits kennen keine Programmnummer und kein Sommer/Komfort/Normal/Absenk | Board: `warteschlange`, `heizkreis_status` |
+| Kessel | Kesseltemperatur groß, daneben Vorlauf / Soll und Rücklauf; rechts **Brenner: aus / Vorlüften / an / Nachlüften** (an in Orange, nur mit Flamme) | Board: `kesseltemperatur`, `vorlauf_vpt`, `vorlauf_soll`, `ruecklauf`, `brennerphase` |
+| Außen | Außentemperatur groß | Board: `aussentemperatur` |
+| Statuszeile | „Aktualisiert HH:MM:SS · Status gelesen HH:MM“, dahinter die Warteschlange des Boards; nach einem Knopfdruck 3 min lang der Fortschritt: vorgemerkt → gesendet → **OK** (grün) oder **NICHT übernommen / abgelehnt (CM=05) / keine Rückmeldung** (rot); Fehler wie „CAN-Board nicht erreichbar“ | Board: `ergebnis_letzter_schaltbefehl`, `warteschlange`, `status_gelesen` |
 | Fußzeile | Build-Stand als Datum | App |
 
 Messwerte, die länger als 10 min nicht aktualisiert wurden, zeigt die App als „--“ statt eines

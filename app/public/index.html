@@ -48,69 +48,46 @@
     </header>
     <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
 
-    <section class="readings">
-
-      <div class="brenner-bar" id="brennerBar">
-        <span class="brenner-icon">◉</span>
-        <span id="brennerLabel">BRENNER — </span>
-        <div class="mode-badges">
-          <span class="mode-badge-label">VORGABE</span><span id="modeBadge" class="mode-badge">—</span>
-          <span class="mode-badge-label">IST</span><span id="modeAktuell" class="mode-badge">—</span>
-        </div>
+    <!-- Heizkreis: Vorgabe = markierter Knopf, "ist" = Heizkreis-Status aus den Statusbits -->
+    <section class="block" id="hkBlock">
+      <div class="block-head">
+        <span class="block-title">HEIZKREIS</span>
+        <span class="block-ist">ist: <span id="hkIst">—</span></span>
+        <button id="statusLesenBtn" class="lesen-btn" type="button" title="Heizkreis- und Warmwasser-Betriebsart einmal vom Bus lesen" aria-label="Status lesen">↻</button>
       </div>
-
-    </section>
-
-    <section class="modes-section">
-      <div class="modes-title"><span>BETRIEBSART</span><button id="statusLesenBtn" class="lesen-btn" type="button" title="Heizkreis- und Warmwasser-Betriebsart einmal vom Bus lesen">STATUS LESEN</button></div>
       <div id="modes" class="modes-grid"></div>
     </section>
 
-    <section class="ww-section">
-      <div class="ww-bar">
-        <span class="ww-label" title="Warmwasser">WW</span>
-        <span class="ww-werte"><span id="wwIst">--,-</span>°</span>
-        <span class="ww-btns">
-          <button id="wwEin" class="ww-btn" type="button">EIN</button>
-          <button id="wwAus" class="ww-btn" type="button">AUS</button>
-        </span>
-        <span class="mode-badges">
-          <span class="mode-badge-label">VORGABE</span><span id="wwVorgabe" class="mode-badge">—</span>
-          <span class="mode-badge-label">IST</span><span id="wwAktiv" class="mode-badge">—</span>
-        </span>
+    <!-- Warmwasser: Vorgabe = markierter Knopf, "ist" = laedt gerade / keine Ladung -->
+    <section class="block" id="wwBlock">
+      <div class="block-head">
+        <span class="block-title">WARMWASSER</span>
+        <span class="block-wert"><span id="wwIst">--,-</span> °C <span class="block-zusatz">unten</span></span>
+        <span class="block-ist">ist: <span id="wwAktiv">—</span></span>
+      </div>
+      <div class="ww-grid">
+        <button id="wwEin" class="mode-btn" type="button">EIN</button>
+        <button id="wwAus" class="mode-btn" type="button">AUS</button>
       </div>
     </section>
 
-    <section class="readings">
-
-      <div class="reading-card primary">
-        <div class="reading-label">AUSSENTEMPERATUR</div>
-        <div class="reading-value-row"><div class="reading-value" id="outsideTemp">--,-</div><div class="reading-unit">°C</div></div>
+    <!-- Kessel mit Brenner -->
+    <section class="block" id="kesselBlock">
+      <div class="block-head">
+        <span class="block-title">KESSEL</span>
+        <span class="block-ist brenner" id="brennerZeile">Brenner: <span id="brennerText">—</span></span>
       </div>
-
-      <div id="detailsSection" class="details-section">
-        <div class="reading-row">
-          <div class="reading-card">
-            <div class="reading-label">KESSEL</div>
-            <div class="reading-value-row"><div class="reading-value small" id="kesselTemp">--,-</div><div class="reading-unit">°C</div></div>
-          </div>
-          <div class="reading-card">
-            <div class="reading-label">RÜCKLAUF</div>
-            <div class="reading-value-row"><div class="reading-value small" id="ruecklaufTemp">--,-</div><div class="reading-unit">°C</div></div>
-          </div>
-          <div class="reading-card">
-            <div class="reading-label">VORLAUF IST</div>
-            <div class="reading-value-row"><div class="reading-value small" id="vorlaufIst">--,-</div><div class="reading-unit">°C</div></div>
-          </div>
-          <div class="reading-card">
-            <div class="reading-label">VORLAUF SOLL</div>
-            <div class="reading-value-row"><div class="reading-value small" id="vorlaufSoll">--,-</div><div class="reading-unit">°C</div></div>
-          </div>
-        </div>
+      <div class="kessel-zeile">
+        <span class="kessel-wert"><span id="kesselTemp">--,-</span><span class="einheit">°C</span></span>
+        <span class="kessel-detail">Vorlauf <span id="vorlaufIst">--,-</span> / Soll <span id="vorlaufSoll">--,-</span><br>Rücklauf <span id="ruecklaufTemp">--,-</span></span>
       </div>
-
     </section>
 
+    <!-- Aussentemperatur gross -->
+    <section class="block aussen">
+      <div class="block-head"><span class="block-title">AUSSEN</span></div>
+      <div class="aussen-wert"><span id="outsideTemp">--,-</span><span class="einheit">°C</span></div>
+    </section>
 
     <div id="message" class="message"></div>
     <div class="app-version" id="appVersion">v__VERSION__</div>
