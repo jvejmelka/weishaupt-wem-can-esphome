@@ -63,6 +63,8 @@ Dazu optional die Handy-App im Ordner `app/` (siehe unten).
 
 ## Einrichten
 
+**Ausführliche Schritt-für-Schritt-Anleitung: [INSTALL.md](INSTALL.md)** – Kurzfassung:
+
 ```
 cp secrets.yaml.example secrets.yaml     # Werte eintragen
 esphome run weishaupt-wem-can.yaml       # erstes Mal per USB, danach per OTA
