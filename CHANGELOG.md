@@ -1,6 +1,12 @@
 # Changelog – ESP-CAN-Brücke Weishaupt (WeAct CAN485, ESPHome)
 
 
+## Handy-App – 2026-09-27 (Ladung, Brenner-Zweck, Schaltfortschritt, ohne Scrollen)
+- Warmwasser: **„Ladung: Gas“** (orange pulsierend wie der Brenner, Kessel im Warmwasserbetrieb = Kesselstatus 15) bzw. „Ladung: aus“ ersetzt „Zustand: lädt gerade / keine Ladung“.
+- Kessel: hinter der Brennerphase der **Zweck** aus dem Kesselstatus („· Heizung“, „· Warmwasser“, „(Heizung wartet)“ bei Warmwasserbetrieb mit gleichzeitiger Heizanforderung); Kaminfeger und Wartung in Rot.
+- **Fortschritt eines Schaltbefehls** wieder sichtbar, jetzt unter den Knöpfen des betroffenen Blocks: vorgemerkt (ab HH:MM) → an WEM gesendet (JSON) → Bus liest nach → bestätigt ✓ bzw. rot ✗ mit Grund; 3 min nach dem Abschluss stehen, sonst keine Zeile.
+- **Fit-to-Screen:** die Grundschrift wird gemessen statt geschätzt (größte Schrift, bei der alles ohne Scrollen passt); feste kleine Abstände statt Luft zwischen den Blöcken. `?diag` zeigt Viewport, Pixelverhältnis, Schrift und Scrollhöhe.
+
 ## v23 – 2026-09-27
 - **Kein gemeinsamer Hauptschalter mehr für R1–R4.** Jede feste Regel ist einzeln schaltbar (Weboberfläche, Datei, `cmd/regel`), mit eigenem Mindestabstand; die gemeinsame Obergrenze pro Stunde bleibt. **Vorgaben im Repository: nur R3 an** (= Verhalten bis v21: Heizkreis nachlesen, wenn sich die Statusbits ändern), R1, R2, R4 aus.
 - **Eigene Regeln** sind ein eigener Block „Eigene Regeln (experimentell)“ mit **eigenem Hauptschalter** (Vorgabe aus), der nur für die eigenen Regeln gilt.

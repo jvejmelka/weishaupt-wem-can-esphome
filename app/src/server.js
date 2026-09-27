@@ -136,6 +136,19 @@ app.get('/api/status', (req, res) => {
   const PHASE = ['Aus', 'Vorlüften', 'An', 'An', 'Nachlüften'];
   const modeCode = zahl('heizkreis_betriebsart_code');
   const letzterFrame = zahl('letzter_can-frame_vor');
+  // Kesselstatus (PDO 0x182, alle 5 s): 0 Standby, 1 Aus, 10 Heizbetrieb, 15 Warmwasserbetrieb, 101 Kaminfeger, 104 Wartung
+  const kstatus = zahl('kesselstatus_code');
+  const ZWECK = { 10: 'Heizung', 15: 'Warmwasser', 101: 'Kaminfeger', 104: 'Wartung' };
+  const kesselZweck = kstatus != null ? (ZWECK[Math.round(kstatus)] || null) : null;
+  // Warmwasser-Ladung durch den Kessel (Gas) = Kesselstatus Warmwasserbetrieb; ohne Status: "Warmwasser aktiv"
+  const wwAktiv = text('warmwasser_aktiv');
+  // Heizkreis fordert Waerme an: Statusbit 0x0040 (PDO 0x1C1, nur bei Aenderung - daher ohne Altersgrenze)
+  // oder Heizanforderung > 0 (PDO 0x241). Steht der Kessel dabei im Warmwasserbetrieb, wartet die Heizung.
+  const hkBitsRoh = werte.get('heizkreis_status_code');
+  const hkBits = hkBitsRoh ? Number(hkBitsRoh.v) : NaN;
+  const heizanf = zahl('heizanforderung');
+  const heizungFordert = (Number.isFinite(hkBits) && (Math.round(hkBits) & 0x0040) !== 0) || (heizanf != null && heizanf > 0);
+  const gas = kstatus != null ? Math.round(kstatus) === 15 : (wwAktiv === 'Ein' ? true : wwAktiv === 'Aus' ? false : null);
   if (!mqttVerbunden || !online) {
     return res.status(503).json({ error: mqttVerbunden ? 'CAN-Board nicht erreichbar' : 'MQTT-Broker nicht erreichbar' });
   }
@@ -149,6 +162,10 @@ app.get('/api/status', (req, res) => {
     warmwasserC:      zahl('warmwasser'),
     warmwasser:       text('warmwasser_betriebsart'),          // Vorgabe "Ein" / "Aus" (im WEM, gelesen nach Start und Schalten)
     warmwasserAktiv:  text('warmwasser_aktiv'),                // Ist: laedt gerade "Ein" / "Aus" (passiv, Kesselstatus)
+    ladung:           { gas },                                  // Speicherladung durch den Kessel
+    kesselZweck,                                               // Heizung / Warmwasser / Kaminfeger / Wartung / null
+    heizungWartet:    kesselZweck === 'Warmwasser' && heizungFordert,
+    kesselZweckWarnung: kesselZweck === 'Kaminfeger' || kesselZweck === 'Wartung',
     brennerAn:        flamme == null ? null : flamme === 1,
     brennerText:      phase != null && PHASE[phase] ? PHASE[phase] : (flamme == null ? null : (flamme === 1 ? 'An' : 'Aus')),
     modeCode:         modeCode != null ? Math.round(modeCode) : null,

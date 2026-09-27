@@ -227,6 +227,98 @@ function zeigeWuensche(data) {
                hkIst, vorgabeStand('hk', hkIst, data, warte, prot));
   zeigeKnoepfe([[document.getElementById('wwEin'), 'Ein'], [document.getElementById('wwAus'), 'Aus']],
                wwIst, vorgabeStand('ww', wwIst, data, warte, prot));
+  zeigeFortschritte(data, warte, prot);
+}
+
+// ── Fortschritt eines Schaltbefehls ───────────────────────────
+// Zeile unter den Knoepfen des betroffenen Blocks:
+//   vorgemerkt (ab HH:MM) → an WEM gesendet (JSON) → Bus liest nach → bestätigt ✓ / ✗ nicht übernommen
+// Quelle: Board-Sensoren warteschlange, ergebnis_letzter_schaltbefehl (schaltStatus), schaltprotokoll.
+// Nach dem Abschluss 3 min stehen lassen, ohne laufenden Befehl keine Zeile.
+const SCHRITTE = ['vorgemerkt', 'an WEM gesendet (JSON)', 'Bus liest nach', 'bestätigt'];
+const FERTIG_KEY = 'wem_fertig_gesehen';
+let fertigGesehen = {};
+try { fertigGesehen = JSON.parse(localStorage.getItem(FERTIG_KEY)) || {}; } catch { fertigGesehen = {}; }
+let zielHinweis = null;        // zuletzt gesehenes Ziel (Warteschlange / "vorgemerkt ...") - fuer "sende an WEM" ohne Ziel
+let laufZiel = null;           // Ziel des gerade laufenden Befehls
+let vorherWarte = { hk: null, ww: null };
+
+// "27.09. 01:22 ..." -> ms (Minutengenau)
+function eintragZeit(t) {
+  const m = (t || '').match(/^(\d\d)\.(\d\d)\. (\d\d):(\d\d)/);
+  if (!m) return null;
+  const jetzt = new Date();
+  let d = new Date(jetzt.getFullYear(), +m[2] - 1, +m[1], +m[3], +m[4]);
+  if (d - jetzt > 86400000) d = new Date(jetzt.getFullYear() - 1, +m[2] - 1, +m[1], +m[3], +m[4]);
+  return d.getTime();
+}
+// Abschlusszeit: wann die App den Eintrag zuerst sah, hoechstens Eintragsminute + 60 s
+function fertigZeit(text, t) {
+  if (!fertigGesehen[text]) {
+    fertigGesehen[text] = Date.now();
+    for (const k of Object.keys(fertigGesehen)) if (Date.now() - fertigGesehen[k] > 3600000) delete fertigGesehen[k];
+    try { localStorage.setItem(FERTIG_KEY, JSON.stringify(fertigGesehen)); } catch { /* egal */ }
+  }
+  return Math.min(fertigGesehen[text], t + 60000);
+}
+function laufendesZiel(warte) {
+  if (laufZiel) return laufZiel;
+  if (vorherWarte.hk != null && warte.hk == null) return 'hk';     // das Board sendet den Heizkreis zuerst
+  if (vorherWarte.ww != null && warte.ww == null) return 'ww';
+  if (merk.hk && !merk.ww) return 'hk';
+  if (merk.ww && !merk.hk) return 'ww';
+  return zielHinweis;
+}
+function fortschrittStand(ziel, data, warte, prot) {
+  const st = data.schaltStatus || '';
+  if (warte[ziel] != null) {
+    const ab = (data.warteschlange || '').match(/naechster Befehl ab (\d\d:\d\d)/);
+    return { schritt: 0, ab: ab ? ab[1] : null };
+  }
+  if (LAEUFT.test(st) && laufZiel === ziel) {
+    if (/sende an WEM/.test(st)) return { schritt: 1 };
+    return { schritt: 2, hinweis: /unklar/.test(st) ? 'WEM-Antwort unklar' : /nicht erreichbar/.test(st) ? 'WEM nicht erreichbar' : '' };
+  }
+  const v = wunschAusSchaltstatus(st);
+  if (v[ziel] != null && !LAEUFT.test(st)) {
+    // "vorgemerkt" gemeldet, aber noch nicht in der Warteschlange gesehen: nur zeigen, solange nichts abgeschlossen ist
+    const kopf = prot.find(e => e.ziel === ziel);
+    if (!kopf || (merk[ziel] && kopf.text === merk[ziel].proto)) return { schritt: 0, ab: null };
+  }
+  const e = prot.find(x => x.ziel === ziel);
+  if (!e) return null;
+  const t = eintragZeit(e.text);
+  if (t == null || Date.now() - fertigZeit(e.text, t) > 180000) return null;
+  const steht = (e.text.match(/steht auf (.+)$/) || [])[1];
+  return { schritt: 3, ok: e.ok, kurz: e.kurz + (steht && !e.ok ? ` (steht auf ${steht})` : ''),
+           fehlerBei: /CM=05|nicht erreichbar/.test(e.text) ? 1 : 3 };
+}
+function zeigeFortschritt(el, f) {
+  el.innerHTML = '';
+  if (!f) { el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+  const letzter = f.schritt === 3 && !f.ok ? f.fehlerBei : 3;
+  for (let i = 0; i <= letzter; i++) {
+    let text = SCHRITTE[i], cls = 'offen';
+    if (i === 0 && f.ab) text += ` ab ${f.ab}`;
+    if (f.schritt < 3) cls = i < f.schritt ? 'fertig' : i === f.schritt ? 'aktiv' : 'offen';
+    else if (f.ok) { cls = i < 3 ? 'fertig' : 'ok'; if (i === 3) text += ' ✓'; }
+    else if (i < letzter) cls = 'fertig';
+    else { cls = 'fehler'; text = '✗ ' + f.kurz; }
+    if (i === 2 && f.schritt === 2 && f.hinweis) text += ` (${f.hinweis})`;
+    if (i > 0) { const p = document.createElement('span'); p.className = 'pfeil'; p.textContent = '→'; el.appendChild(p); }
+    const s = document.createElement('span'); s.className = cls; s.textContent = text; el.appendChild(s);
+  }
+}
+function zeigeFortschritte(data, warte, prot) {
+  const st = data.schaltStatus || '';
+  const v = wunschAusSchaltstatus(st);
+  if (warte.hk != null) zielHinweis = 'hk'; else if (warte.ww != null) zielHinweis = 'ww';
+  else if (v.hk != null) zielHinweis = 'hk'; else if (v.ww != null) zielHinweis = 'ww';
+  if (LAEUFT.test(st)) laufZiel = laufendesZiel(warte); else laufZiel = null;
+  vorherWarte = warte;
+  zeigeFortschritt(document.getElementById('hkFort'), fortschrittStand('hk', data, warte, prot));
+  zeigeFortschritt(document.getElementById('wwFort'), fortschrittStand('ww', data, warte, prot));
 }
 
 // Zustand aus den Statusbits: "Zeitprogramm + WW-Ladung (0x0040)" -> "Zeitprogramm, heizt · WW lädt"
@@ -241,7 +333,7 @@ function hkZustandText(s) {
 
 // nach einem Knopfdruck sofort mit dem letzten Stand neu zeichnen
 let letzteDaten = null;
-function refreshKnoepfe() { if (letzteDaten) zeigeWuensche(letzteDaten); }
+function refreshKnoepfe() { if (letzteDaten) zeigeWuensche(letzteDaten); passeAnWennNoetig(); }
 
 async function refreshStatus() {
   try {
@@ -264,15 +356,27 @@ async function refreshStatus() {
     const hkZustand = document.getElementById('hkZustand');
     hkZustand.textContent = hkZustandText(data.modeAktuellLabel);
     hkZustand.parentElement.title = data.modeAktuellLabel || '';
-    document.getElementById('wwAktiv').textContent =
-      data.warmwasserAktiv === 'Ein' ? 'lädt gerade' : data.warmwasserAktiv === 'Aus' ? 'keine Ladung' : '—';
+    // Ladung im Warmwasser-Block: Gas = Kessel im Warmwasserbetrieb (Kesselstatus 15), sonst "aus"
+    const gas = data.ladung ? data.ladung.gas : null;
+    document.getElementById('ladungText').textContent = gas === true ? 'Gas' : gas === false ? 'aus' : '—';
+    document.getElementById('ladungZeile').classList.toggle('an', gas === true);
 
-    // Brenner im Kessel-Block: Aus / Vorlüften / An / Nachlüften
-    document.getElementById('brennerText').textContent = data.brennerText ? data.brennerText.toLowerCase() : '—';
+    // Brenner im Kessel-Block: Aus / Vorlüften / An / Nachlüften, dahinter der Zweck aus dem Kesselstatus
+    const bt = data.brennerText ? data.brennerText.toLowerCase() : null;
+    document.getElementById('brennerText').textContent = bt || '—';
     document.getElementById('brennerZeile').classList.toggle('an', data.brennerAn === true);
+    const zweckEl = document.getElementById('brennerZweck');
+    let zweck = '';
+    if (data.kesselZweckWarnung) zweck = ' · ' + data.kesselZweck;
+    else if (bt && bt !== 'aus' && (data.kesselZweck === 'Heizung' || data.kesselZweck === 'Warmwasser'))
+      zweck = ' · ' + data.kesselZweck + (data.kesselZweck === 'Warmwasser' && data.heizungWartet ? ' (Heizung wartet)' : '');
+    zweckEl.textContent = zweck;
+    zweckEl.classList.toggle('warn', !!data.kesselZweckWarnung);
+    document.getElementById('brennerZeile').title = data.heizungWartet ? 'Kessel lädt Warmwasser, der Heizkreis fordert gleichzeitig Wärme an' : '';
 
     letzteDaten = data;
     zeigeWuensche(data);
+    passeAnWennNoetig();
 
     // Rot wenn Gerät hängt (alle Werte null)
     const allNull = data.outsideTempC == null && data.kesselTempC == null && data.ruecklaufTempC == null;
@@ -433,6 +537,7 @@ document.addEventListener('visibilitychange', () => {
 
 async function init() {
   try { await loadMeta(); } catch (e) { console.warn('loadMeta failed:', e); }
+  passeAnWennNoetig();
   await refreshStatus();
 
   if (intervalId) clearInterval(intervalId);
@@ -450,5 +555,57 @@ async function init() {
     });
   }
 })();
+
+// ── Fit-to-Screen ─────────────────────────────────────────────
+// Die Grundschrift (html font-size) wird so gewaehlt, dass der ganze Inhalt ohne Scrollen passt:
+// binaere Suche zwischen 11 px und der Breitengrenze (Spalte / 22,5, sonst passen vier Knoepfe nicht
+// nebeneinander; hoechstens 30 px). Gemessen wird der echte Inhalt, nicht geschaetzt - Browserleisten,
+// Statusleiste und Schriftmetrik des Geraets sind damit automatisch drin. Neu gerechnet wird nur bei
+// Groessenaenderung oder wenn sich die Inhaltshoehe aendert (z. B. Fortschrittszeile erscheint).
+const DIAG = /[?&]diag\b/.test(location.search);
+let fitSchrift = null, fitHoehe = null, fitVerfuegbar = null, fitBreite = null, fitSchritte = 0;
+const appEl = document.querySelector('.app');
+function verfuegbarH() { return Math.floor(window.visualViewport ? Math.min(window.visualViewport.height, window.innerHeight) : window.innerHeight); }
+function verfuegbarB() { return window.visualViewport ? Math.min(window.visualViewport.width, window.innerWidth) : window.innerWidth; }
+function inhaltH() { return Math.ceil(appEl.getBoundingClientRect().height); }
+function passeAn() {
+  const html = document.documentElement;
+  const h = verfuegbarH(), b = verfuegbarB();
+  const oben = Math.min(30, Math.min(b, 460) / 22.5);
+  let lo = 11, hi = Math.max(11, oben), n = 0;
+  html.style.fontSize = hi + 'px';
+  if (inhaltH() > h) {
+    while (hi - lo > 0.25 && n < 12) {                      // groesste Schrift, bei der alles passt
+      const mitte = (lo + hi) / 2;
+      html.style.fontSize = mitte + 'px'; n++;
+      if (inhaltH() <= h) lo = mitte; else hi = mitte;
+    }
+    html.style.fontSize = lo + 'px';
+  } else lo = hi;
+  fitSchrift = lo; fitHoehe = inhaltH(); fitVerfuegbar = h; fitBreite = b; fitSchritte = n;
+  zeigeDiag();
+}
+function passeAnWennNoetig() {
+  if (fitSchrift == null || verfuegbarH() !== fitVerfuegbar || verfuegbarB() !== fitBreite ||
+      Math.abs(inhaltH() - fitHoehe) > 2) passeAn();
+  else zeigeDiag();
+}
+function zeigeDiag() {
+  if (!DIAG) return;
+  const el = document.getElementById('diag');
+  const vv = window.visualViewport;
+  el.classList.remove('hidden');
+  el.textContent = ` · ${window.innerWidth}×${window.innerHeight}` +
+    (vv ? ` vv ${Math.round(vv.width)}×${Math.round(vv.height)}` : '') +
+    ` · dpr ${window.devicePixelRatio.toFixed(2)} · Schrift ${fitSchrift != null ? fitSchrift.toFixed(2) : '?'} px` +
+    ` · Inhalt ${fitHoehe} · scroll ${document.documentElement.scrollHeight}/${window.innerHeight}`;
+}
+let fitTimer = null;
+function passeAnSpaeter() { clearTimeout(fitTimer); fitTimer = setTimeout(passeAn, 80); }
+window.addEventListener('resize', passeAnSpaeter);
+window.addEventListener('orientationchange', passeAnSpaeter);
+if (window.visualViewport) window.visualViewport.addEventListener('resize', passeAnSpaeter);
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(passeAn);
+passeAn();
 
 if (getToken()) { init(); } else { showLogin(); }

@@ -58,19 +58,22 @@
         <button id="statusLesenBtn" class="lesen-btn" type="button" title="Heizkreis- und Warmwasser-Betriebsart einmal vom Bus lesen" aria-label="Status lesen">↻</button>
       </div>
       <div id="modes" class="modes-grid"></div>
+      <div id="hkFort" class="fortschritt hidden" aria-live="polite"></div>
     </section>
 
-    <!-- Warmwasser: voll markiert = Ist (am Bus), gestrichelt = eigene Vorgabe, "Zustand" = laedt gerade / keine Ladung -->
+    <!-- Warmwasser: voll markiert = Ist (am Bus), gestrichelt = eigene Vorgabe,
+         rechts "Ladung" = wer den Speicher gerade laedt (Gas = Kessel im Warmwasserbetrieb, WP = Waermepumpe) -->
     <section class="block" id="wwBlock">
       <div class="block-head">
         <span class="block-title">WARMWASSER</span>
         <span class="block-wert"><span id="wwIst">--,-</span> °C <span class="block-zusatz">unten</span></span>
-        <span class="block-zustand">Zustand: <span id="wwAktiv">—</span></span>
+        <span class="block-zustand brenner" id="ladungZeile">Ladung: <span id="ladungText">—</span></span>
       </div>
       <div class="ww-grid">
         <button id="wwEin" class="mode-btn" type="button">EIN</button>
         <button id="wwAus" class="mode-btn" type="button">AUS</button>
       </div>
+      <div id="wwFort" class="fortschritt hidden" aria-live="polite"></div>
     </section>
 
     <!-- Kessel und Aussen: im Hochformat untereinander, auf quadratischen/breiten Bildschirmen nebeneinander -->
@@ -79,7 +82,7 @@
     <section class="block" id="kesselBlock">
       <div class="block-head">
         <span class="block-title">KESSEL</span>
-        <span class="block-zustand brenner" id="brennerZeile">Brenner: <span id="brennerText">—</span></span>
+        <span class="block-zustand brenner" id="brennerZeile">Brenner: <span id="brennerText">—</span><span id="brennerZweck" class="zweck"></span></span>
       </div>
       <div class="kessel-zeile">
         <span class="kessel-wert"><span id="kesselTemp">--,-</span><span class="einheit">°C</span></span>
@@ -95,7 +98,7 @@
     </div>
 
     <div id="message" class="message"></div>
-    <div class="app-version" id="appVersion">v__VERSION__</div>
+    <div class="app-version"><span id="appVersion">v__VERSION__</span><span id="diag" class="hidden"></span></div>
 
   </main>
 

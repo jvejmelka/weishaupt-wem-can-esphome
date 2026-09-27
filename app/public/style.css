@@ -21,7 +21,9 @@
    Alles ist in rem gebaut; die Grundschrift richtet sich nach Spaltenbreite UND Geraetehoehe:
    - Breite: Spaltenbreite / 22,5  (= 16 px bei 360 px; vier Knoepfe nebeneinander muessen passen)
    - Hoehe:  100dvh / --hoehe (= Hoehe des Inhalts in rem), damit nie gescrollt werden muss
-   Der kleinere Wert gewinnt. Restliche Hoehe geht als Luft ZWISCHEN die Bloecke, nicht hinein. */
+   Der kleinere Wert gewinnt. Das ist nur der Startwert: app.js misst danach den echten Inhalt und
+   setzt die Grundschrift so, dass nichts gescrollt werden muss (Fit-to-Screen, s. passeAn()).
+   Uebrige Hoehe wird ueber die groessere Schrift genutzt, die Abstaende bleiben klein und fest. */
 :root { --hoehe: 43.5; --spalte: min(100vw, 460px); }
 html {
   font-size: clamp(11px, min(calc(var(--spalte) / 22.5), calc(100vh / var(--hoehe))), 24px);
@@ -31,7 +33,6 @@ html, body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--sans);
-  min-height: 100dvh;
   overscroll-behavior: none;
 }
 
@@ -100,14 +101,12 @@ html, body {
 /* ── LAYOUT ── */
 .app {
   width: 100%; max-width: 460px; margin: 0 auto;
-  min-height: 100vh; min-height: 100dvh;
   padding: 0 0 env(safe-area-inset-bottom, 0);
   display: flex; flex-direction: column; gap: .7rem;
 }
-/* uebrige Hoehe gleichmaessig als Luft zwischen die Bloecke (auto-Raender teilen sie sich),
-   die Bloecke selbst bleiben so hoch wie ihr Inhalt */
-.app > .block, .app > .message { flex: none; margin-top: auto; }
-.app > .app-version { margin-top: -.3rem; }
+/* feste, kleine Abstaende - die Hoehe regelt die Grundschrift (app.js) */
+.app > .block, .app > .message { flex: none; }
+.app > .app-version { margin-top: -.4rem; }
 
 /* ── HEADER ── */
 .header {
@@ -183,6 +182,22 @@ html, body {
 .block-zustand span { color: var(--text); }
 .block-zustand.brenner.an span { color: var(--amber); font-weight: 700; }
 .block-zustand.brenner.an::before { content: '◉ '; color: var(--amber); animation: pulse 1s ease infinite; }
+/* Zweck des Brenners (Heizung / Warmwasser); Kaminfeger und Wartung in Warnfarbe */
+.block-zustand.brenner .zweck:empty { display: none; }
+.block-zustand.brenner .zweck.warn { color: var(--red); font-weight: 700; }
+
+/* Fortschritt eines Schaltbefehls (unter den Knoepfen, nur solange einer laeuft bzw. 3 min danach) */
+.fortschritt {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: .1rem .3rem;
+  margin-top: .45rem; font-size: .74rem; letter-spacing: .03em; line-height: 1.25;
+  color: var(--muted);
+}
+.fortschritt.hidden { display: none; }
+.fortschritt .pfeil { color: var(--muted); }
+.fortschritt .fertig { color: var(--text2); }
+.fortschritt .aktiv  { color: var(--amber); font-weight: 700; animation: pulse 1s ease infinite; }
+.fortschritt .ok     { color: var(--green); font-weight: 700; }
+.fortschritt .fehler { color: var(--red); font-weight: 700; }
 .lesen-btn {
   background: var(--bg3); border: 1px solid var(--border); color: var(--text2);
   font-size: 1.05rem; line-height: 1;
@@ -263,11 +278,14 @@ html, body {
 
 .app-version {
   flex: none;
-  text-align: center; padding: .4rem 1rem .6rem;
+  text-align: center; padding: .1rem 1rem .3rem;
   font-family: var(--mono); font-size: .6rem;
   color: #2a2a2a; letter-spacing: .1em;
 }
 
 /* Kessel und Aussen stehen untereinander (die Reihe gibt ihre Bloecke an .app weiter) */
 .reihe { display: contents; }
-.reihe > .block { flex: none; margin-top: auto; }
+.reihe > .block { flex: none; }
+/* Diagnose (?diag): Viewport, Pixelverhaeltnis, gewaehlte Schrift - zum Nachsehen am Handy */
+#diag { color: var(--text2); }
+#diag.hidden { display: none; }
