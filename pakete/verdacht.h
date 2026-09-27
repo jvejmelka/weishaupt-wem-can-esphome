@@ -1,7 +1,13 @@
 // Paket VERDACHT (verdacht.yaml): Hilfsfunktionen fuer die eigenen Regeln.
 // Reines C++ ohne ESPHome-IDs: Einlesen/Pruefen der JSON-Datei, Speicherform, Anzeige.
 #pragma once
+// Auf dem Board kommt ArduinoJson ueber ESPHome, in den Tests (tests/) direkt.
+#if __has_include("esphome/components/json/json_util.h")
 #include "esphome/components/json/json_util.h"
+#else
+#include <ArduinoJson.h>
+#endif
+#include <cstdint>
 #include <string>
 #include <vector>
 #include <cstdio>

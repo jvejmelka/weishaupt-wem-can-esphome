@@ -19,6 +19,7 @@
 # erkennt seit v25 beide (bis v24 nur 0x40, deshalb hat R1 in v22-v24 nie ausgeloest).
 # R1-R5 ruhen 2 min nach einem eigenen Schaltbefehl (der liest ohnehin selbst nach).
 # Jede feste Regel hat ihren eigenen Schalter. Vorgabe: R1, R2, R3 an; R4, R5 aus.
+# Die Entscheidungslogik steht in regellogik.h (ohne ESPHome, getestet in tests/).
 # Eigene Regeln (experimentell): generische Trigger "CAN-ID + Maske + Muster", mit EIGENEM
 # Hauptschalter (Vorgabe aus), der nur fuer die eigenen Regeln gilt. Siehe REGELN.md.
 # Jede Ausloesung und jedes Ergebnis steht im Log (Tag "verdacht", INFO; Unterdrueckungen DEBUG)
@@ -41,6 +42,7 @@ substitutions:
 
 esphome:
   includes:
+    - pakete/regellogik.h
     - pakete/verdacht.h
   on_boot:
     priority: -100
@@ -178,32 +180,25 @@ script:
       - lambda: |-
           uint32_t jetzt = millis();
           const char *zt = ziel == 1 ? "hk" : (ziel == 2 ? "ww" : "beide");
-          if (!an) {
-            auto &ls = id(vd_letzt_schatten);
-            auto is = ls.find(regel);
-            if (is != ls.end() && jetzt - is->second < (uint32_t) abstand * 60000UL) {
+          // Entscheidung in regellogik.h (rl::regel_pruefen), hier nur Log und Folgen
+          bool bus_ok = rl::bus_bereit(id(bus_seit), id(letzter_frame), id(pause_ms), jetzt);
+          switch (rl::regel_pruefen(regel, an, abstand, (int) id(vd_max_h).state, bus_ok, jetzt,
+                                    id(vd_letzt), id(vd_letzt_schatten), id(vd_zeiten))) {
+            case rl::Ergebnis::SCHATTEN_ABSTAND:
               ESP_LOGD("verdacht", "%s waere ausgeloest (Regel aus), Mindestabstand %d min - nicht gemeldet", regel.c_str(), abstand); return;
-            }
-            ls[regel] = jetzt;
-            ESP_LOGI("verdacht", "%s waere ausgeloest (Regel aus) - nicht gelesen", regel.c_str());
-            id(vd_ereignis)->execute(regel, std::string("waere"), std::string(zt), std::string(""), -1);
-            return;
+            case rl::Ergebnis::SCHATTEN_GEMELDET:
+              ESP_LOGI("verdacht", "%s waere ausgeloest (Regel aus) - nicht gelesen", regel.c_str());
+              id(vd_ereignis)->execute(regel, std::string("waere"), std::string(zt), std::string(""), -1);
+              return;
+            case rl::Ergebnis::BUS_NICHT_BEREIT:
+              ESP_LOGD("verdacht", "%s: Bus nicht bereit (Anlaufpause/Bus schweigt) - nicht gelesen", regel.c_str()); return;
+            case rl::Ergebnis::ABSTAND:
+              ESP_LOGD("verdacht", "%s: Mindestabstand %d min - nicht gelesen", regel.c_str(), abstand); return;
+            case rl::Ergebnis::OBERGRENZE:
+              ESP_LOGD("verdacht", "%s: Obergrenze %d/h erreicht - nicht gelesen", regel.c_str(), (int) id(vd_max_h).state); return;
+            case rl::Ergebnis::AUSLOESEN:
+              break;
           }
-          if (id(bus_seit) == 0 || jetzt - id(letzter_frame) > 30000 || jetzt - id(bus_seit) <= id(pause_ms)) {
-            ESP_LOGD("verdacht", "%s: Bus nicht bereit (Anlaufpause/Bus schweigt) - nicht gelesen", regel.c_str()); return;
-          }
-          auto &l = id(vd_letzt);
-          auto it = l.find(regel);
-          if (it != l.end() && jetzt - it->second < (uint32_t) abstand * 60000UL) {
-            ESP_LOGD("verdacht", "%s: Mindestabstand %d min - nicht gelesen", regel.c_str(), abstand); return;
-          }
-          auto &z = id(vd_zeiten);
-          z.erase(std::remove_if(z.begin(), z.end(), [jetzt](uint32_t t) { return jetzt - t > 3600000UL; }), z.end());
-          if ((int) z.size() >= (int) id(vd_max_h).state) {
-            ESP_LOGD("verdacht", "%s: Obergrenze %d/h erreicht - nicht gelesen", regel.c_str(), (int) id(vd_max_h).state); return;
-          }
-          z.push_back(jetzt);
-          l[regel] = jetzt;
           std::string zeit = id(uhr).now().is_valid() ? id(uhr).now().strftime("%d.%m. %H:%M:%S") : std::string("seit Start ") + to_string(jetzt / 1000) + " s";
           if (ziel & 1) {
             if (id(vd_offen_hk)) id(vd_offen_hk_regel) += "+" + regel;
@@ -445,29 +440,17 @@ canbus:
           - lambda: |-
               if (x.size() < 5) return;
               uint32_t j = millis();
-              uint16_t idx = (x[2] << 8) | x[1];
-              uint8_t sub = x[3];
-              bool eigen = id(eigener_befehl_ms) != 0 && j - id(eigener_befehl_ms) < 120000;
-              if (x[0] == 0xA4 || x[0] == 0x40) {
-                if (idx == 0x2101 && sub == 0x0A) id(vd_r1_a) = j | 1;
-                else if (idx == 0x2102 && sub == 0x0D) id(vd_r1_b) = j | 1;
-                else if (idx == 0x2102 && sub == 0x01) {
-                  bool folge = id(vd_r1_a) != 0 && id(vd_r1_b) != 0 && j - id(vd_r1_b) < 10000 && j - id(vd_r1_a) < 15000 &&
-                               (int32_t)(id(vd_r1_b) - id(vd_r1_a)) >= 0;
-                  id(vd_r1_a) = 0; id(vd_r1_b) = 0;
-                  bool wem_neu = id(vd_wem_start) != 0 && j - id(vd_wem_start) < 300000;
-                  if (folge) {
-                    if (eigen || wem_neu) ESP_LOGD("verdacht", "R1-Folge erkannt, ruht (%s)", eigen ? "eigener Befehl" : "WEM-Neustart");
-                    else id(vd_regel)->execute("R1", 2, (int) id(vd_ab_r1).state, id(vd_r1).state);
-                  }
+              bool eigen = rl::eigen_ruht(id(eigener_befehl_ms), j);
+              int v = 0;
+              if (rl::ist_leseanfrage(x[0])) {
+                if (rl::r1_frame(id(vd_r1_a), id(vd_r1_b), x, j)) {
+                  bool wem_neu = rl::wem_neu(id(vd_wem_start), j);
+                  if (eigen || wem_neu) ESP_LOGD("verdacht", "R1-Folge erkannt, ruht (%s)", eigen ? "eigener Befehl" : "WEM-Neustart");
+                  else id(vd_regel)->execute("R1", 2, (int) id(vd_ab_r1).state, id(vd_r1).state);
                 }
-              } else if ((x[0] & 0xE0) == 0x20 && idx == 0x252B) {
-                int v = x[4];
-                int vorher = id(vd_252b_vorher);
-                id(vd_252b_vorher) = v;
-                if (v == vorher) return;
-                bool r2 = v == 0x0F && id(vd_ww_bekannt) == 2;
-                bool r4 = v == 0x0A && (id(vd_hk_bekannt) == 1 || id(vd_hk_bekannt) == 5);
+              } else if (rl::w252b_frame(id(vd_252b_vorher), x, v)) {
+                bool r2 = rl::r2_bei_252b(v, id(vd_ww_bekannt));
+                bool r4 = rl::r4_bei_252b(v, id(vd_hk_bekannt));
                 if (r2) { if (eigen) ESP_LOGD("verdacht", "R2 (0x252B=0F) ruht (eigener Befehl)");
                           else id(vd_regel)->execute("R2", 2, (int) id(vd_ab_r2).state, id(vd_r2).state); }
                 if (r4) { if (eigen) ESP_LOGD("verdacht", "R4 (0x252B=0A) ruht (eigener Befehl)");
@@ -477,13 +460,11 @@ canbus:
       - can_id: 0x182
         then:
           - lambda: |-
-              if (x.size() < 1) return;
-              int st = x[0], vorher = id(vd_kstatus_vorher);
-              id(vd_kstatus_vorher) = st;
-              if (vorher < 0 || st == vorher) return;
-              bool eigen = id(eigener_befehl_ms) != 0 && millis() - id(eigener_befehl_ms) < 120000;
-              bool r2 = st == 15 && id(vd_ww_bekannt) == 2;
-              bool r4 = st == 10 && (id(vd_hk_bekannt) == 1 || id(vd_hk_bekannt) == 5);
+              int st = 0;
+              if (!rl::kstatus_flanke(id(vd_kstatus_vorher), x, st)) return;
+              bool eigen = rl::eigen_ruht(id(eigener_befehl_ms), millis());
+              bool r2 = rl::r2_bei_kstatus(st, id(vd_ww_bekannt));
+              bool r4 = rl::r4_bei_kstatus(st, id(vd_hk_bekannt));
               if (r2) { if (eigen) ESP_LOGD("verdacht", "R2 (Kesselstatus 15) ruht (eigener Befehl)");
                         else id(vd_regel)->execute("R2", 2, (int) id(vd_ab_r2).state, id(vd_r2).state); }
               if (r4) { if (eigen) ESP_LOGD("verdacht", "R4 (Kesselstatus 10) ruht (eigener Befehl)");
@@ -494,52 +475,37 @@ canbus:
       - can_id: 0x1C1
         then:
           - lambda: |-
-              if (x.size() < 4) return;
-              uint16_t m = (x[3] << 8) | x[2];
-              int stby = (m & 0x1000) ? 1 : 0;
-              int rest = m & ~0x1050;
-              int sv = id(vd_stby_vorher), rv = id(vd_rest_vorher);
-              bool s_neu = stby != sv, r_neu = rest != rv;
-              if (!s_neu && !r_neu) return;
-              id(vd_stby_vorher) = stby;
-              id(vd_rest_vorher) = rest;
-              bool eigen = id(eigener_befehl_ms) != 0 && millis() - id(eigener_befehl_ms) < 120000;
-              bool r3 = false;
-              if (s_neu && sv >= 0) {
-                if (eigen) ESP_LOGD("verdacht", "R3 Standby-Bit %d -> %d ruht (eigener Befehl)", sv, stby);
-                else { id(vd_regel)->execute("R3", 1, (int) id(vd_ab_r3).state, id(vd_r3).state); r3 = id(vd_r3).state; }
-              }
-              if (r_neu && rv >= 0) {
-                if (eigen) ESP_LOGD("verdacht", "R5 Statusbits 0x%04X -> 0x%04X ruht (eigener Befehl)", rv, rest);
-                else if (r3) ESP_LOGD("verdacht", "R5 Statusbits 0x%04X -> 0x%04X: R3 liest schon", rv, rest);
-                else id(vd_regel)->execute("R5", 1, (int) id(vd_ab_r5).state, id(vd_r5).state);
+              rl::StatusAenderung e = rl::statusbits(id(vd_stby_vorher), id(vd_rest_vorher), x);
+              if (!e.geaendert) return;
+              bool eigen = rl::eigen_ruht(id(eigener_befehl_ms), millis());
+              rl::StatusEntscheid s = rl::status_entscheiden(e, eigen, id(vd_r3).state);
+              if (e.r3 && eigen) ESP_LOGD("verdacht", "R3 Standby-Bit %d -> %d ruht (eigener Befehl)", e.sv, e.stby);
+              if (s.r3) id(vd_regel)->execute("R3", 1, (int) id(vd_ab_r3).state, id(vd_r3).state);
+              if (e.r5) {
+                if (eigen) ESP_LOGD("verdacht", "R5 Statusbits 0x%04X -> 0x%04X ruht (eigener Befehl)", e.rv, e.rest);
+                else if (s.r3_liest) ESP_LOGD("verdacht", "R5 Statusbits 0x%04X -> 0x%04X: R3 liest schon", e.rv, e.rest);
+                else if (s.r5) id(vd_regel)->execute("R5", 1, (int) id(vd_ab_r5).state, id(vd_r5).state);
               }
       # R4: Aussentemperatur merken
       - can_id: 0x201
         then:
-          - lambda: 'if (x.size() >= 3) id(vd_at) = (int16_t(x[2] << 8 | x[1])) * 0.1f;'
+          - lambda: 'if (x.size() >= 3) id(vd_at) = rl::pdo_temp(x[1], x[2]);'
       # R4: Vorlaufsoll HZ (PDO 0x241 Bytes 0-1) gegen die bekannte Raumsoll-Stufe
       #   Rueckrechnung RT = (VL - 1,4 + 1,1 * AT) / 2,1 (geeicht bei AT 12,9-15,2 C) -> 18 / 20 / 21
       - can_id: 0x241
         then:
           - lambda: |-
               if (x.size() < 2) return;
-              float vl = (int16_t(x[1] << 8 | x[0])) * 0.1f;
+              float vl = rl::pdo_temp(x[0], x[1]);
               id(vd_vl) = vl;
-              int hk = id(vd_hk_bekannt);
-              // Bedingung wird auch bei ausgeschaltetem R4 geprueft (Schattenmodus)
-              if (vl <= 0 || isnan(id(vd_at)) || hk < 6 || hk > 8) { id(vd_r4_key) = -1; return; }
-              float rt = (vl - 1.4f + 1.1f * id(vd_at)) / 2.1f;
-              int stufe = rt < 19.0f ? 18 : (rt < 20.5f ? 20 : 21);
-              int soll = hk == 6 ? 21 : (hk == 7 ? 20 : 18);
-              if (stufe == soll) { id(vd_r4_key) = -1; return; }
-              int key = hk * 100 + stufe;
-              if (key == id(vd_r4_key)) return;          // gleicher Widerspruch wie zuletzt: nicht erneut
-              id(vd_r4_key) = key;
-              if (id(eigener_befehl_ms) != 0 && millis() - id(eigener_befehl_ms) < 120000) {
-                ESP_LOGD("verdacht", "R4 (Raumsoll-Stufe %d statt %d) ruht (eigener Befehl)", stufe, soll); return;
+              // Bedingung wird auch bei ausgeschaltetem R4 geprueft (Schattenmodus);
+              // gleicher Widerspruch wie zuletzt loest nicht erneut aus
+              rl::R4Befund b;
+              if (!rl::r4_vorlauf(id(vd_r4_key), vl, id(vd_at), id(vd_hk_bekannt), b)) return;
+              if (rl::eigen_ruht(id(eigener_befehl_ms), millis())) {
+                ESP_LOGD("verdacht", "R4 (Raumsoll-Stufe %d statt %d) ruht (eigener Befehl)", b.stufe, b.soll); return;
               }
-              ESP_LOGI("verdacht", "R4: Vorlaufsoll %.1f, AT %.1f -> Raumsoll ~%.1f (Stufe %d), erwartet %d", vl, id(vd_at), rt, stufe, soll);
+              ESP_LOGI("verdacht", "R4: Vorlaufsoll %.1f, AT %.1f -> Raumsoll ~%.1f (Stufe %d), erwartet %d", vl, id(vd_at), b.rt, b.stufe, b.soll);
               id(vd_regel)->execute("R4", 1, (int) id(vd_ab_r4).state, id(vd_r4).state);
       # WEM-Neustart (Bootup-Heartbeat 0x701 = 00): R1 ruht danach 5 min
       - can_id: 0x701
@@ -549,11 +515,11 @@ canbus:
       - can_id: 0x581
         then:
           - lambda: |-
-              if (x.size() < 5 || (x[0] & 0xF0) != 0x40 || x[3] != 2) return;
-              uint16_t idx = (x[2] << 8) | x[1];
+              uint16_t idx = 0; int wert = 0;
+              if (!rl::antwort_lesen(x, idx, wert)) return;
               static const char *hn[] = {"?", "Standby", "Zeitprogramm 1", "Zeitprogramm 2", "Zeitprogramm 3", "Sommer", "Komfort", "Normal", "Absenk"};
               if (idx == 0x2933) {
-                int neu = x[4];
+                int neu = wert;
                 if (id(vd_offen_hk)) {
                   id(vd_offen_hk) = false;
                   int alt = id(vd_offen_hk_alt);
@@ -567,7 +533,7 @@ canbus:
                 }
                 id(vd_hk_bekannt) = neu;
               } else if (idx == 0x2A20) {
-                int neu = x[4];
+                int neu = wert;
                 auto nm = [](int b) { return b == 1 ? "Ein" : (b == 2 ? "Aus" : "?"); };
                 if (id(vd_offen_ww)) {
                   id(vd_offen_ww) = false;
@@ -590,17 +556,12 @@ canbus:
               // Auch ausgeschaltete eigene Regeln (einzeln aus oder Hauptschalter aus) werden
               // ausgewertet - sie melden dann nur "waere" (Schattenmodus), gelesen wird nicht.
               if (vd::eigene().empty()) return;
-              if (can_id == 0x601 || can_id == 0x581) return;      // eigene Anfragen und ihre Antworten nie
+              if (rl::gesperrte_id(can_id)) return;      // eigene Anfragen und ihre Antworten nie
               bool haupt = id(vd_eigene_haupt).state;
               for (auto &r : vd::eigene()) {
                 if (r.can_id != can_id) continue;
-                bool ok = true;
-                for (int i = 0; i < 8 && ok; i++) {
-                  uint8_t b = i < (int) x.size() ? x[i] : 0;
-                  if ((b & r.maske[i]) != r.muster[i]) ok = false;
-                }
-                if (!ok) continue;
-                if (id(eigener_befehl_ms) != 0 && millis() - id(eigener_befehl_ms) < 120000) {
+                if (!rl::maske_passt(r.maske, r.muster, x)) continue;
+                if (rl::eigen_ruht(id(eigener_befehl_ms), millis())) {
                   ESP_LOGD("verdacht", "%s ruht (eigener Befehl)", r.name.c_str()); continue;
                 }
                 id(vd_regel)->execute(r.name, (int) r.lesen, (int) r.abstand_min, haupt && r.an);

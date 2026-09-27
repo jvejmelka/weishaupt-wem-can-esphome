@@ -3,3 +3,4 @@ secrets.yaml
 *.bin
 *.elf
 __pycache__/
+tests/.deps/

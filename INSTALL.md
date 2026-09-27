@@ -276,6 +276,18 @@ esphome run weishaupt-wem-can.yaml --device <IP>   # per OTA
 `secrets.yaml` und `.env` bleiben dabei unberührt. Was sich geändert hat, steht im
 [CHANGELOG](CHANGELOG.md); die laufende Version zeigt die Weboberfläche unter *Firmware*.
 
+## 13. Tests (optional)
+
+Wer an den Paketen etwas ändert, prüft vor dem Flashen:
+
+```
+tests/run.sh                                   # Regellogik und Datei-Parser (g++, curl)
+python3 tests/links.py                         # Links in den .md-Dateien
+esphome compile weishaupt-wem-can.yaml         # Firmware baut
+```
+
+Dasselbe läuft bei jedem Push in GitHub Actions, siehe [README](README.md#tests--ci).
+
 ## Fehlersuche
 
 | Beobachtung | Ursache / Abhilfe |

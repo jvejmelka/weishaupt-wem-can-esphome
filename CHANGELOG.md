@@ -1,6 +1,12 @@
 # Changelog – ESP-CAN-Brücke Weishaupt (WeAct CAN485, ESPHome)
 
 
+## v26 – 2026-09-27 (intern umgebaut, Verhalten unverändert, Tests + CI)
+- **Intern umgebaut, Verhalten unverändert.** Die Entscheidungslogik der Regeln (R1–R5, eigene Regeln, Schattenmodus, Mindestabstand, Obergrenze pro Stunde, Ruhe nach eigenem Schaltbefehl, Byte-Reihenfolge der Statusbits) steht jetzt in [`pakete/regellogik.h`](pakete/regellogik.h) – reines C++ ohne ESPHome, die Zeit kommt als Parameter. Die Lambdas in `verdacht.yaml` rufen nur noch diese Funktionen auf und kümmern sich um Log, Schalter und MQTT. Log-Meldungen, Ereignisse, Vorgaben und gespeicherte Werte sind dieselben.
+- **Automatische Tests** ([`tests/`](tests/)): 37 Tests mit ausgedachten Beispiel-Frames nach PROTOKOLL.md, dazu die Datei-Parser für `cmd/regeln` und `cmd/zusatz`. Einer davon (`r1_erkennt_block_upload_A4`) wird rot, sobald R1 wieder nur `0x40` auswertet – der Fehler aus v22–v24 wäre damit sofort aufgefallen.
+- **GitHub Actions:** bei jedem Push laufen die Tests, die Firmware wird mit ESPHome 2026.9.0 und einer Dummy-`secrets.yaml` kompiliert, und die Links in den .md-Dateien werden geprüft.
+- `verdacht.h` und `zusatz.h` holen ArduinoJson auf dem Board wie bisher über ESPHome, in den Tests direkt.
+
 ## v25 – 2026-09-27 (Regeln: Fehler in R1 behoben, R3/R5, Schattenmodus, Ereignisse)
 - **Fehlerbehebung R1: R1 hat in v22–v24 nie ausgelöst.** Der WEM fragt den Kessel mit Kommandobyte **`0xA4`** (SDO Block-Upload) ab, nicht mit `0x40`; R1 hat nur `0x40` ausgewertet. R1 erkennt jetzt beide (Index und Subindex stehen an derselben Stelle). An den Rohmitschnitten nachgeprüft: vorher 0 Treffer, jetzt jede Warmwasser-Umschaltung.
 - **R3 reagiert nur noch auf das Standby-Bit `0x1000`** (Heizung ein ↔ Standby). Das bisherige R3-Verhalten (jede Änderung der übrigen Statusbits) ist die neue **R5**, eigener Schalter und Mindestabstand (Vorgabe aus, 5 min). Beide Zustände werden dauerhaft gespeichert.

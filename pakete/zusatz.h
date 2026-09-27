@@ -2,7 +2,13 @@
 // Das Board liest die Werte NICHT selbst - es verwaltet nur die Liste (Name, Topic, Feld ...)
 // und veroeffentlicht sie retained unter <geraet>/app/zusatz. Die App abonniert die Topics.
 #pragma once
+// Auf dem Board kommt ArduinoJson ueber ESPHome, in den Tests (tests/) direkt.
+#if __has_include("esphome/components/json/json_util.h")
 #include "esphome/components/json/json_util.h"
+#else
+#include <ArduinoJson.h>
+#endif
+#include <cstdint>
 #include <string>
 #include <vector>
 #include <cstdio>

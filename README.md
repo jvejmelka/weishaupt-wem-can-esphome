@@ -1,5 +1,7 @@
 # Weishaupt WEM am CAN-Bus – ESPHome-Firmware
 
+[![CI](https://github.com/jvejmelka/weishaupt-wem-can-esphome/actions/workflows/ci.yml/badge.svg)](https://github.com/jvejmelka/weishaupt-wem-can-esphome/actions/workflows/ci.yml)
+
 Firmware für ein **WeAct CAN485 DevBoard V1** (ESP32, galvanisch getrennter CAN-Transceiver),
 das am CAN-Bus einer Weishaupt-Brennwertheizung mit **WEM-Systemgerät** (z. B. WTC-GW 15-B) mithört.
 
@@ -284,6 +286,23 @@ billiger, aber **ohne** galvanische Trennung.
   [WLAN inkl. `wifi.configure`](https://esphome.io/components/wifi/),
   [HTTP Request](https://esphome.io/components/http_request/),
   [MQTT](https://esphome.io/components/mqtt/), [Web Server](https://esphome.io/components/web_server/).
+
+## Tests & CI
+
+Die Entscheidungslogik der Regeln steht in [`pakete/regellogik.h`](pakete/regellogik.h) – reines
+C++ ohne ESPHome – und wird mit ausgedachten Beispiel-Frames nach [PROTOKOLL.md](PROTOKOLL.md)
+getestet, zusammen mit den Parsern für `cmd/regeln` und `cmd/zusatz`. Lokal (braucht `g++` und
+`curl`; ArduinoJson wird in der Board-Version 7.4.3 geladen und per SHA-256 geprüft):
+
+```
+tests/run.sh           # Regellogik und Datei-Parser
+python3 tests/links.py # relative Links und Anker in allen .md-Dateien
+```
+
+Bei jedem Push laufen beide in [GitHub Actions](https://github.com/jvejmelka/weishaupt-wem-can-esphome/actions/workflows/ci.yml), dazu wird die
+Firmware mit ESPHome 2026.9.0 und einer Dummy-`secrets.yaml` (aus `secrets.yaml.example`)
+kompiliert. Neue Regeln oder Änderungen an bestehenden bitte mit Test – der Fehler aus
+v22–v24 (R1 kannte nur `0x40`, der WEM fragt mit `0xA4`) hätte so nicht passieren können.
 
 ## Mithelfen
 
