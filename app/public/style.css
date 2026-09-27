@@ -224,7 +224,7 @@ html, body {
   border-radius: 2px;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .15rem;
 }
-.mode-btn:hover  { border-color: var(--amber); color: var(--amber); background: #1a1200; }
+@media (hover: hover) { .mode-btn:hover { border-color: var(--amber); color: var(--amber); background: #1a1200; } }  /* nur echte Maus: am Handy blieb der zuletzt beruehrte Knopf sonst umrandet */
 /* voll markiert = Ist (am Bus bestaetigt) */
 .mode-btn.active { border-color: var(--amber); color: #000; background: var(--amber); }
 /* eigene Vorgabe, noch nicht am Bus bestaetigt: vorgemerkt (Warteschlange) / gesendet (Kontrolle steht aus) */
