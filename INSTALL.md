@@ -157,10 +157,11 @@ Kommt nichts: H und L tauschen, Adern prüfen, notfalls **−** zusätzlich aufl
 
 ## 9. Eigene Leseanfragen einschalten (optional)
 
-Erst wenn das Mithören ein paar Tage stabil läuft: in der Weboberfläche unter *Diagnose* den
-Schalter **„Eigene CAN-Anfragen“** einschalten. Das Board fragt dann Kesselwerte wie Rücklauf,
-Druck oder Leistung im Weishaupt-Takt (40 s / 60 s / 5 min) selbst ab – nur lesend, siehe
-[Abfragetakt](README.md#abfragetakt).
+Erst wenn das Mithören ein paar Tage stabil läuft: in der Weboberfläche unter *Einstellungen* den
+Schalter **„Eigene CAN-Anfragen“** einschalten (den aktuellen Zustand samt Anlaufpause zeigt die
+gleichnamige Zeile unter *Diagnose*). Das Board fragt dann Kesselwerte wie Druck, Leistung oder
+Volumenstrom im Weishaupt-Takt (40 s / 60 s / 5 min) selbst ab – nur lesend, siehe
+[PROTOKOLL.md](PROTOKOLL.md#takt-der-eigenen-anfragen).
 
 ## 10. MQTT und Home Assistant
 

@@ -31,6 +31,7 @@ das am CAN-Bus einer Weishaupt-Brennwertheizung mit **WEM-Systemgerät** (z. B. 
 3. **Der WEM ist empfindlich.** Häufige JSON-Anfragen, Anfragen an nicht vorhandene Objekte oder
    mehrere Clients gleichzeitig können seine JSON-Schnittstelle bis zum nächsten Stromlos-Machen
    lahmlegen. Deshalb: mindestens eine Minute zwischen zwei Befehlen, kein Polling über JSON.
+   Einzelheiten: [PROTOKOLL.md – Wann sich der WEM aufhängt](PROTOKOLL.md#8-wann-sich-der-wem-aufhängt).
 4. Der 120-Ω-Abschluss auf dem Board bleibt **aus**, das Board hängt mitten am Bus.
 
 ## Anschluss
@@ -93,21 +94,11 @@ Codes Heizkreis: 1 Standby, 2–4 Zeitprogramm 1–3, 5 Sommer, 6 Komfort, 7 Nor
 
 ## Abfragetakt
 
-Mithören ist passiv. Eigene Leseanfragen stellt das Board nach Weishaupts Vorgabe –
-das WEM-Portal lässt für seinen Datenlogger höchstens alle 40 s je Wert abfragen:
-
-| Werte | Takt |
-|---|---|
-| Kessel: Temperatur, Abgas, Vorlauf, Leistung, Drehzahl, Brenner | 40 s |
-| Kessel: Vorlauf-Soll, Volumenstrom, Druck; WEM: Vorlauf Heizkreis, Vorlaufsoll-Anforderung | 60 s |
-| WEM: Raumsoll | 5 min |
-| WEM: Betriebsarten, Warmwasser-Sollwerte | nur bei Anlass: nach dem Start, bei geänderten Statusbits, nach Schaltbefehlen |
-| nach Board-Start | 1 min nur mithören |
-| nach Stromzyklus der Heizung (Bus war weg) | 10 min nur mithören |
-
-Mit dem Schalter **„Eigene CAN-Anfragen“** (Einstellungen) lassen sich die eigenen Abfragen ganz
-abschalten; das Board hört dann nur mit. Die Betriebsarten werden weiterhin bei Anlass gelesen
-(sie liegen im WEM und kommen sonst nie über den Bus). Schalten über den WEM bleibt möglich.
+Mithören ist passiv und kostet nichts. Eigene Leseanfragen stellt das Board höchstens alle 40 s
+je Wert (Weishaupts Vorgabe für den Datenlogger), Betriebsarten nur bei Anlass; nach einem
+Stromzyklus der Heizung hört es zehn Minuten nur mit. Mit dem Schalter **„Eigene CAN-Anfragen“**
+lassen sich die Abfragen ganz abschalten – Takte und Bedingungen:
+[PROTOKOLL.md – Mithören und Lesen auf Anforderung](PROTOKOLL.md#2-mithören-und-lesen-auf-anforderung).
 
 ## Überwachung
 
@@ -115,17 +106,24 @@ Der Sensor **„Letzter CAN-Frame vor"** (Sekunden) eignet sich für eine Warnun
 länger als 300 s darüber, schweigt der Bus (Heizung aus, Kabel ab, Controller im Bus-off).
 Der Bus-Wächter startet das Board nach einstellbarer Zeit ohne Frame selbst neu.
 
-## Zuordnung JSON-Objekt → CAN-Objekt (gemessen)
+## Protokoll
 
-| JSON-Modul | CAN-Knoten | Versatz |
-|---|---|---|
-| MI 07 (Kessel) | 2 | gleich |
-| MI 01 (System) | 1 | +0x100 |
-| MI 02 (Heizkreis HZK0) | 1 | +0x400 |
-| MI 03 (Warmwasser WW0) | 1 | +0x500 |
+Was auf dem Bus mitgehört und was angefragt wird, wie der JSON-Befehl an den WEM aussieht, wie
+JSON-Objekte auf CAN-Objekte abgebildet werden (z. B. Heizkreis-Betriebsart JSON `02 00 2533 02` =
+CAN Knoten 1 `0x2933/2`) und wie neue Objekte gefunden werden: **[PROTOKOLL.md](PROTOKOLL.md)**.
 
-Beispiele: Heizkreis-Betriebsart JSON `02 00 2533 02` = CAN Knoten 1 `0x2933/2`;
-Warmwasser-Betriebsart JSON `03 00 2520 02` (1 = Ein, 2 = Aus) = CAN Knoten 1 `0x2A20/2`.
+Beispielanlage mit Wärmepumpe und PV (Sollwerte, Messungen, was man am Bus sieht):
+**[ANLAGE.md](ANLAGE.md)**.
+
+Die Dokumente im Überblick:
+
+- [INSTALL.md](INSTALL.md) – Schritt für Schritt vom Board bis zur Handy-App
+- [PROTOKOLL.md](PROTOKOLL.md) – CAN-Bus, WEM-JSON, Abbildung und Fehlerbilder
+- [ANLAGE.md](ANLAGE.md) – Beispielanlage mit Wärmepumpe und PV
+- [IDEEN.md](IDEEN.md) – was sich noch bauen ließe: Datenbank und Grafana, H2-Sperre,
+  Raumsensoren, Raumgerät per Funk, Heizkörperventile, Anlage prüfen
+- [CHANGELOG.md](CHANGELOG.md) – Änderungen je Firmware-Stand
+- [LICENSE](LICENSE) – Lizenz
 
 ## Handy-App (optional, Ordner `app/`)
 
@@ -186,26 +184,10 @@ topic write weact-can485-weishaupt/cmd/warmwasser
 
 ## Was belegt ist und was nicht
 
-Die Zuordnung der Objekte stammt teils aus fremden Vorlagen. Hier steht ehrlich, was an einer
-echten Anlage (WTC-GW 15-B) gegengeprüft ist.
-
-| Wert | Objekt | Stand |
-|---|---|---|
-| Außentemperatur | PDO 0x201 | **belegt** – Kesseldisplay und Wetterdienst |
-| Warmwasser | PDO 0x241 | **belegt** – Kesseldisplay |
-| Anlagendruck | 0x2714/2 | **belegt** – Kesseldisplay |
-| Kesseltemperatur | 0x2532/0 | **belegt** – Kesseldisplay |
-| Brenner, Kesselstatus | 0x2541/0, PDO 0x182 | **belegt** – Display „Heizkreise inaktiv“ |
-| Heizkreis-Betriebsart | Knoten 1 0x2933/2 | **belegt** für Standby, Zeitprogramm 1–3, Sommer. **Komfort, Normal, Absenk nie beobachtet** |
-| Warmwasser Ein/Aus | Knoten 1 0x2A20/2 | **belegt** – geschaltet und am Display gesehen |
-| Rücklauf, Vorlauf VPT, Sollleistung | passiv aus 0x6C2 (0x2699/0x2697/0x2698) | **plausibel** (Rücklauf 17,9 °C bei 18,5 °C Vorlauf, Brenner aus), Deutung laut geronet1 |
-| Abgastemperatur | 0x2537/0 | **unbestätigt** – in manchen Vorlagen „Rücklauf“ genannt |
-| Vorlauf Soll | 0x2545/0 | **unbestätigt** |
-| Vorlauf | 0x2536/0 | **unbestätigt** – antwortet, Deutung erst bei laufendem Brenner prüfbar (Vorlauf muss dann über Kessel liegen) |
-| Leistung, Drehzahl, Volumenstrom | 0x2534, 0x2540, 0x2713/2 | aus der Vorlage übernommen, bei laufendem Brenner prüfen |
-| Wärmemengen Vortag | 0x2726–0x2728/2 | kommen nur, wenn der WEM sie selbst abfragt |
-
-Rückmeldungen von anderen Anlagen sind willkommen.
+Die Zuordnung der Objekte stammt teils aus fremden Vorlagen. Welcher Wert an einer echten Anlage
+(WTC-GW 15-B) gegengeprüft ist und welcher nicht, steht je Objekt in
+[PROTOKOLL.md, Abschnitt 3 und 4](PROTOKOLL.md#3-was-mitgehört-wird). Rückmeldungen von anderen
+Anlagen sind willkommen.
 
 ## Sicherheit
 
