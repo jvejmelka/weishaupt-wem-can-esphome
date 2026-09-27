@@ -234,6 +234,51 @@ Die Zuordnung der Objekte stammt teils aus fremden Vorlagen. Welcher Wert an ein
 [PROTOKOLL.md, Abschnitt 3 und 4](PROTOKOLL.md#3-was-mitgehört-wird). Rückmeldungen von anderen
 Anlagen sind willkommen.
 
+Kurzübersicht aller Objekte, die die Firmware auswertet (Einzelheiten und Belege in
+[PROTOKOLL.md](PROTOKOLL.md); Quelle ist [`register.yaml`](register.yaml)):
+
+<!-- REGISTER:BEGIN uebersicht -->
+<!-- erzeugt aus register.yaml von werkzeuge/register_erzeugen.py - nicht von Hand aendern -->
+
+| Stelle | Name in der Firmware | Weg | Stand |
+|---|---|---|---|
+| PDO `0x201` B1–2 | Aussentemperatur | PDO | **belegt** |
+| PDO `0x201` B0 | Systembetriebsart | PDO | plausibel |
+| PDO `0x241` B0–1 | Heizanforderung *(Name historisch)* | PDO | plausibel |
+| PDO `0x241` B2–3 | Kesseltemperatur | PDO | plausibel |
+| PDO `0x241` B6–7 | Warmwasser | PDO | **belegt** |
+| PDO `0x181` B0–5 | Uhrzeit Heizung | PDO | **belegt** |
+| PDO `0x182` B0 | Kesselstatus, Warmwasser aktiv (Status 15) | PDO | **belegt** |
+| PDO `0x1C1` B2–3 | Heizkreis Status | PDO | plausibel |
+| Knoten 2 `0x252B`/0 | Regeln R2/R4 | WEM schreibt | plausibel |
+| `0x6C2` `0x2699`/1 | Ruecklauf | Telegramm 0x6C2 | plausibel |
+| `0x6C2` `0x2697`/1 | Vorlauf VPT | Telegramm 0x6C2 | plausibel |
+| `0x6C2` `0x2698`/1 | Sollleistung | Telegramm 0x6C2 | plausibel |
+| Knoten 2 `0x2532`/0 | Kesseltemperatur | eigene Anfrage, Antwort an den WEM | **belegt** |
+| Knoten 2 `0x2537`/0 | Abgastemperatur | eigene Anfrage, Antwort an den WEM | **unbestätigt** |
+| Knoten 2 `0x2536`/0 | Vorlauf | eigene Anfrage | **unbestätigt** |
+| Knoten 2 `0x2534`/0 | Leistung | eigene Anfrage, Antwort an den WEM | **unbestätigt** |
+| Knoten 2 `0x2540`/0 | Drehzahl | eigene Anfrage | **unbestätigt** |
+| Knoten 2 `0x2541`/0 | Brenner Status, Brenner, Brennerphase, Brennerstarts | eigene Anfrage, Antwort an den WEM | **belegt** |
+| Knoten 2 `0x2545`/0 | Vorlauf Soll | eigene Anfrage, Antwort an den WEM | **unbestätigt** |
+| Knoten 2 `0x2713`/2 | Volumenstrom | eigene Anfrage, Antwort an den WEM | **unbestätigt** |
+| Knoten 2 `0x2714`/2 | Anlagendruck | eigene Anfrage, Antwort an den WEM | **belegt** |
+| Knoten 2 `0x2726`/2 | Wärmemenge Vortag Heizung | Antwort an den WEM | **belegt** |
+| Knoten 2 `0x2727`/2 | Wärmemenge Vortag WW | Antwort an den WEM | **belegt** |
+| Knoten 2 `0x2728`/2 | Wärmemenge Vortag Gesamt | Antwort an den WEM | **belegt** |
+| Knoten 2 `0x2101`/0A | Regel R1 | Frage des WEM | **belegt** |
+| Knoten 2 `0x2102`/0D | Regel R1 | Frage des WEM | **belegt** |
+| Knoten 2 `0x2102`/1 | Regel R1 | Frage des WEM | **belegt** |
+| Knoten 1 `0x2907`/2 | Vorlauf Heizkreis | eigene Anfrage | plausibel |
+| Knoten 1 `0x2640`/3 | Vorlaufsoll Anforderung | eigene Anfrage | plausibel |
+| Knoten 1 `0x2958`/2 | Raumsoll aktuell | eigene Anfrage | plausibel |
+| Knoten 1 `0x2933`/2 | Heizkreis Betriebsart | eigene Anfrage | **belegt** |
+| Knoten 1 `0x2A20`/2 | Warmwasser Betriebsart | eigene Anfrage | **belegt** |
+| Knoten 1 `0x2A2C`/2 | Warmwasser Soll aktuell | eigene Anfrage | plausibel |
+| Knoten 1 `0x2A39`/2 | Warmwasser Soll normal | eigene Anfrage | plausibel |
+
+<!-- REGISTER:END uebersicht -->
+
 ## Sicherheit
 
 - Die Weboberfläche nutzt Basic Auth über **unverschlüsseltes HTTP** – nur im LAN betreiben,
@@ -306,11 +351,17 @@ ausgedachten Beispiel-Frames nach [PROTOKOLL.md](PROTOKOLL.md), zusammen mit den
 `curl`; ArduinoJson wird in der Board-Version 7.4.3 geladen und per SHA-256 geprüft):
 
 ```
-tests/run.sh           # Regellogik und Datei-Parser
-python3 tests/links.py # relative Links und Anker in allen .md-Dateien
+tests/run.sh                                     # Regellogik, Datei-Parser, Registertabelle
+python3 werkzeuge/register_erzeugen.py --pruefen # erzeugte Dateien passen zu register.yaml
+python3 tests/links.py                           # relative Links und Anker in allen .md-Dateien
 ```
 
-Bei jedem Push laufen beide in [GitHub Actions](https://github.com/jvejmelka/weishaupt-wem-can-esphome/actions/workflows/ci.yml), dazu wird die
+**Registertabelle:** alle CAN-Objekte stehen nur in [`register.yaml`](register.yaml); daraus
+erzeugt [`werkzeuge/register_erzeugen.py`](werkzeuge/register_erzeugen.py) die C++-Konstanten
+(`pakete/register_gen.h`) und die Tabellen in PROTOKOLL.md und hier. Ablauf zum Ändern:
+[INSTALL.md, Abschnitt 14](INSTALL.md#14-register-ändern).
+
+Bei jedem Push laufen alle drei in [GitHub Actions](https://github.com/jvejmelka/weishaupt-wem-can-esphome/actions/workflows/ci.yml), dazu wird die
 Firmware mit ESPHome 2026.9.0 und einer Dummy-`secrets.yaml` (aus `secrets.yaml.example`)
 kompiliert. Neue Regeln oder Änderungen an bestehenden bitte mit Test – der Fehler aus
 v22–v24 (R1 kannte nur `0x40`, der WEM fragt mit `0xA4`) hätte so nicht passieren können.

@@ -165,6 +165,9 @@ WEM-Anfragen mithören. Wer welches der PDOs sendet, ist nicht in jedem Fall gek
 
 ## 3. Was mitgehört wird
 
+Die Tabellen in den Abschnitten 3–5 werden aus [`register.yaml`](register.yaml) erzeugt
+([INSTALL.md, Abschnitt 14](INSTALL.md#14-register-ändern)); Ergänzungen bitte dort eintragen.
+
 **Stand:** *belegt* = an der Anlage gegen Kesseldisplay oder eine unabhängige Quelle geprüft;
 *plausibel* = Werte passen, aber nicht gegengeprüft; *unbestätigt* = Deutung aus fremden Quellen.
 
@@ -175,6 +178,9 @@ WEM-Anfragen mithören. Wer welches der PDOs sendet, ist nicht in jedem Fall gek
 
 ### PDOs und Schreibtelegramme
 
+<!-- REGISTER:BEGIN mithoeren -->
+<!-- erzeugt aus register.yaml von werkzeuge/register_erzeugen.py - nicht von Hand aendern -->
+
 | CAN-ID | Bytes | Inhalt | Faktor | Name in der Firmware | Stand |
 |---|---|---|---|---|---|
 | `0x201` | 1–2 | Außentemperatur, int16 | 0,1 °C | Aussentemperatur | **belegt** (Display, Wetterdienst) |
@@ -183,12 +189,17 @@ WEM-Anfragen mithören. Wer welches der PDOs sendet, ist nicht in jedem Fall gek
 | `0x241` | 2–3 | Kesseltemperatur (gleich `0x2532`) | 0,1 °C | Kesseltemperatur | plausibel |
 | `0x241` | 6–7 | Warmwassertemperatur | 0,1 °C | Warmwasser | **belegt** (Display) |
 | `0x181` | 0–5 | Stunde, Minute, Jahr − 2000, Monat, Tag, Wochentag | – | Uhrzeit Heizung | **belegt** |
-| `0x182` | 0 | Kesselstatus: 0 Standby, 1 Aus, 10 Heizbetrieb, 15 Warmwasserbetrieb, 101 Kaminfeger, 104 Wartung | – | Kesselstatus, Warmwasser aktiv (Status 15) | **belegt** für den Ruhezustand |
+| `0x182` | 0 | Kesselstatus (Objekt `0x2530`): 0 Standby, 1 Aus, 10 Heizbetrieb, 15 Warmwasserbetrieb, 101 Kaminfeger, 104 Wartung | – | Kesselstatus, Warmwasser aktiv (Status 15) | **belegt** (für den Ruhezustand) |
 | `0x1C1` | 2–3 | Statusbits Knoten 1 (Objekt `0x274D`): `0x1000` Heizkreis Standby, `0x0040` Heizbetrieb, `0x0010` Warmwasser-Ladung ¹ | – | Heizkreis Status | plausibel |
-| `0x602` | SDO-Schreibtelegramme **des WEM an den Kessel** | `0x252B`: 01 keine Anforderung, 0A Heizen, 0F Warmwasser · `0x252C`: Vorlaufsoll Heizkreis · `0x252D`: steigt beim Warmwasserladen rampenförmig (auf 50 °C beobachtet) · `0x2709`: 0x64 Heizanforderung aktiv, 0x32 Nachlauf | – | nicht ausgewertet | plausibel |
+| `0x602` | SDO-Schreibtelegramm des WEM an den Kessel, Objekt `0x252B`/0 | Anforderung an den Kessel: 01 keine Anforderung, 0A Heizen, 0F Warmwasser | – | Regeln R2/R4 | plausibel |
+| `0x602` | SDO-Schreibtelegramm des WEM an den Kessel, Objekt `0x252C`/0 | Vorlaufsoll Heizkreis (erscheint auch in PDO `0x241` B0–1) | – | nicht ausgewertet | plausibel |
+| `0x602` | SDO-Schreibtelegramm des WEM an den Kessel, Objekt `0x252D`/0 | steigt beim Warmwasserladen rampenförmig (auf 50 °C beobachtet) | – | nicht ausgewertet | plausibel |
+| `0x602` | SDO-Schreibtelegramm des WEM an den Kessel, Objekt `0x2709`/0 | 0x64 Heizanforderung aktiv, 0x32 Nachlauf | – | nicht ausgewertet | plausibel |
 | `0x6C2` | SDO-Schreibtelegramm, Objekt `0x2699`/1 | Rücklauftemperatur VPT | 0,1 °C | Ruecklauf | plausibel |
-| `0x6C2` | Objekt `0x2697`/1 | Vorlauftemperatur VPT | 0,1 °C | Vorlauf VPT | plausibel |
-| `0x6C2` | Objekt `0x2698`/1 | Sollleistung | 0,01 % | Sollleistung | plausibel |
+| `0x6C2` | SDO-Schreibtelegramm, Objekt `0x2697`/1 | Vorlauftemperatur VPT | 0,1 °C | Vorlauf VPT | plausibel |
+| `0x6C2` | SDO-Schreibtelegramm, Objekt `0x2698`/1 | Sollleistung | 0,01 % | Sollleistung | plausibel |
+
+<!-- REGISTER:END mithoeren -->
 
 Zu `0x6C2`: Auf dieser CAN-ID liegen alle paar Sekunden Schreibtelegramme (Kommando `2B`/`2F`/`23`),
 bestätigt auf `0x682`. Die Objektbedeutung stammt aus
@@ -208,22 +219,31 @@ Das Board wertet jede SDO-Antwort auf `0x581` und `0x582` aus, egal wer gefragt 
 Mitschnitt fragte der WEM (mit dem Kommandobyte `A4`) unter anderem diese Kesselobjekte selbst ab –
 deren Werte kommen also auch bei ausgeschalteten eigenen Anfragen:
 
+<!-- REGISTER:BEGIN wem-antwort -->
+<!-- erzeugt aus register.yaml von werkzeuge/register_erzeugen.py - nicht von Hand aendern -->
+
 | Objekt (Knoten 2) | Name in der Firmware | vom WEM abgefragt |
 |---|---|---|
 | `0x2532`/0 | Kesseltemperatur | ja |
-| `0x2534`/0 | Leistung | ja |
 | `0x2537`/0 | Abgastemperatur | ja |
-| `0x2541`/0 | Brenner, Brennerphase, Brennerstarts | ja, selten |
+| `0x2534`/0 | Leistung | ja |
+| `0x2541`/0 | Brenner Status, Brenner, Brennerphase, Brennerstarts | ja, selten |
 | `0x2545`/0 | Vorlauf Soll | ja, selten |
 | `0x2713`/2 | Volumenstrom | ja, selten |
 | `0x2714`/2 | Anlagendruck | ja |
-| `0x2726`/2, `0x2727`/2, `0x2728`/2 | Wärmemengen Vortag | ja – **nur** so, die Firmware fragt sie nie selbst |
+| `0x2726`/2 | Wärmemenge Vortag Heizung | ja – **nur** so, die Firmware fragt es nie selbst |
+| `0x2727`/2 | Wärmemenge Vortag WW | ja – **nur** so, die Firmware fragt es nie selbst |
+| `0x2728`/2 | Wärmemenge Vortag Gesamt | ja – **nur** so, die Firmware fragt es nie selbst |
+| `0x2731`/2 | nicht ausgewertet (Wärmeleistung aktuell) | ja |
+| `0x2533`/2 | nicht ausgewertet (Rücklauftemperatur VPT, Kandidat) | ja |
 | `0x2536`/0 | Vorlauf | **nein** – kommt nur mit eigenen Anfragen |
 | `0x2540`/0 | Drehzahl | **nein** – kommt nur mit eigenen Anfragen |
 
-Der WEM fragt noch weitere Objekte ab (u. a. `0x2530`, `0x2531`, `0x2533`/2, `0x2731`/2, `0x2739`,
-`0x2753`/2), die die Firmware nicht auswertet. `0x2533`/2 ist laut Weishaupt-Registertabelle und
-geronet1 die Rücklauftemperatur VPT – an der Anlage **noch nicht geprüft**.
+<!-- REGISTER:END wem-antwort -->
+
+Der WEM fragt noch weitere Objekte ab (u. a. `0x2530`, `0x2531`, `0x2739`, `0x2753`/2), die die
+Firmware nicht auswertet. `0x2533`/2 ist laut Weishaupt-Registertabelle und geronet1 die
+Rücklauftemperatur VPT – an der Anlage **noch nicht geprüft**.
 
 Wie oft der WEM ein Objekt abfragt, schwankt stark; „selten“ heißt: deutlich seltener als einmal
 pro Minute. Die Liste stammt aus einem Mitschnitt im Sommerbetrieb und ist nicht vollständig.
@@ -249,24 +269,29 @@ Alle Anfragen mit Kommandobyte `0x40`. Die Größe ergibt sich aus der Antwort (
 2 Byte, `43` 4 Byte); die Firmware liest bei Knoten 2 bis zu 4 Byte, bei Knoten 1 meist 2 Byte mit
 Vorzeichen (Betriebsarten: 1 Byte). Der Wert `0x8000` bedeutet „kein Wert“ und wird verworfen.
 
-| Knoten | Objekt | Faktor | Takt | Name in der Firmware | Stand |
-|---|---|---|---|---|---|
-| 2 | `0x2532`/0 | 0,1 °C | 40 s | Kesseltemperatur | **belegt** (Display) |
-| 2 | `0x2537`/0 | 0,1 °C | 40 s | Abgastemperatur | **unbestätigt** – in manchen Vorlagen „Rücklauf“ genannt |
-| 2 | `0x2536`/0 | 0,1 °C | 40 s | Vorlauf | **unbestätigt** – antwortet, Deutung erst bei laufendem Brenner prüfbar (Vorlauf muss dann über Kessel liegen) |
-| 2 | `0x2534`/0 | 0,01 % | 40 s | Leistung | aus der Vorlage übernommen, bei laufendem Brenner prüfen |
-| 2 | `0x2540`/0 | 1 U/min | 40 s | Drehzahl | aus der Vorlage übernommen, bei laufendem Brenner prüfen |
-| 2 | `0x2541`/0 | Phase: 0 aus, 1 Vorbelüftung, 2 Steuerbetrieb, 3 Regelbetrieb, 4 Nachbelüftung | 40 s | Brenner Status, Brenner, Brennerphase, Brennerstarts | **belegt** (Display „Heizkreise inaktiv“) |
-| 2 | `0x2545`/0 | 0,1 °C | 60 s | Vorlauf Soll | **unbestätigt** |
-| 2 | `0x2713`/2 | 1 l/h | 60 s | Volumenstrom | aus der Vorlage übernommen, bei laufendem Brenner prüfen |
-| 2 | `0x2714`/2 | 0,01 bar | 60 s | Anlagendruck | **belegt** (Display) |
-| 1 | `0x2907`/2 | 0,1 °C | 60 s | Vorlauf Heizkreis | plausibel (JSON MI 02 `0x2507` Vorlaufisttemperatur, +0x400) |
-| 1 | `0x2640`/3 | 0,1 °C | 60 s | Vorlaufsoll Anforderung | plausibel (50 °C bei Warmwasser Ein, 23 °C bei Aus beobachtet) |
-| 1 | `0x2958`/2 | 0,1 °C | 5 min | Raumsoll aktuell | plausibel (JSON MI 02 `0x2558`, +0x400) |
-| 1 | `0x2933`/2 | Code 1–8, s. [Abschnitt 5](#5-schreiben-über-den-wem-json) | Anlass, höchstens alle 2 min | Heizkreis Betriebsart | **belegt** für Standby, Zeitprogramm 1–3, Sommer. **Komfort, Normal, Absenk nie beobachtet** |
-| 1 | `0x2A20`/2 | 1 Ein, 2 Aus | Anlass | Warmwasser Betriebsart | **belegt** – geschaltet und am Display gesehen |
-| 1 | `0x2A2C`/2 | 0,1 °C | Anlass | Warmwasser Soll aktuell | plausibel (JSON MI 03 `0x252C`, +0x500; 8,0 °C bei Warmwasser Aus) |
-| 1 | `0x2A39`/2 | 0,1 °C | Anlass | Warmwasser Soll normal | plausibel (JSON MI 03 `0x2539`, +0x500) |
+<!-- REGISTER:BEGIN eigene-anfragen -->
+<!-- erzeugt aus register.yaml von werkzeuge/register_erzeugen.py - nicht von Hand aendern -->
+
+| Knoten | Objekt | Faktor | Takt | Klasse | Name in der Firmware | Stand |
+|---|---|---|---|---|---|---|
+| 2 | `0x2532`/0 | 0,1 °C | 40 s | s | Kesseltemperatur | **belegt** (Display) |
+| 2 | `0x2537`/0 | 0,1 °C | 40 s | – | Abgastemperatur | **unbestätigt** – in manchen Vorlagen „Rücklauf“ genannt |
+| 2 | `0x2536`/0 | 0,1 °C | 40 s | – | Vorlauf | **unbestätigt** – antwortet, Deutung erst bei laufendem Brenner prüfbar (Vorlauf muss dann über Kessel liegen) |
+| 2 | `0x2534`/0 | 0,01 % | 40 s | – | Leistung | **unbestätigt** – aus der Vorlage übernommen, bei laufendem Brenner prüfen |
+| 2 | `0x2540`/0 | 1 U/min | 40 s | – | Drehzahl | **unbestätigt** – aus der Vorlage übernommen, bei laufendem Brenner prüfen |
+| 2 | `0x2541`/0 | Phase: 0 aus, 1 Vorbelüftung, 2 Steuerbetrieb, 3 Regelbetrieb, 4 Nachbelüftung | 40 s | s | Brenner Status, Brenner, Brennerphase, Brennerstarts | **belegt** (Display „Heizkreise inaktiv“) |
+| 2 | `0x2545`/0 | 0,1 °C | 60 s | m | Vorlauf Soll | **unbestätigt** |
+| 2 | `0x2713`/2 | 1 l/h | 60 s | m | Volumenstrom | **unbestätigt** – aus der Vorlage übernommen, bei laufendem Brenner prüfen |
+| 2 | `0x2714`/2 | 0,01 bar | 60 s | m | Anlagendruck | **belegt** (Display) |
+| 1 | `0x2907`/2 | 0,1 °C | 60 s | s | Vorlauf Heizkreis | plausibel (JSON MI 02 `0x2507` Vorlaufisttemperatur, +0x400) |
+| 1 | `0x2640`/3 | 0,1 °C | 60 s | – | Vorlaufsoll Anforderung | plausibel (50 °C bei Warmwasser Ein, 23 °C bei Aus beobachtet) |
+| 1 | `0x2958`/2 | 0,1 °C | 5 min | m | Raumsoll aktuell | plausibel (JSON MI 02 `0x2558`, +0x400) |
+| 1 | `0x2933`/2 | Code 1–8, s. [Abschnitt 5](#5-schreiben-über-den-wem-json) | Anlass, höchstens alle 2 min | m | Heizkreis Betriebsart | **belegt** (für Standby, Zeitprogramm 1–3, Sommer. **Komfort, Normal, Absenk nie beobachtet**) |
+| 1 | `0x2A20`/2 | 1 Ein, 2 Aus | Anlass | – | Warmwasser Betriebsart | **belegt** (geschaltet und am Display gesehen) |
+| 1 | `0x2A2C`/2 | 0,1 °C | Anlass | m | Warmwasser Soll aktuell | plausibel (JSON MI 03 `0x252C`, +0x500; 8,0 °C bei Warmwasser Aus) |
+| 1 | `0x2A39`/2 | 0,1 °C | Anlass | m | Warmwasser Soll normal | plausibel (JSON MI 03 `0x2539`, +0x500) |
+
+<!-- REGISTER:END eigene-anfragen -->
 
 „Brenner“ (0/1) und der Zähler „Brennerstarts“ zählen nur mit Flamme (Phase 2 oder 3).
 Schaltet man „Eigene CAN-Anfragen“ aus, gehen die Werte, die nur durch eigene Anfragen aktuell
@@ -310,10 +335,15 @@ aus: `04` oder `02` gilt als bestätigt, `05` als abgelehnt.
 
 ### Was die Firmware schreibt
 
+<!-- REGISTER:BEGIN schreiben -->
+<!-- erzeugt aus register.yaml von werkzeuge/register_erzeugen.py - nicht von Hand aendern -->
+
 | Ziel | MI | MX | OX | OS | VS | Werte | Beobachtet |
 |---|---|---|---|---|---|---|---|
 | Heizkreis-Betriebsart | `02` | `00` | `0x2533` | `02` | `0001` | 1 Standby, 2 Zeitprogramm 1, 3 Zeitprogramm 2, 4 Zeitprogramm 3, 5 Sommer, 6 Komfort, 7 Normal, 8 Absenk | 1–5; **6–8 nie** |
 | Warmwasser-Betriebsart | `03` | `00` | `0x2520` | `02` | `0001` | 1 Ein, 2 Aus | beide |
+
+<!-- REGISTER:END schreiben -->
 
 Die Heizkreis-Codes stehen so in der Weishaupt-Registertabelle. Die Warmwasser-Betriebsart steht
 dort nicht; sie wurde per Scan und Differenz gefunden (s. [Abschnitt 7](#7-neue-objekte-finden-scan-und-differenz)).
@@ -326,12 +356,17 @@ Modulen MI 01, 02 und 03 (s. [Abschnitt 6](#6-weboberfläche-lesen-und-schreiben
 Die Firmware liest nichts über JSON. Wer es dennoch tut: diese Objekte antworten an der
 WTC-GW 15-B mit `CM 02` (alle **MI 09 / MX 01**, OS `02`, 4 Byte):
 
+<!-- REGISTER:BEGIN json-lesen -->
+<!-- erzeugt aus register.yaml von werkzeuge/register_erzeugen.py - nicht von Hand aendern -->
+
 | OX | Inhalt | Faktor | am Bus |
 |---|---|---|---|
-| `0x2628` | Wärmemenge Vortag gesamt | 0,01 kWh | Knoten 2 `0x2728`/2 |
 | `0x2626` | Wärmemenge Vortag Heizung | 0,01 kWh | Knoten 2 `0x2726`/2 |
 | `0x2627` | Wärmemenge Vortag Warmwasser | 0,01 kWh | Knoten 2 `0x2727`/2 |
+| `0x2628` | Wärmemenge Vortag gesamt | 0,01 kWh | Knoten 2 `0x2728`/2 |
 | `0x2631` | Wärmeleistung aktuell | 0,01 kW | Knoten 2 `0x2731`/2 |
+
+<!-- REGISTER:END json-lesen -->
 
 Unter **MI 07 / MX 00** liefern dieselben OX `CM 05` – s. das Warnbeispiel in
 [Abschnitt 8](#regeln-die-daraus-folgen).

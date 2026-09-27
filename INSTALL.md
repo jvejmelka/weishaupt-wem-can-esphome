@@ -281,12 +281,38 @@ esphome run weishaupt-wem-can.yaml --device <IP>   # per OTA
 Wer an den Paketen etwas ändert, prüft vor dem Flashen:
 
 ```
-tests/run.sh                                   # Regellogik, Schaltbefehle/Status-JSON, Datei-Parser (g++, curl)
+tests/run.sh                                   # Regellogik, Schaltbefehle/Status-JSON, Datei-Parser, Registertabelle (g++, curl)
+python3 werkzeuge/register_erzeugen.py --pruefen  # erzeugte Dateien passen zu register.yaml (PyYAML)
 python3 tests/links.py                         # Links in den .md-Dateien
 esphome compile weishaupt-wem-can.yaml         # Firmware baut
 ```
 
 Dasselbe läuft bei jedem Push in GitHub Actions, siehe [README](README.md#tests--ci).
+
+## 14. Register ändern
+
+Alle CAN-Objekte (Knoten, Index, Subindex, Faktor, Einheit, Stand, Beleg …) stehen **nur** in
+[`register.yaml`](register.yaml). Daraus werden `pakete/register_gen.h` und die Tabellen in
+PROTOKOLL.md und README.md erzeugt – beides nie von Hand ändern.
+
+1. `register.yaml` bearbeiten (die Felder sind im Kopf der Datei erklärt). Ein neues Objekt, das
+   die Firmware auswerten soll, bekommt eine `id`; im YAML-Lambda heißt es dann `reg::<id>`.
+2. Erzeugen:
+   ```
+   pip install pyyaml                      # einmalig
+   python3 werkzeuge/register_erzeugen.py  # schreibt register_gen.h und die Tabellen
+   ```
+   Der Generator bricht ab, wenn ein `reg::…` in den Paketen fehlt oder eine Leseanfrage an den
+   falschen Knoten ginge.
+3. Prüfen: `tests/run.sh` und `esphome compile weishaupt-wem-can.yaml`. Ändert sich ein
+   bestehender Wert (Faktor, Index), müssen die Tests `register_*_wie_v27` angepasst werden –
+   das ist Absicht: so fällt jede Verhaltensänderung auf.
+4. Alles zusammen einchecken (`register.yaml`, `pakete/register_gen.h`, PROTOKOLL.md, README.md).
+   Die CI lässt den Generator laufen und bricht ab, wenn danach etwas anders ist
+   (`git diff --exit-code`); lokal geht dasselbe mit `python3 werkzeuge/register_erzeugen.py --pruefen`.
+
+Faustregel für den Stand: **belegt** nur mit unabhängiger Gegenprobe (Kesseldisplay,
+Wetterdienst, physikalisches Kriterium) – eine App, die dieselben Register liest, zählt nicht.
 
 ## Fehlersuche
 

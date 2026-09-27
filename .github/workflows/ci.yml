@@ -17,6 +17,23 @@ jobs:
       - name: Tests bauen und ausfuehren
         run: tests/run.sh
 
+  register:
+    name: Registertabelle und erzeugte Dateien
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: PyYAML installieren
+        run: pip install pyyaml
+      - name: Erzeugen und pruefen, dass nichts veraltet ist
+        # register.yaml ist die einzige Quelle; pakete/register_gen.h und die Tabellen in
+        # PROTOKOLL.md/README.md muessen dazu passen (sonst: Generator lokal laufen lassen)
+        run: |
+          python3 werkzeuge/register_erzeugen.py
+          git diff --exit-code
+
   links:
     name: Links in den .md-Dateien
     runs-on: ubuntu-latest
@@ -41,7 +58,7 @@ jobs:
           path: |
             ~/.platformio
             .esphome
-          key: esphome-${{ env.ESPHOME_VERSION }}-${{ hashFiles('weishaupt-wem-can.yaml', 'pakete/**') }}
+          key: esphome-${{ env.ESPHOME_VERSION }}-${{ hashFiles('weishaupt-wem-can.yaml', 'pakete/**', 'register.yaml') }}
           restore-keys: esphome-${{ env.ESPHOME_VERSION }}-
       - name: ESPHome installieren
         run: pip install "esphome==${ESPHOME_VERSION}"

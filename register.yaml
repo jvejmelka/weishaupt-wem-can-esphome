@@ -1,0 +1,541 @@
+# Registertabelle - die EINZIGE Quelle fuer Objekte am CAN-Bus der Weishaupt WTC-GW
+# (WEM-Systemgeraet = Knoten 1, Kessel = Knoten 2).
+#
+# Aus dieser Datei erzeugt werkzeuge/register_erzeugen.py:
+#   - pakete/register_gen.h  (C++-Konstanten, die die YAML-Lambdas und regellogik.h benutzen)
+#   - die Tabellen zwischen <!-- REGISTER:BEGIN name --> und <!-- REGISTER:END name -->
+#     in PROTOKOLL.md und README.md
+# Nach jeder Aenderung: python3 werkzeuge/register_erzeugen.py && tests/run.sh
+# (CI prueft mit --pruefen, dass die erzeugten Dateien aktuell sind.)
+#
+# Felder (alle optional ausser id und name):
+#   id        C++-Name im Namensraum reg:: (GROSS_MIT_UNTERSTRICH)
+#   name      Inhalt, wie er in der Doku steht
+#   firmware  Name(n) der Entitaet(en) in der Firmware; fehlt = nicht ausgewertet
+#   knoten    CAN-Knoten (1 = WEM-Systemgeraet, 2 = Kessel) - SDO-Objekte
+#   index/sub CANopen-Objekt
+#   pdo       {can_id, byte, laenge}: Lage in einem PDO bzw. Telegramm (byte = erstes Byte)
+#   typ       int16 | int32 | uint8 | uint16 | code | datum
+#   faktor    Rohwert * faktor = Wert in einheit (Zahl; C++ als float-Literal)
+#   einheit   Einheit nach dem Faktor
+#   werte     Codeliste statt Faktor (Text)
+#   weg       pdo | wem_antwort (Antwort auf eine Frage des WEM, mitgehoert) |
+#             eigene_anfrage (das Board fragt selbst, nur Leseanfrage 0x40) |
+#             wem_schreibt (SDO-Schreibtelegramm des WEM an den Kessel, 0x602) |
+#             telegramm_6c2 (Schreibtelegramm auf 0x6C2) | wem_liest (nur als Frage des WEM gesehen)
+#   takt      eigene Anfrage: Takt (Doku); die Takte selbst stehen in pakete/kessel.yaml
+#   wem_fragt ja | selten | nein - fragt der WEM das Objekt selbst ab (Mitschnitt, Sommerbetrieb)
+#   klasse    Aktualisierungsklasse laut Weishaupt-Datenpunktliste: s (>=30 s), m (>=60 s), l (>=10 min)
+#   status    belegt | plausibel | unbestaetigt | vermutung
+#   beleg     kurze Begruendung (oeffentlich tauglich)
+#   quelle    woher die Zuordnung stammt
+#   json      {mi, mx, ox, os, vs}: dasselbe Objekt ueber die WEM-JSON-Schnittstelle (vs = Laenge in Byte)
+#   schreiben {werte, beobachtet}: die Firmware schreibt es ueber den WEM (JSON, CM 03)
+#   json_lesen {inhalt}: ueber JSON lesbar belegt (CM 02)
+
+objekte:
+  # ---------------------------------------------------------------- PDOs (der Bus sendet von selbst)
+  - id: AUSSENTEMP
+    name: Außentemperatur, int16
+    firmware: Aussentemperatur
+    pdo: {can_id: 0x201, byte: 1, laenge: 2}
+    typ: int16
+    faktor: 0.1
+    einheit: °C
+    weg: [pdo]
+    status: belegt
+    beleg: Display, Wetterdienst
+  - id: SYSTEMBETRIEBSART
+    name: Systembetriebsart
+    firmware: Systembetriebsart
+    pdo: {can_id: 0x201, byte: 0, laenge: 1}
+    typ: code
+    werte: 0 Aus, 1 Standby, 2 Sommer, 3 Automatik
+    weg: [pdo]
+    status: plausibel
+  - id: VORLAUFSOLL_HZ
+    name: "**Vorlaufsoll Heizkreis**, int16 – derselbe Wert, den der WEM in `0x252C` schreibt (s. `0x602`); 0 = keine Anforderung"
+    firmware: Heizanforderung *(Name historisch)*
+    pdo: {can_id: 0x241, byte: 0, laenge: 2}
+    typ: int16
+    faktor: 0.1
+    einheit: °C
+    weg: [pdo]
+    status: plausibel
+    beleg: 0 bei „Heizkreise inaktiv“
+  - id: KESSEL_TEMP_PDO
+    name: Kesseltemperatur (gleich `0x2532`)
+    firmware: Kesseltemperatur
+    pdo: {can_id: 0x241, byte: 2, laenge: 2}
+    typ: int16
+    faktor: 0.1
+    einheit: °C
+    weg: [pdo]
+    status: plausibel
+  - id: WARMWASSER
+    name: Warmwassertemperatur
+    firmware: Warmwasser
+    pdo: {can_id: 0x241, byte: 6, laenge: 2}
+    typ: int16
+    faktor: 0.1
+    einheit: °C
+    weg: [pdo]
+    status: belegt
+    beleg: Display
+  - id: UHRZEIT
+    name: Stunde, Minute, Jahr − 2000, Monat, Tag, Wochentag
+    firmware: Uhrzeit Heizung
+    pdo: {can_id: 0x181, byte: 0, laenge: 6}
+    typ: datum
+    weg: [pdo]
+    status: belegt
+  - id: KESSELSTATUS
+    name: Kesselstatus (Objekt `0x2530`)
+    firmware: Kesselstatus, Warmwasser aktiv (Status 15)
+    pdo: {can_id: 0x182, byte: 0, laenge: 1}
+    typ: code
+    werte: 0 Standby, 1 Aus, 10 Heizbetrieb, 15 Warmwasserbetrieb, 101 Kaminfeger, 104 Wartung
+    weg: [pdo]
+    status: belegt
+    beleg: für den Ruhezustand
+  - id: STATUSBITS_PDO
+    name: "Statusbits Knoten 1 (Objekt `0x274D`): `0x1000` Heizkreis Standby, `0x0040` Heizbetrieb, `0x0010` Warmwasser-Ladung ¹"
+    firmware: Heizkreis Status
+    pdo: {can_id: 0x1C1, byte: 2, laenge: 2}
+    typ: uint16
+    weg: [pdo]
+    status: plausibel
+
+  # ------------------------------------------ Schreibtelegramme des WEM an den Kessel (0x602), nur mitgehoert
+  - id: W_252B
+    name: Anforderung an den Kessel
+    knoten: 2
+    index: 0x252B
+    sub: 0
+    typ: uint8
+    werte: 01 keine Anforderung, 0A Heizen, 0F Warmwasser
+    weg: [wem_schreibt]
+    firmware: Regeln R2/R4
+    status: plausibel
+  - id: W_252C
+    name: Vorlaufsoll Heizkreis (erscheint auch in PDO `0x241` B0–1)
+    knoten: 2
+    index: 0x252C
+    sub: 0
+    weg: [wem_schreibt]
+    status: plausibel
+  - id: W_252D
+    name: steigt beim Warmwasserladen rampenförmig (auf 50 °C beobachtet)
+    knoten: 2
+    index: 0x252D
+    sub: 0
+    weg: [wem_schreibt]
+    status: plausibel
+  - id: W_2709
+    name: 0x64 Heizanforderung aktiv, 0x32 Nachlauf
+    knoten: 2
+    index: 0x2709
+    sub: 0
+    weg: [wem_schreibt]
+    status: plausibel
+
+  # ------------------------------------------ Schreibtelegramme auf 0x6C2 (alle ~5 s), passiv mitgelesen
+  - id: RUECKLAUF_VPT
+    name: Rücklauftemperatur VPT
+    firmware: Ruecklauf
+    index: 0x2699
+    sub: 1
+    pdo: {can_id: 0x6C2, byte: 4, laenge: 2}
+    typ: int16
+    faktor: 0.1
+    einheit: °C
+    weg: [telegramm_6c2]
+    status: plausibel
+    quelle: geronet1/wem-python
+  - id: VORLAUF_VPT
+    name: Vorlauftemperatur VPT
+    firmware: Vorlauf VPT
+    index: 0x2697
+    sub: 1
+    pdo: {can_id: 0x6C2, byte: 4, laenge: 2}
+    typ: int16
+    faktor: 0.1
+    einheit: °C
+    weg: [telegramm_6c2]
+    status: plausibel
+    quelle: geronet1/wem-python
+  - id: SOLLLEISTUNG
+    name: Sollleistung
+    firmware: Sollleistung
+    index: 0x2698
+    sub: 1
+    pdo: {can_id: 0x6C2, byte: 4, laenge: 2}
+    typ: int16
+    faktor: 0.01
+    einheit: "%"
+    weg: [telegramm_6c2]
+    status: plausibel
+    quelle: geronet1/wem-python
+
+  # ---------------------------------------------------------------- Kessel (Knoten 2), SDO
+  - id: KESSEL_TEMP
+    name: Kesseltemperatur
+    firmware: Kesseltemperatur
+    knoten: 2
+    index: 0x2532
+    sub: 0
+    typ: int32
+    faktor: 0.1
+    einheit: °C
+    weg: [eigene_anfrage, wem_antwort]
+    takt: 40 s
+    wem_fragt: ja
+    klasse: s
+    status: belegt
+    beleg: Display
+    json: {mi: 0x07, mx: 0x00, ox: 0x2532, os: 0x00, vs: 2}
+  - id: ABGAS
+    name: Abgastemperatur
+    firmware: Abgastemperatur
+    knoten: 2
+    index: 0x2537
+    sub: 0
+    typ: int32
+    faktor: 0.1
+    einheit: °C
+    weg: [eigene_anfrage, wem_antwort]
+    takt: 40 s
+    wem_fragt: ja
+    status: unbestaetigt
+    beleg: in manchen Vorlagen „Rücklauf“ genannt
+  - id: VORLAUF
+    name: Vorlauf
+    firmware: Vorlauf
+    knoten: 2
+    index: 0x2536
+    sub: 0
+    typ: int32
+    faktor: 0.1
+    einheit: °C
+    weg: [eigene_anfrage]
+    takt: 40 s
+    wem_fragt: nein
+    status: unbestaetigt
+    beleg: antwortet, Deutung erst bei laufendem Brenner prüfbar (Vorlauf muss dann über Kessel liegen)
+  - id: LEISTUNG
+    name: Leistung
+    firmware: Leistung
+    knoten: 2
+    index: 0x2534
+    sub: 0
+    typ: int32
+    faktor: 0.01
+    einheit: "%"
+    weg: [eigene_anfrage, wem_antwort]
+    takt: 40 s
+    wem_fragt: ja
+    status: unbestaetigt
+    beleg: aus der Vorlage übernommen, bei laufendem Brenner prüfen
+    quelle: MenkeC/Weishaupt-C3supermini
+  - id: DREHZAHL
+    name: Drehzahl
+    firmware: Drehzahl
+    knoten: 2
+    index: 0x2540
+    sub: 0
+    typ: int32
+    faktor: 1
+    einheit: U/min
+    weg: [eigene_anfrage]
+    takt: 40 s
+    wem_fragt: nein
+    status: unbestaetigt
+    beleg: aus der Vorlage übernommen, bei laufendem Brenner prüfen
+    quelle: MenkeC/Weishaupt-C3supermini
+  - id: BRENNER
+    name: Betriebsphase Brenner
+    firmware: Brenner Status, Brenner, Brennerphase, Brennerstarts
+    knoten: 2
+    index: 0x2541
+    sub: 0
+    typ: code
+    werte: "Phase: 0 aus, 1 Vorbelüftung, 2 Steuerbetrieb, 3 Regelbetrieb, 4 Nachbelüftung"
+    weg: [eigene_anfrage, wem_antwort]
+    takt: 40 s
+    wem_fragt: selten
+    klasse: s
+    status: belegt
+    beleg: Display „Heizkreise inaktiv“
+    quelle: Weishaupt-Registertabelle
+    json: {mi: 0x07, mx: 0x00, ox: 0x2541, os: 0x00, vs: 1}
+  - id: VORLAUF_SOLL
+    name: Vorlauf Soll
+    firmware: Vorlauf Soll
+    knoten: 2
+    index: 0x2545
+    sub: 0
+    typ: int32
+    faktor: 0.1
+    einheit: °C
+    weg: [eigene_anfrage, wem_antwort]
+    takt: 60 s
+    wem_fragt: selten
+    klasse: m
+    status: unbestaetigt
+    json: {mi: 0x07, mx: 0x00, ox: 0x2545, os: 0x00, vs: 2}
+  - id: VOLUMENSTROM
+    name: Volumenstrom
+    firmware: Volumenstrom
+    knoten: 2
+    index: 0x2713
+    sub: 2
+    typ: int32
+    faktor: 1
+    einheit: l/h
+    weg: [eigene_anfrage, wem_antwort]
+    takt: 60 s
+    wem_fragt: selten
+    klasse: m
+    status: unbestaetigt
+    beleg: aus der Vorlage übernommen, bei laufendem Brenner prüfen
+    json: {mi: 0x09, mx: 0x01, ox: 0x2613, os: 0x02, vs: 2}
+  - id: DRUCK
+    name: Anlagendruck
+    firmware: Anlagendruck
+    knoten: 2
+    index: 0x2714
+    sub: 2
+    typ: int32
+    faktor: 0.01
+    einheit: bar
+    weg: [eigene_anfrage, wem_antwort]
+    takt: 60 s
+    wem_fragt: ja
+    klasse: m
+    status: belegt
+    beleg: Display
+    json: {mi: 0x09, mx: 0x01, ox: 0x2614, os: 0x02, vs: 2}
+  - id: WM_HEIZUNG
+    name: Wärmemenge Vortag Heizung
+    firmware: Wärmemenge Vortag Heizung
+    knoten: 2
+    index: 0x2726
+    sub: 2
+    typ: int32
+    faktor: 0.01
+    einheit: kWh
+    weg: [wem_antwort]
+    wem_fragt: ja
+    klasse: l
+    status: belegt
+    beleg: JSON antwortet mit CM 02
+    json: {mi: 0x09, mx: 0x01, ox: 0x2626, os: 0x02, vs: 4}
+    json_lesen: {inhalt: Wärmemenge Vortag Heizung}
+  - id: WM_WW
+    name: Wärmemenge Vortag Warmwasser
+    firmware: Wärmemenge Vortag WW
+    knoten: 2
+    index: 0x2727
+    sub: 2
+    typ: int32
+    faktor: 0.01
+    einheit: kWh
+    weg: [wem_antwort]
+    wem_fragt: ja
+    klasse: l
+    status: belegt
+    beleg: JSON antwortet mit CM 02
+    json: {mi: 0x09, mx: 0x01, ox: 0x2627, os: 0x02, vs: 4}
+    json_lesen: {inhalt: Wärmemenge Vortag Warmwasser}
+  - id: WM_GESAMT
+    name: Wärmemenge Vortag gesamt
+    firmware: Wärmemenge Vortag Gesamt
+    knoten: 2
+    index: 0x2728
+    sub: 2
+    typ: int32
+    faktor: 0.01
+    einheit: kWh
+    weg: [wem_antwort]
+    wem_fragt: ja
+    klasse: l
+    status: belegt
+    beleg: JSON antwortet mit CM 02
+    json: {mi: 0x09, mx: 0x01, ox: 0x2628, os: 0x02, vs: 4}
+    json_lesen: {inhalt: Wärmemenge Vortag gesamt}
+  - id: WAERMELEISTUNG
+    name: Wärmeleistung aktuell
+    knoten: 2
+    index: 0x2731
+    sub: 2
+    typ: int32
+    faktor: 0.01
+    einheit: kW
+    weg: [wem_antwort]
+    wem_fragt: ja
+    klasse: m
+    status: plausibel
+    beleg: JSON antwortet mit CM 02; am Bus nicht ausgewertet
+    json: {mi: 0x09, mx: 0x01, ox: 0x2631, os: 0x02, vs: 4}
+    json_lesen: {inhalt: Wärmeleistung aktuell}
+  - id: RUECKLAUF_KANDIDAT
+    name: Rücklauftemperatur VPT, Kandidat
+    knoten: 2
+    index: 0x2533
+    sub: 2
+    typ: int16
+    faktor: 0.1
+    einheit: °C
+    weg: [wem_antwort]
+    wem_fragt: ja
+    status: vermutung
+    beleg: laut Weishaupt-Registertabelle und geronet1 Rücklauf VPT – an der Anlage noch nicht geprüft
+    quelle: Weishaupt-Registertabelle, geronet1/wem-python
+
+  # R1: Folge, die der WEM bei jeder Warmwasser-Umschaltung vom Kessel liest (Kommandobyte 0xA4)
+  - id: R1_A
+    name: 1. Glied der Warmwasser-Folge
+    firmware: Regel R1
+    knoten: 2
+    index: 0x2101
+    sub: 0x0A
+    weg: [wem_liest]
+    status: belegt
+    beleg: 7 von 7 Umschaltungen im Mitschnitt
+  - id: R1_B
+    name: 2. Glied der Warmwasser-Folge
+    firmware: Regel R1
+    knoten: 2
+    index: 0x2102
+    sub: 0x0D
+    weg: [wem_liest]
+    status: belegt
+    beleg: 7 von 7 Umschaltungen im Mitschnitt
+  - id: R1_C
+    name: 3. Glied der Warmwasser-Folge
+    firmware: Regel R1
+    knoten: 2
+    index: 0x2102
+    sub: 0x01
+    weg: [wem_liest]
+    status: belegt
+    beleg: 7 von 7 Umschaltungen im Mitschnitt
+
+  # ---------------------------------------------------------------- WEM-Systemgeraet (Knoten 1), SDO
+  - id: HK_VORLAUF
+    name: Vorlauf Heizkreis
+    firmware: Vorlauf Heizkreis
+    knoten: 1
+    index: 0x2907
+    sub: 2
+    typ: int16
+    faktor: 0.1
+    einheit: °C
+    weg: [eigene_anfrage]
+    takt: 60 s
+    klasse: s
+    status: plausibel
+    beleg: JSON MI 02 `0x2507` Vorlaufisttemperatur, +0x400
+    json: {mi: 0x02, mx: 0x00, ox: 0x2507, os: 0x02, vs: 2}
+  - id: VL_SOLL_ANF
+    name: Vorlaufsoll Anforderung
+    firmware: Vorlaufsoll Anforderung
+    knoten: 1
+    index: 0x2640
+    sub: 3
+    typ: int16
+    faktor: 0.1
+    einheit: °C
+    weg: [eigene_anfrage]
+    takt: 60 s
+    status: plausibel
+    beleg: 50 °C bei Warmwasser Ein, 23 °C bei Aus beobachtet
+  - id: RAUMSOLL
+    name: Raumsoll aktuell
+    firmware: Raumsoll aktuell
+    knoten: 1
+    index: 0x2958
+    sub: 2
+    typ: int16
+    faktor: 0.1
+    einheit: °C
+    weg: [eigene_anfrage]
+    takt: 5 min
+    klasse: m
+    status: plausibel
+    beleg: JSON MI 02 `0x2558`, +0x400
+    json: {mi: 0x02, mx: 0x00, ox: 0x2558, os: 0x02, vs: 2}
+  - id: STATUSBITS
+    name: Statusbits Knoten 1 (Objekt; ausgewertet wird der PDO `0x1C1`, s. STATUSBITS_PDO)
+    knoten: 1
+    index: 0x274D
+    sub: 0
+    typ: uint16
+    weg: []
+    status: plausibel
+    beleg: wird nicht abgefragt, der WEM sendet es bei Änderung als PDO `0x1C1`
+  - id: HK_BETRIEBSART
+    name: Heizkreis-Betriebsart
+    firmware: Heizkreis Betriebsart
+    knoten: 1
+    index: 0x2933
+    sub: 2
+    typ: uint8
+    werte: Code 1–8, s. [Abschnitt 5](#5-schreiben-über-den-wem-json)
+    weg: [eigene_anfrage]
+    takt: Anlass, höchstens alle 2 min
+    klasse: m
+    status: belegt
+    beleg: für Standby, Zeitprogramm 1–3, Sommer. **Komfort, Normal, Absenk nie beobachtet**
+    quelle: Weishaupt-Registertabelle, Scan und Differenz
+    json: {mi: 0x02, mx: 0x00, ox: 0x2533, os: 0x02, vs: 1}
+    schreiben:
+      werte: 1 Standby, 2 Zeitprogramm 1, 3 Zeitprogramm 2, 4 Zeitprogramm 3, 5 Sommer, 6 Komfort, 7 Normal, 8 Absenk
+      beobachtet: 1–5; **6–8 nie**
+  - id: WW_BETRIEBSART
+    name: Warmwasser-Betriebsart
+    firmware: Warmwasser Betriebsart
+    knoten: 1
+    index: 0x2A20
+    sub: 2
+    typ: uint8
+    werte: 1 Ein, 2 Aus
+    weg: [eigene_anfrage]
+    takt: Anlass
+    status: belegt
+    beleg: geschaltet und am Display gesehen
+    quelle: Scan und Differenz
+    json: {mi: 0x03, mx: 0x00, ox: 0x2520, os: 0x02, vs: 1}
+    schreiben:
+      werte: 1 Ein, 2 Aus
+      beobachtet: beide
+  - id: WW_SOLL_AKT
+    name: Warmwasser Soll aktuell
+    firmware: Warmwasser Soll aktuell
+    knoten: 1
+    index: 0x2A2C
+    sub: 2
+    typ: int16
+    faktor: 0.1
+    einheit: °C
+    weg: [eigene_anfrage]
+    takt: Anlass
+    klasse: m
+    status: plausibel
+    beleg: JSON MI 03 `0x252C`, +0x500; 8,0 °C bei Warmwasser Aus
+    json: {mi: 0x03, mx: 0x00, ox: 0x252C, os: 0x02, vs: 2}
+  - id: WW_SOLL_NORMAL
+    name: Warmwasser Soll normal
+    firmware: Warmwasser Soll normal
+    knoten: 1
+    index: 0x2A39
+    sub: 2
+    typ: int16
+    faktor: 0.1
+    einheit: °C
+    weg: [eigene_anfrage]
+    takt: Anlass
+    klasse: m
+    status: plausibel
+    beleg: JSON MI 03 `0x2539`, +0x500
+    json: {mi: 0x03, mx: 0x00, ox: 0x2539, os: 0x02, vs: 2}

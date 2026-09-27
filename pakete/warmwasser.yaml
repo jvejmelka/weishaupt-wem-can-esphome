@@ -27,11 +27,11 @@ interval:
           condition:
             lambda: 'return id(ww_jetzt_lesen);'
           then:
-            - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: [0x40, 0x20, 0x2A, 0x02, 0, 0, 0, 0] }  # WW-Betriebsart
+            - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: !lambda 'return reg::lese(reg::WW_BETRIEBSART);' }
             - delay: 150ms
-            - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: [0x40, 0x2C, 0x2A, 0x02, 0, 0, 0, 0] }  # WW-Soll aktuell
+            - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: !lambda 'return reg::lese(reg::WW_SOLL_AKT);' }
             - delay: 150ms
-            - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: [0x40, 0x39, 0x2A, 0x02, 0, 0, 0, 0] }  # WW-Soll normal
+            - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: !lambda 'return reg::lese(reg::WW_SOLL_NORMAL);' }
 
 canbus:
   - id: !extend my_can_bus
@@ -39,30 +39,31 @@ canbus:
       # PDO 0x241, Bytes 6-7: Warmwassertemperatur
       - can_id: 0x241
         then:
-          - lambda: 'id(wem_warmwasser).publish_state((int16_t(x[7] << 8 | x[6])) * 0.1f);'
+          - lambda: 'id(wem_warmwasser).publish_state(reg::pdo_wert(reg::WARMWASSER, x));'
       # PDO 0x182: Kesselstatus 15 = Warmwasserbetrieb
       - can_id: 0x182
         then:
           - lambda: |-
-              bool an = x[0] == 15;
+              bool an = x[reg::KESSELSTATUS.byte] == 15;
               id(wem_ww_aktiv).publish_state(an ? "Ein" : "Aus");
               id(wem_ww_aktiv_num).publish_state(an ? 1.0f : 0.0f);
       - can_id: 0x581
         then:
           - lambda: |-
-              if ((x[0] & 0xF0) != 0x40 || x[3] != 2) return;
+              if ((x[0] & 0xF0) != 0x40) return;
               uint16_t idx = (x[2] << 8) | x[1];
-              if (idx == 0x2A20) {
+              uint8_t sub = x[3];
+              if (reg::ist(reg::WW_BETRIEBSART, idx, sub)) {
                 // Warmwasser-Betriebsart (JSON MI03 0x2520/02): 1 = Ein, 2 = Aus
                 uint8_t b = x[4];
                 id(ww_betriebsart_code).publish_state((float) b);
                 id(ww_betriebsart).publish_state(b == 1 ? "Ein" : (b == 2 ? "Aus" : "unbekannt"));
                 bf::status().ww_gelesen(b, (id(uhr).now().is_valid() ? (uint32_t) id(uhr).now().timestamp : 0u));
-              } else if (idx == 0x2A2C || idx == 0x2A39) {
+              } else if (reg::ist(reg::WW_SOLL_AKT, idx, sub) || reg::ist(reg::WW_SOLL_NORMAL, idx, sub)) {
                 int16_t v = (int16_t)((x[5] << 8) | x[4]);
                 if (v == (int16_t) 0x8000) return;
-                if (idx == 0x2A2C) { id(ww_soll_akt).publish_state(v * 0.1f); bf::status().setze_f(bf::status().ww_soll_akt, v * 0.1f); }
-                else { id(ww_soll_normal).publish_state(v * 0.1f); bf::status().setze_f(bf::status().ww_soll_normal, v * 0.1f); }
+                if (reg::ist(reg::WW_SOLL_AKT, idx, sub)) { float w = reg::wert(reg::WW_SOLL_AKT, v); id(ww_soll_akt).publish_state(w); bf::status().setze_f(bf::status().ww_soll_akt, w); }
+                else { float w = reg::wert(reg::WW_SOLL_NORMAL, v); id(ww_soll_normal).publish_state(w); bf::status().setze_f(bf::status().ww_soll_normal, w); }
               }
 
 switch:

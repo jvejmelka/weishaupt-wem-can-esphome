@@ -723,6 +723,90 @@ TEST(status_json_drossel) {
   PRUEFE(bf::senden_faellig(bf::Status(), 0xFFFFFFF0u));      // millis()-Ueberlauf egal
 }
 
+// ---------------------------------------------------------------- Registertabelle (v28)
+// Die Werte aus register.yaml (pakete/register_gen.h) muessen EXAKT dem entsprechen, was bis v27
+// fest in den YAML-Lambdas stand - sonst hat sich das Verhalten der Firmware geaendert.
+// Die erwarteten Bytes sind bewusst hier noch einmal von Hand hingeschrieben (Stand v27).
+
+static bool bytes_gleich(const std::vector<uint8_t> &a, std::vector<uint8_t> b) { return a == b; }
+
+TEST(register_leseanfragen_wie_v27) {
+  // kessel.yaml, 40 s / 60 s / 5 min und Anlass (can_id 0x602 bzw. 0x601)
+  PRUEFE(bytes_gleich(reg::lese(reg::KESSEL_TEMP),    {0x40, 0x32, 0x25, 0x00, 0, 0, 0, 0}));
+  PRUEFE(bytes_gleich(reg::lese(reg::ABGAS),          {0x40, 0x37, 0x25, 0x00, 0, 0, 0, 0}));
+  PRUEFE(bytes_gleich(reg::lese(reg::VORLAUF),        {0x40, 0x36, 0x25, 0x00, 0, 0, 0, 0}));
+  PRUEFE(bytes_gleich(reg::lese(reg::LEISTUNG),       {0x40, 0x34, 0x25, 0x00, 0, 0, 0, 0}));
+  PRUEFE(bytes_gleich(reg::lese(reg::DREHZAHL),       {0x40, 0x40, 0x25, 0x00, 0, 0, 0, 0}));
+  PRUEFE(bytes_gleich(reg::lese(reg::BRENNER),        {0x40, 0x41, 0x25, 0x00, 0, 0, 0, 0}));
+  PRUEFE(bytes_gleich(reg::lese(reg::VORLAUF_SOLL),   {0x40, 0x45, 0x25, 0x00, 0, 0, 0, 0}));
+  PRUEFE(bytes_gleich(reg::lese(reg::VOLUMENSTROM),   {0x40, 0x13, 0x27, 0x02, 0, 0, 0, 0}));
+  PRUEFE(bytes_gleich(reg::lese(reg::DRUCK),          {0x40, 0x14, 0x27, 0x02, 0, 0, 0, 0}));
+  PRUEFE(bytes_gleich(reg::lese(reg::HK_VORLAUF),     {0x40, 0x07, 0x29, 0x02, 0, 0, 0, 0}));
+  PRUEFE(bytes_gleich(reg::lese(reg::VL_SOLL_ANF),    {0x40, 0x40, 0x26, 0x03, 0, 0, 0, 0}));
+  PRUEFE(bytes_gleich(reg::lese(reg::RAUMSOLL),       {0x40, 0x58, 0x29, 0x02, 0, 0, 0, 0}));
+  PRUEFE(bytes_gleich(reg::lese(reg::HK_BETRIEBSART), {0x40, 0x33, 0x29, 0x02, 0, 0, 0, 0}));
+  // warmwasser.yaml
+  PRUEFE(bytes_gleich(reg::lese(reg::WW_BETRIEBSART), {0x40, 0x20, 0x2A, 0x02, 0, 0, 0, 0}));
+  PRUEFE(bytes_gleich(reg::lese(reg::WW_SOLL_AKT),    {0x40, 0x2C, 0x2A, 0x02, 0, 0, 0, 0}));
+  PRUEFE(bytes_gleich(reg::lese(reg::WW_SOLL_NORMAL), {0x40, 0x39, 0x2A, 0x02, 0, 0, 0, 0}));
+  // Knoten: 0x602 Kessel, 0x601 WEM - nie ein anderes Ziel, nie Knoten 2 beschreiben
+  for (const reg::Sdo *o : {&reg::KESSEL_TEMP, &reg::ABGAS, &reg::VORLAUF, &reg::LEISTUNG, &reg::DREHZAHL,
+                            &reg::BRENNER, &reg::VORLAUF_SOLL, &reg::VOLUMENSTROM, &reg::DRUCK})
+    PRUEFE(reg::anfrage_id(*o) == 0x602 && reg::antwort_id(*o) == 0x582);
+  for (const reg::Sdo *o : {&reg::HK_VORLAUF, &reg::VL_SOLL_ANF, &reg::RAUMSOLL, &reg::HK_BETRIEBSART,
+                            &reg::WW_BETRIEBSART, &reg::WW_SOLL_AKT, &reg::WW_SOLL_NORMAL})
+    PRUEFE(reg::anfrage_id(*o) == 0x601 && reg::antwort_id(*o) == 0x581);
+}
+
+TEST(register_faktoren_wie_v27) {
+  // exakt dieselben float-Konstanten wie bisher in den Lambdas
+  PRUEFE(reg::DRUCK.faktor == 0.01f && reg::LEISTUNG.faktor == 0.01f && reg::SOLLLEISTUNG.faktor == 0.01f);
+  PRUEFE(reg::WM_HEIZUNG.faktor == 0.01f && reg::WM_WW.faktor == 0.01f && reg::WM_GESAMT.faktor == 0.01f);
+  for (const reg::Sdo *o : {&reg::VORLAUF, &reg::ABGAS, &reg::KESSEL_TEMP, &reg::VORLAUF_SOLL, &reg::RUECKLAUF_VPT,
+                            &reg::VORLAUF_VPT, &reg::VL_SOLL_ANF, &reg::RAUMSOLL, &reg::HK_VORLAUF,
+                            &reg::WW_SOLL_AKT, &reg::WW_SOLL_NORMAL})
+    PRUEFE(o->faktor == 0.1f);
+  // (float) v wie bisher
+  for (int32_t v : {0, 1, 1234, -5, 65535, 2147483000})
+    PRUEFE(reg::wert(reg::DREHZAHL, v) == (float) v && reg::wert(reg::VOLUMENSTROM, v) == (float) v);
+  for (int32_t v : {0, 243, -71, 30000, 123456})
+    PRUEFE(reg::wert(reg::DRUCK, v) == v * 0.01f && reg::wert(reg::KESSEL_TEMP, v) == v * 0.1f);
+  // Objekte, die die Lambdas vergleichen
+  PRUEFE(reg::ist(reg::DRUCK, 0x2714, 2) && !reg::ist(reg::DRUCK, 0x2714, 0));
+  PRUEFE(reg::ist(reg::BRENNER, 0x2541, 0) && reg::ist(reg::STATUSBITS, 0x274D, 0));
+  PRUEFE(reg::ist(reg::WM_HEIZUNG, 0x2726, 2) && reg::ist(reg::WM_WW, 0x2727, 2) && reg::ist(reg::WM_GESAMT, 0x2728, 2));
+  PRUEFE(reg::ist(reg::RUECKLAUF_VPT, 0x2699, 1) && reg::ist(reg::VORLAUF_VPT, 0x2697, 1) && reg::ist(reg::SOLLLEISTUNG, 0x2698, 1));
+  PRUEFE(reg::ist(reg::R1_A, 0x2101, 0x0A) && reg::ist(reg::R1_B, 0x2102, 0x0D) && reg::ist(reg::R1_C, 0x2102, 0x01));
+  PRUEFE(reg::W_252B.index == 0x252B && reg::HK_BETRIEBSART.index == 0x2933 && reg::WW_BETRIEBSART.index == 0x2A20);
+}
+
+TEST(register_pdos_wie_v27) {
+  std::vector<uint8_t> x = {0x03, 0x2C, 0x01, 0xAB, 0xFF, 0x12, 0x34, 0x02};
+  PRUEFE(reg::pdo_wert(reg::AUSSENTEMP, x) == (int16_t(x[2] << 8 | x[1])) * 0.1f);
+  PRUEFE(reg::pdo_wert(reg::VORLAUFSOLL_HZ, x) == (int16_t(x[1] << 8 | x[0])) * 0.1f);
+  PRUEFE(reg::pdo_wert(reg::KESSEL_TEMP_PDO, x) == (int16_t(x[3] << 8 | x[2])) * 0.1f);
+  PRUEFE(reg::pdo_wert(reg::WARMWASSER, x) == (int16_t(x[7] << 8 | x[6])) * 0.1f);
+  PRUEFE(reg::pdo_wert(reg::AUSSENTEMP, x) == rl::pdo_temp(x[1], x[2]));
+  PRUEFE(reg::SYSTEMBETRIEBSART.can_id == 0x201 && reg::SYSTEMBETRIEBSART.byte == 0);
+  PRUEFE(reg::KESSELSTATUS.can_id == 0x182 && reg::KESSELSTATUS.byte == 0);
+  PRUEFE(reg::STATUSBITS_PDO.can_id == 0x1C1 && reg::STATUSBITS_PDO.byte == 2);
+  PRUEFE(reg::AUSSENTEMP.can_id == 0x201 && reg::WARMWASSER.can_id == 0x241 && reg::VORLAUFSOLL_HZ.can_id == 0x241);
+}
+
+TEST(register_json_schreiben_wie_v27) {
+  char b[24], alt[24];
+  for (unsigned w = 0; w <= 9; w++) {
+    reg::json_vg_schreiben(b, sizeof(b), reg::HK_BETRIEBSART_JSON, w);
+    snprintf(alt, sizeof(alt), "0302002533020001%02X", w);
+    PRUEFE(std::string(b) == alt);
+    reg::json_vg_schreiben(b, sizeof(b), reg::WW_BETRIEBSART_JSON, w);
+    snprintf(alt, sizeof(alt), "0303002520020001%02X", w);
+    PRUEFE(std::string(b) == alt);
+  }
+  // geschrieben wird nur im Systemgeraet (MI 01-03), nie der Kessel
+  PRUEFE(reg::HK_BETRIEBSART_JSON.mi == 0x02 && reg::WW_BETRIEBSART_JSON.mi == 0x03);
+}
+
 int main() {
   for (auto &t : tests()) {
     g_test = t.name;

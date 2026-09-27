@@ -21,7 +21,7 @@ canbus:
       - can_id: 0x581
         then:
           - lambda: |-
-              if ((x[0] & 0xF0) != 0x40 || x[3] != 2 || ((x[2] << 8) | x[1]) != 0x2A20) return;
+              if ((x[0] & 0xF0) != 0x40 || !reg::ist(reg::WW_BETRIEBSART, (x[2] << 8) | x[1], x[3])) return;
               uint8_t b = x[4];
               if (b == 1 || b == 2) id(ww_setzen).publish_state(b == 1 ? "Ein" : "Aus");
               if (id(schalt_ziel) != 2 || !id(pruefen)) return;

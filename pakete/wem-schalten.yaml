@@ -174,8 +174,9 @@ script:
           bf::Befehl bb;
           if (!s.naechster(bb)) return;
           char b[24];
-          if (bb.ziel == 1) snprintf(b, sizeof(b), "0302002533020001%02X", bb.wert);   // MI02 HZK0 Betriebsart
-          else              snprintf(b, sizeof(b), "0303002520020001%02X", bb.wert);   // MI03 WW0 Betriebsart
+          // VG: CM 03, MI MX OX OS VS, Wert - z.B. 0302002533020001 + Wert (register.yaml)
+          if (bb.ziel == 1) reg::json_vg_schreiben(b, sizeof(b), reg::HK_BETRIEBSART_JSON, bb.wert);   // MI02 HZK0 Betriebsart
+          else              reg::json_vg_schreiben(b, sizeof(b), reg::WW_BETRIEBSART_JSON, bb.wert);   // MI03 WW0 Betriebsart
           id(schalt_ziel) = bb.ziel; id(schalt_vg) = b;
           id(letzter_befehl) = millis() | 1; id(eigener_befehl_ms) = id(letzter_befehl);
           bf::status().setze(bf::status().frei_ab, s.uhr ? s.uhr + 60 : 0u);
@@ -269,11 +270,11 @@ script:
       - delay: 3s
       - lambda: |-
           if (id(schalt_ziel) != 1 && id(schalt_ziel) != 2) return;
-          uint16_t idx = id(schalt_ziel) == 1 ? 0x2933 : 0x2A20;
+          const reg::Sdo &ziel = id(schalt_ziel) == 1 ? reg::HK_BETRIEBSART : reg::WW_BETRIEBSART;
           id(pruefen) = true;
           bf::status().anlass("schaltbefehl", id(schalt_ziel) == 1, id(schalt_ziel) == 2);
-          std::vector<uint8_t> d = {0x40, (uint8_t)(idx & 0xFF), (uint8_t)(idx >> 8), 0x02, 0, 0, 0, 0};
-          id(my_can_bus)->send_data(0x601, false, d);
+          std::vector<uint8_t> d = reg::lese(ziel);
+          id(my_can_bus)->send_data(reg::anfrage_id(ziel), false, d);
       - delay: 10s
       - lambda: |-
           if (id(schalt_ziel) != 1 && id(schalt_ziel) != 2) return;
@@ -296,7 +297,7 @@ canbus:
       - can_id: 0x581
         then:
           - lambda: |-
-              if ((x[0] & 0xF0) != 0x40 || x[3] != 2 || ((x[2] << 8) | x[1]) != 0x2933) return;
+              if ((x[0] & 0xF0) != 0x40 || !reg::ist(reg::HK_BETRIEBSART, (x[2] << 8) | x[1], x[3])) return;
               uint8_t b = x[4];
               static const char* n[] = {"?", "Standby", "Zeitprogramm 1", "Zeitprogramm 2", "Zeitprogramm 3", "Sommer", "Komfort", "Normal", "Absenk"};
               if (b >= 1 && b <= 8) id(hk_setzen).publish_state(n[b]);

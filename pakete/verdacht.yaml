@@ -480,14 +480,14 @@ canbus:
       # R4: Aussentemperatur merken
       - can_id: 0x201
         then:
-          - lambda: 'if (x.size() >= 3) id(vd_at) = rl::pdo_temp(x[1], x[2]);'
+          - lambda: 'if (x.size() >= 3) id(vd_at) = reg::pdo_wert(reg::AUSSENTEMP, x);'
       # R4: Vorlaufsoll HZ (PDO 0x241 Bytes 0-1) gegen die bekannte Raumsoll-Stufe
       #   Rueckrechnung RT = (VL - 1,4 + 1,1 * AT) / 2,1 (geeicht bei AT 12,9-15,2 C) -> 18 / 20 / 21
       - can_id: 0x241
         then:
           - lambda: |-
               if (x.size() < 2) return;
-              float vl = rl::pdo_temp(x[0], x[1]);
+              float vl = reg::pdo_wert(reg::VORLAUFSOLL_HZ, x);
               id(vd_vl) = vl;
               // Bedingung wird auch bei ausgeschaltetem R4 geprueft (Schattenmodus);
               // gleicher Widerspruch wie zuletzt loest nicht erneut aus
@@ -509,7 +509,7 @@ canbus:
               uint16_t idx = 0; int wert = 0;
               if (!rl::antwort_lesen(x, idx, wert)) return;
               static const char *hn[] = {"?", "Standby", "Zeitprogramm 1", "Zeitprogramm 2", "Zeitprogramm 3", "Sommer", "Komfort", "Normal", "Absenk"};
-              if (idx == 0x2933) {
+              if (idx == reg::HK_BETRIEBSART.index) {
                 int neu = wert;
                 if (id(vd_offen_hk)) {
                   id(vd_offen_hk) = false;
@@ -523,7 +523,7 @@ canbus:
                                            std::string(neu <= 8 ? hn[neu] : "?"), alt < 0 ? -1 : (alt == neu ? 0 : 1));
                 }
                 id(vd_hk_bekannt) = neu;
-              } else if (idx == 0x2A20) {
+              } else if (idx == reg::WW_BETRIEBSART.index) {
                 int neu = wert;
                 auto nm = [](int b) { return b == 1 ? "Ein" : (b == 2 ? "Aus" : "?"); };
                 if (id(vd_offen_ww)) {

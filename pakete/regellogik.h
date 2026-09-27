@@ -11,6 +11,7 @@
 #include <vector>
 #include <map>
 #include <algorithm>
+#include "register_gen.h"
 
 namespace rl {
 
@@ -43,9 +44,9 @@ inline bool r1_frame(uint32_t &a, uint32_t &b, const std::vector<uint8_t> &x, ui
   if (x.size() < 5 || !ist_leseanfrage(x[0])) return false;
   uint16_t idx = sdo_index(x);
   uint8_t sub = x[3];
-  if (idx == 0x2101 && sub == 0x0A) { a = j | 1; return false; }
-  if (idx == 0x2102 && sub == 0x0D) { b = j | 1; return false; }
-  if (idx == 0x2102 && sub == 0x01) {
+  if (reg::ist(reg::R1_A, idx, sub)) { a = j | 1; return false; }
+  if (reg::ist(reg::R1_B, idx, sub)) { b = j | 1; return false; }
+  if (reg::ist(reg::R1_C, idx, sub)) {
     bool folge = a != 0 && b != 0 && j - b < R1_FENSTER_B_MS && j - a < R1_FENSTER_A_MS && (int32_t)(b - a) >= 0;
     a = 0; b = 0;
     return folge;
@@ -61,7 +62,7 @@ inline bool wem_neu(uint32_t wem_start, uint32_t jetzt) {
 // Schreibt der WEM 0x252B (Kommandobyte 0x2x an 0x602)? true = geschrieben UND geaendert.
 inline bool w252b_frame(int &vorher, const std::vector<uint8_t> &x, int &wert) {
   if (x.size() < 5 || ist_leseanfrage(x[0])) return false;
-  if ((x[0] & 0xE0) != 0x20 || sdo_index(x) != 0x252B) return false;
+  if ((x[0] & 0xE0) != 0x20 || sdo_index(x) != reg::W_252B.index) return false;
   wert = x[4];
   int alt = vorher;
   vorher = wert;

@@ -32,6 +32,7 @@ substitutions:
 # ${geraet}/status/json, das Paket wem-schalten fuehrt darin die Schaltbefehle.
 esphome:
   includes:
+    - pakete/register_gen.h
     - pakete/befehle.h
 
 web_server:
@@ -156,17 +157,17 @@ interval:
           condition:
             lambda: 'return id(can_anfragen).state && millis() - id(letzter_frame) < 30000 && id(bus_seit) != 0 && millis() - id(bus_seit) > id(pause_ms);'
           then:
-            - canbus.send: { canbus_id: my_can_bus, can_id: 0x602, data: [0x40, 0x32, 0x25, 0x00, 0, 0, 0, 0] }  # Kesseltemperatur
+            - canbus.send: { canbus_id: my_can_bus, can_id: 0x602, data: !lambda 'return reg::lese(reg::KESSEL_TEMP);' }  # Kesseltemperatur
             - delay: 150ms
-            - canbus.send: { canbus_id: my_can_bus, can_id: 0x602, data: [0x40, 0x37, 0x25, 0x00, 0, 0, 0, 0] }  # Abgastemperatur
+            - canbus.send: { canbus_id: my_can_bus, can_id: 0x602, data: !lambda 'return reg::lese(reg::ABGAS);' }  # Abgastemperatur
             - delay: 150ms
-            - canbus.send: { canbus_id: my_can_bus, can_id: 0x602, data: [0x40, 0x36, 0x25, 0x00, 0, 0, 0, 0] }  # Vorlauf
+            - canbus.send: { canbus_id: my_can_bus, can_id: 0x602, data: !lambda 'return reg::lese(reg::VORLAUF);' }  # Vorlauf
             - delay: 150ms
-            - canbus.send: { canbus_id: my_can_bus, can_id: 0x602, data: [0x40, 0x34, 0x25, 0x00, 0, 0, 0, 0] }  # Leistung
+            - canbus.send: { canbus_id: my_can_bus, can_id: 0x602, data: !lambda 'return reg::lese(reg::LEISTUNG);' }  # Leistung
             - delay: 150ms
-            - canbus.send: { canbus_id: my_can_bus, can_id: 0x602, data: [0x40, 0x40, 0x25, 0x00, 0, 0, 0, 0] }  # Drehzahl
+            - canbus.send: { canbus_id: my_can_bus, can_id: 0x602, data: !lambda 'return reg::lese(reg::DREHZAHL);' }  # Drehzahl
             - delay: 150ms
-            - canbus.send: { canbus_id: my_can_bus, can_id: 0x602, data: [0x40, 0x41, 0x25, 0x00, 0, 0, 0, 0] }  # Brenner
+            - canbus.send: { canbus_id: my_can_bus, can_id: 0x602, data: !lambda 'return reg::lese(reg::BRENNER);' }  # Brenner
   # Kessel und WEM, alle 60 s
   - interval: 60s
     then:
@@ -175,15 +176,15 @@ interval:
             lambda: 'return id(can_anfragen).state && millis() - id(letzter_frame) < 30000 && id(bus_seit) != 0 && millis() - id(bus_seit) > id(pause_ms);'
           then:
             - delay: 7s
-            - canbus.send: { canbus_id: my_can_bus, can_id: 0x602, data: [0x40, 0x45, 0x25, 0x00, 0, 0, 0, 0] }  # Vorlauf Soll
+            - canbus.send: { canbus_id: my_can_bus, can_id: 0x602, data: !lambda 'return reg::lese(reg::VORLAUF_SOLL);' }  # Vorlauf Soll
             - delay: 150ms
-            - canbus.send: { canbus_id: my_can_bus, can_id: 0x602, data: [0x40, 0x13, 0x27, 0x02, 0, 0, 0, 0] }  # Volumenstrom
+            - canbus.send: { canbus_id: my_can_bus, can_id: 0x602, data: !lambda 'return reg::lese(reg::VOLUMENSTROM);' }  # Volumenstrom
             - delay: 150ms
-            - canbus.send: { canbus_id: my_can_bus, can_id: 0x602, data: [0x40, 0x14, 0x27, 0x02, 0, 0, 0, 0] }  # Anlagendruck
+            - canbus.send: { canbus_id: my_can_bus, can_id: 0x602, data: !lambda 'return reg::lese(reg::DRUCK);' }  # Anlagendruck
             - delay: 150ms
-            - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: [0x40, 0x07, 0x29, 0x02, 0, 0, 0, 0] }  # Vorlauf Heizkreis
+            - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: !lambda 'return reg::lese(reg::HK_VORLAUF);' }  # Vorlauf Heizkreis
             - delay: 150ms
-            - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: [0x40, 0x40, 0x26, 0x03, 0, 0, 0, 0] }  # Vorlaufsoll-Anforderung
+            - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: !lambda 'return reg::lese(reg::VL_SOLL_ANF);' }  # Vorlaufsoll-Anforderung
   # WEM, alle 5 min: Raumsoll (wechselt mit dem Zeitprogramm)
   - interval: 300s
     then:
@@ -192,7 +193,7 @@ interval:
             lambda: 'return id(can_anfragen).state && millis() - id(letzter_frame) < 30000 && id(bus_seit) != 0 && millis() - id(bus_seit) > id(pause_ms);'
           then:
             - delay: 13s
-            - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: [0x40, 0x58, 0x29, 0x02, 0, 0, 0, 0] }  # Raumsoll aktuell
+            - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: !lambda 'return reg::lese(reg::RAUMSOLL);' }  # Raumsoll aktuell
 
   # Betriebsarten (liegen im WEM) werden NICHT periodisch gelesen, sondern nur bei Anlass,
   # unabhaengig vom Schalter "Eigene CAN-Anfragen":
@@ -221,7 +222,7 @@ interval:
           condition:
             lambda: 'return id(hk_jetzt_lesen);'
           then:
-            - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: [0x40, 0x33, 0x29, 0x02, 0, 0, 0, 0] }  # Heizkreis-Betriebsart
+            - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: !lambda 'return reg::lese(reg::HK_BETRIEBSART);' }  # Heizkreis-Betriebsart
 
 script:
   # Status auf Wunsch: Heizkreis-Betriebsart (0x2933/2) und - mit Paket warmwasser -
@@ -285,8 +286,8 @@ canbus:
       - can_id: 0x201
         then:
           - lambda: |-
-              id(wem_aussentemp).publish_state((int16_t(x[2] << 8 | x[1])) * 0.1f);
-              int sb = x[0];
+              id(wem_aussentemp).publish_state(reg::pdo_wert(reg::AUSSENTEMP, x));
+              int sb = x[reg::SYSTEMBETRIEBSART.byte];
               id(wem_systembetriebsart_code).publish_state((float) sb);
               static const char* n[] = {"Aus", "Standby", "Sommer", "Automatik"};
               id(wem_systembetriebsart).publish_state(sb <= 3 ? n[sb] : "unbekannt");
@@ -295,9 +296,9 @@ canbus:
       - can_id: 0x241
         then:
           - lambda: |-
-              id(wem_heizanforderung).publish_state((int16_t(x[1] << 8 | x[0])) * 0.1f);
+              id(wem_heizanforderung).publish_state(reg::pdo_wert(reg::VORLAUFSOLL_HZ, x));
               // Bytes 2-3: Kesseltemperatur (gleich 0x2532) - kommt so alle paar Sekunden, ohne Anfrage
-              if (x.size() >= 4) id(wem_kessel).publish_state((int16_t(x[3] << 8 | x[2])) * 0.1f);
+              if (x.size() >= 4) id(wem_kessel).publish_state(reg::pdo_wert(reg::KESSEL_TEMP_PDO, x));
 
       # PDO 0x181: Datum und Uhrzeit der Heizung (Stunde, Minute, Jahr-2000, Monat, Tag, Wochentag)
       - can_id: 0x181
@@ -318,15 +319,15 @@ canbus:
               uint8_t sub = x[3];
               int16_t v = (int16_t)((x[5] << 8) | x[4]);
               if (sub != 1) return;
-              if (idx == 0x2699) id(wem_ruecklauf).publish_state(v * 0.1f);        // Ruecklauftemperatur VPT
-              else if (idx == 0x2697) id(wem_vorlauf_vpt).publish_state(v * 0.1f); // Vorlauftemperatur VPT
-              else if (idx == 0x2698) id(wem_sollleistung).publish_state(v * 0.01f); // Sollleistung
+              if (reg::ist(reg::RUECKLAUF_VPT, idx, sub)) id(wem_ruecklauf).publish_state(reg::wert(reg::RUECKLAUF_VPT, v));
+              else if (reg::ist(reg::VORLAUF_VPT, idx, sub)) id(wem_vorlauf_vpt).publish_state(reg::wert(reg::VORLAUF_VPT, v));
+              else if (reg::ist(reg::SOLLLEISTUNG, idx, sub)) id(wem_sollleistung).publish_state(reg::wert(reg::SOLLLEISTUNG, v));
 
       # PDO 0x182: Kesselstatus (Objekt 0x2530)
       - can_id: 0x182
         then:
           - lambda: |-
-              uint8_t st = x[0];
+              uint8_t st = x[reg::KESSELSTATUS.byte];
               const char* s = "unbekannt";
               switch (st) {
                 case 0:   s = "Standby"; break;
@@ -344,7 +345,7 @@ canbus:
       - can_id: 0x1C1
         then:
           - lambda: |-
-              uint16_t m = (x[3] << 8) | x[2];
+              uint16_t m = (x[reg::STATUSBITS_PDO.byte + 1] << 8) | x[reg::STATUSBITS_PDO.byte];
               int kern = m & ~0x0050;
               if (id(statusbits_anlass) && id(statusbits_vorher) >= 0 && kern != id(statusbits_vorher)) {
                 id(anlass_ms) = millis() | 1; bf::status().anlass("statusbits", true, true);
@@ -365,7 +366,7 @@ canbus:
               if ((x[0] & 0xF0) != 0x40) return;
               uint16_t idx = (x[2] << 8) | x[1];
               uint8_t sub = x[3];
-              if (idx == 0x274D && sub == 0) {
+              if (reg::ist(reg::STATUSBITS, idx, sub)) {
                 uint16_t m = (x[5] << 8) | x[4];
                 std::string s = (m & 0x1000) ? "Standby" : "Zeitprogramm";
                 if (m & 0x0010) s += " + WW-Ladung";
@@ -374,9 +375,9 @@ canbus:
                 id(wem_betriebsart_hk_code).publish_state((float) m);
                 id(wem_betriebsart_hk).publish_state(s);
                 bf::status().setze(bf::status().hk_bits, (int) m);
-              } else if (idx == 0x2640 && sub == 3) {
-                id(wem_ww_vlsoll).publish_state((int16_t)((x[5] << 8) | x[4]) * 0.1f);
-              } else if (idx == 0x2933 && sub == 2) {
+              } else if (reg::ist(reg::VL_SOLL_ANF, idx, sub)) {
+                id(wem_ww_vlsoll).publish_state(reg::wert(reg::VL_SOLL_ANF, (int16_t)((x[5] << 8) | x[4])));
+              } else if (reg::ist(reg::HK_BETRIEBSART, idx, sub)) {
                 // Heizkreis-Betriebsart (JSON MI02 0x2533/02)
                 uint8_t b = x[4];
                 static const char* n[] = {"?", "Standby", "Zeitprogramm 1", "Zeitprogramm 2", "Zeitprogramm 3", "Sommer", "Komfort", "Normal", "Absenk"};
@@ -385,11 +386,11 @@ canbus:
                 bf::status().hk_gelesen(b, (id(uhr).now().is_valid() ? (uint32_t) id(uhr).now().timestamp : 0u));
                 std::string z = id(uhr).now().is_valid() ? id(uhr).now().strftime("%d.%m. %H:%M:%S ") : std::string("");
                 id(status_gelesen).publish_state(z + "gelesen");
-              } else if (sub == 2 && (idx == 0x2958 || idx == 0x2907)) {
+              } else if (reg::ist(reg::RAUMSOLL, idx, sub) || reg::ist(reg::HK_VORLAUF, idx, sub)) {
                 int16_t v = (int16_t)((x[5] << 8) | x[4]);
                 if (v == (int16_t) 0x8000) return;
-                if (idx == 0x2958) id(hk_raumsoll_akt).publish_state(v * 0.1f);
-                else id(hk_vorlauf).publish_state(v * 0.1f);
+                if (reg::ist(reg::RAUMSOLL, idx, sub)) id(hk_raumsoll_akt).publish_state(reg::wert(reg::RAUMSOLL, v));
+                else id(hk_vorlauf).publish_state(reg::wert(reg::HK_VORLAUF, v));
               }
 
       # SDO-Antworten Knoten 2 (Kessel)
@@ -400,14 +401,14 @@ canbus:
               uint16_t idx = (x[2] << 8) | x[1];
               uint8_t sub = x[3];
               int32_t v = (int32_t)((uint32_t)x[7] << 24 | (uint32_t)x[6] << 16 | (uint32_t)x[5] << 8 | (uint32_t)x[4]);
-              if (idx == 0x2714 && sub == 2) id(wem_druck).publish_state(v * 0.01f);
-              else if (idx == 0x2534 && sub == 0) id(wem_leistung).publish_state(v * 0.01f);
-              else if (idx == 0x2540 && sub == 0) id(wem_drehzahl).publish_state((float) v);
-              else if (idx == 0x2536 && sub == 0) id(wem_vorlauf).publish_state(v * 0.1f);
-              else if (idx == 0x2537 && sub == 0) id(wem_abgas).publish_state(v * 0.1f);
-              else if (idx == 0x2532 && sub == 0) id(wem_kessel).publish_state(v * 0.1f);
-              else if (idx == 0x2545 && sub == 0) id(wem_vorlauf_soll).publish_state(v * 0.1f);
-              else if (idx == 0x2541 && sub == 0) {
+              if (reg::ist(reg::DRUCK, idx, sub)) id(wem_druck).publish_state(reg::wert(reg::DRUCK, v));
+              else if (reg::ist(reg::LEISTUNG, idx, sub)) id(wem_leistung).publish_state(reg::wert(reg::LEISTUNG, v));
+              else if (reg::ist(reg::DREHZAHL, idx, sub)) id(wem_drehzahl).publish_state(reg::wert(reg::DREHZAHL, v));
+              else if (reg::ist(reg::VORLAUF, idx, sub)) id(wem_vorlauf).publish_state(reg::wert(reg::VORLAUF, v));
+              else if (reg::ist(reg::ABGAS, idx, sub)) id(wem_abgas).publish_state(reg::wert(reg::ABGAS, v));
+              else if (reg::ist(reg::KESSEL_TEMP, idx, sub)) id(wem_kessel).publish_state(reg::wert(reg::KESSEL_TEMP, v));
+              else if (reg::ist(reg::VORLAUF_SOLL, idx, sub)) id(wem_vorlauf_soll).publish_state(reg::wert(reg::VORLAUF_SOLL, v));
+              else if (reg::ist(reg::BRENNER, idx, sub)) {
                 // Betriebsphase Brenner (Weishaupt-Registertabelle): 0 aus, 1 Vorbelueftung,
                 // 2 Steuerbetrieb, 3 Regelbetrieb, 4 Nachbelueftung. "Ein" nur mit Flamme (2/3).
                 int ph = v & 0xFF;
@@ -422,10 +423,10 @@ canbus:
                 }
                 id(brenner_vorher) = b;
               }
-              else if (idx == 0x2713 && sub == 2) id(wem_volumenstrom).publish_state((float) v);
-              else if (idx == 0x2726 && sub == 2) id(wem_wm_heizung).publish_state(v * 0.01f);
-              else if (idx == 0x2727 && sub == 2) id(wem_wm_ww).publish_state(v * 0.01f);
-              else if (idx == 0x2728 && sub == 2) id(wem_wm_gesamt).publish_state(v * 0.01f);
+              else if (reg::ist(reg::VOLUMENSTROM, idx, sub)) id(wem_volumenstrom).publish_state(reg::wert(reg::VOLUMENSTROM, v));
+              else if (reg::ist(reg::WM_HEIZUNG, idx, sub)) id(wem_wm_heizung).publish_state(reg::wert(reg::WM_HEIZUNG, v));
+              else if (reg::ist(reg::WM_WW, idx, sub)) id(wem_wm_ww).publish_state(reg::wert(reg::WM_WW, v));
+              else if (reg::ist(reg::WM_GESAMT, idx, sub)) id(wem_wm_gesamt).publish_state(reg::wert(reg::WM_GESAMT, v));
 
 text_sensor:
   - platform: template
