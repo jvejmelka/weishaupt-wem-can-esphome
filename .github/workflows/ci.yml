@@ -9,9 +9,10 @@ permissions:
   contents: read
 
 jobs:
+  # runs-on fest auf ubuntu-24.04: ubuntu-latest wechselt am 19.10.2026 auf Ubuntu 26.04
   tests:
-    name: Tests der Regellogik
-    runs-on: ubuntu-latest
+    name: Tests der Regellogik und des Bauteils
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - name: Tests bauen und ausfuehren
@@ -19,7 +20,7 @@ jobs:
 
   register:
     name: Registertabelle und erzeugte Dateien
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -28,7 +29,7 @@ jobs:
       - name: PyYAML installieren
         run: pip install pyyaml
       - name: Erzeugen und pruefen, dass nichts veraltet ist
-        # register.yaml ist die einzige Quelle; pakete/register_gen.h und die Tabellen in
+        # register.yaml ist die einzige Quelle; components/weishaupt_can/register_gen.h und die Tabellen in
         # PROTOKOLL.md/README.md muessen dazu passen (sonst: Generator lokal laufen lassen)
         run: |
           python3 werkzeuge/register_erzeugen.py
@@ -36,7 +37,7 @@ jobs:
 
   links:
     name: Links in den .md-Dateien
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - name: Relative Links und Anker pruefen
@@ -44,7 +45,7 @@ jobs:
 
   firmware:
     name: Firmware kompilieren (ESPHome 2026.9.0)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       ESPHOME_VERSION: "2026.9.0"
     steps:
@@ -58,12 +59,15 @@ jobs:
           path: |
             ~/.platformio
             .esphome
-          key: esphome-${{ env.ESPHOME_VERSION }}-${{ hashFiles('weishaupt-wem-can.yaml', 'pakete/**', 'register.yaml') }}
+          key: esphome-${{ env.ESPHOME_VERSION }}-${{ hashFiles('weishaupt-wem-can.yaml', 'pakete/**', 'components/**', 'register.yaml') }}
           restore-keys: esphome-${{ env.ESPHOME_VERSION }}-
       - name: ESPHome installieren
         run: pip install "esphome==${ESPHOME_VERSION}"
       - name: Dummy-secrets.yaml aus der Vorlage
         # nur Platzhalter (Dokumentationsadressen 192.0.2.x) - echte Zugangsdaten gibt es hier nicht
         run: cp secrets.yaml.example secrets.yaml
-      - name: Kompilieren
+      - name: Kompilieren (mit dem Bauteil components/weishaupt_can)
         run: esphome compile weishaupt-wem-can.yaml
+      - name: Bauteil wirklich gebaut?
+        # ohne das Bauteil gaebe es id(wcan) nicht - trotzdem ausdruecklich pruefen
+        run: test -n "$(find .esphome/build -path '*components/weishaupt_can/weishaupt_can.cpp.o*' -print -quit)"

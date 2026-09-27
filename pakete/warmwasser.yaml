@@ -2,30 +2,17 @@
 # und der Warmwasserbetrieb des Kessels. Nur lesen. Braucht das Paket kessel.
 #   JSON MI03 entspricht auf dem Bus Knoten 1, Index JSON-OX + 0x500.
 
-globals:
-  - id: ww_erledigt
-    type: uint32_t
-    initial_value: '0'
-  - id: ww_jetzt_lesen
-    type: bool
-    initial_value: 'false'
-
 interval:
   # Warmwasser-Betriebsart und -Sollwerte liegen im WEM: gelesen nur bei Anlass (siehe
   # Paket kessel: nach Start, bei geaenderten Statusbits, nach Schaltbefehlen).
   - interval: 5s
     then:
       - lambda: |-
-          id(ww_jetzt_lesen) = false;
-          uint32_t a = id(anlass_ms);
-          if (id(anlass_ww_ms) != 0 && (a == 0 || (int32_t)(id(anlass_ww_ms) - a) > 0)) a = id(anlass_ww_ms);
-          if (a == 0 || a == id(ww_erledigt)) return;
-          if (millis() - a < 8000) return;
-          if (millis() - id(letzter_frame) > 30000) return;
-          id(ww_erledigt) = a; id(ww_jetzt_lesen) = true;
+          uint32_t jetzt = millis();
+          id(wcan)->anlass.ww_takt(id(wcan)->bus.tot(jetzt), jetzt);
       - if:
           condition:
-            lambda: 'return id(ww_jetzt_lesen);'
+            lambda: 'return id(wcan)->anlass.ww_jetzt;'
           then:
             - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: !lambda 'return reg::lese(reg::WW_BETRIEBSART);' }
             - delay: 150ms
@@ -57,8 +44,8 @@ canbus:
                 // Warmwasser-Betriebsart (JSON MI03 0x2520/02): 1 = Ein, 2 = Aus
                 uint8_t b = x[4];
                 id(ww_betriebsart_code).publish_state((float) b);
-                id(ww_betriebsart).publish_state(b == 1 ? "Ein" : (b == 2 ? "Aus" : "unbekannt"));
-                bf::status().ww_gelesen(b, (id(uhr).now().is_valid() ? (uint32_t) id(uhr).now().timestamp : 0u));
+                id(ww_betriebsart).publish_state(wc::ww_name(b, "unbekannt"));
+                bf::status().ww_gelesen(b, id(wcan)->unix_zeit());
               } else if (reg::ist(reg::WW_SOLL_AKT, idx, sub) || reg::ist(reg::WW_SOLL_NORMAL, idx, sub)) {
                 int16_t v = (int16_t)((x[5] << 8) | x[4]);
                 if (v == (int16_t) 0x8000) return;

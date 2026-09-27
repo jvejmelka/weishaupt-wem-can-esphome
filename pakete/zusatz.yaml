@@ -17,15 +17,17 @@
 #                                NAME loeschen   |   alle loeschen
 #   Zuletzt geschrieben gilt (Web und Datei aendern dieselbe Liste).
 
+# Zustand: wc::Zusatz im Bauteil (kern.h), Liste und Parser in zusatz.h
+weishaupt_can:
+  zusatz: true               # gespeicherte Liste anlegen
+
 esphome:
-  includes:
-    - pakete/zusatz.h
   on_boot:
     priority: -100
     then:
       - lambda: |-
           std::string f;
-          if (!zs::aus_speicher(id(zs_speicher).data(), f)) ESP_LOGW("zusatz", "Liste: %s", f.c_str());
+          if (!zs::aus_speicher(id(wcan)->zs.speicher.data(), f)) ESP_LOGW("zusatz", "Liste: %s", f.c_str());
           ESP_LOGI("zusatz", "%u Zusatzanzeige(n) geladen", (unsigned) zs::liste().size());
           id(zs_liste_ts).publish_state(zs::anzeige());
           #ifdef USE_MQTT
@@ -33,22 +35,6 @@ esphome:
             id(zs_datei)->execute(p);
           });
           #endif
-
-globals:
-  - id: zs_speicher            # Liste in Speicherform (JSON), ueberlebt den Neustart
-    type: std::array<char, 1600>
-    restore_value: yes
-  - id: zs_datei_hash          # Pruefsumme der zuletzt uebernommenen Datei
-    type: uint32_t
-    restore_value: yes
-    initial_value: '0'
-  - id: zs_version             # "version" der zuletzt uebernommenen Datei (-1 = keine)
-    type: int
-    restore_value: yes
-    initial_value: '-1'
-  - id: zs_gesendet
-    type: bool
-    initial_value: 'false'
 
 web_server:
   sorting_groups:
@@ -64,11 +50,10 @@ script:
     then:
       - lambda: |-
           std::string s = zs::speicherform();
-          auto &m = id(zs_speicher);
-          if (s.size() < m.size()) { m.fill(0); memcpy(m.data(), s.c_str(), s.size()); }
-          else ESP_LOGE("zusatz", "Liste zu gross (%u Byte) - nicht gespeichert", (unsigned) s.size());
+          if (!wc::speicher_schreiben(id(wcan)->zs.speicher, s))
+            ESP_LOGE("zusatz", "Liste zu gross (%u Byte) - nicht gespeichert", (unsigned) s.size());
           id(zs_liste_ts).publish_state(zs::anzeige());
-          id(zs_gesendet) = false;
+          id(wcan)->zs.gesendet = false;
           id(zs_senden)->execute();
 
   - id: zs_senden
@@ -78,15 +63,8 @@ script:
       - lambda: |-
           #ifdef USE_MQTT
           if (!mqtt::global_mqtt_client->is_connected()) return;
-          JsonDocument d;
-          JsonObject o = d.to<JsonObject>();
-          o["firmware"] = "${firmware}";
-          if (id(zs_version) >= 0) o["version"] = id(zs_version);
-          JsonArray a = o["eintraege"].to<JsonArray>();
-          for (auto &e : zs::liste()) zs::eintrag_json(a.add<JsonObject>(), e);
-          std::string s;
-          serializeJson(d, s);
-          id(zs_gesendet) = mqtt::global_mqtt_client->publish("${geraet}/app/zusatz", s, 0, true);
+          std::string s = zs::app_json("${firmware}", id(wcan)->zs.version);
+          id(wcan)->zs.gesendet = mqtt::global_mqtt_client->publish("${geraet}/app/zusatz", s, 0, true);
           #endif
 
   - id: zs_datei
@@ -95,9 +73,9 @@ script:
       txt: string
     then:
       - lambda: |-
-          std::string z = id(uhr).now().is_valid() ? id(uhr).now().strftime("%H:%M:%S ") : std::string("");
+          std::string z = id(wcan)->zeit("%H:%M:%S ");
           uint32_t h = zs::fnv(txt);
-          if (h == id(zs_datei_hash)) { ESP_LOGI("zusatz", "Zusatz-Datei unveraendert - ignoriert"); return; }
+          if (h == id(wcan)->zs.datei_hash) { ESP_LOGI("zusatz", "Zusatz-Datei unveraendert - ignoriert"); return; }
           int version = -1; std::vector<zs::Eintrag> v; std::string f;
           if (!zs::datei_lesen(txt, version, v, f)) {
             id(zs_meldung_ts).publish_state(z + "Datei ABGELEHNT: " + f);
@@ -106,13 +84,13 @@ script:
           }
           std::vector<zs::Eintrag> vorher = zs::liste();
           zs::liste() = v;
-          if (zs::speicherform().size() >= id(zs_speicher).size()) {
+          if (zs::speicherform().size() >= id(wcan)->zs.speicher.size()) {
             zs::liste() = vorher;
             id(zs_meldung_ts).publish_state(z + "Datei ABGELEHNT: Liste zu lang (Topics/Namen kuerzen)");
             return;
           }
-          id(zs_datei_hash) = h;
-          if (version >= 0) id(zs_version) = version;
+          id(wcan)->zs.datei_hash = h;
+          if (version >= 0) id(wcan)->zs.version = version;
           char b[80];
           snprintf(b, sizeof(b), "Datei uebernommen (version %d): %u Eintrag/Eintraege", version, (unsigned) v.size());
           id(zs_meldung_ts).publish_state(z + b);
@@ -125,11 +103,11 @@ script:
       txt: string
     then:
       - lambda: |-
-          std::string z = id(uhr).now().is_valid() ? id(uhr).now().strftime("%H:%M:%S ") : std::string("");
+          std::string z = id(wcan)->zeit("%H:%M:%S ");
           std::vector<zs::Eintrag> vorher = zs::liste();
           bool ok = false;
           std::string m = zs::befehl(txt, ok);
-          if (ok && zs::speicherform().size() >= id(zs_speicher).size()) {
+          if (ok && zs::speicherform().size() >= id(wcan)->zs.speicher.size()) {
             zs::liste() = vorher; ok = false; m = "Liste zu lang (Topics/Namen kuerzen)";
           }
           id(zs_meldung_ts).publish_state(z + m);
@@ -140,8 +118,8 @@ interval:
     then:
       - lambda: |-
           #ifdef USE_MQTT
-          if (!mqtt::global_mqtt_client->is_connected()) id(zs_gesendet) = false;
-          else if (!id(zs_gesendet)) id(zs_senden)->execute();
+          if (!mqtt::global_mqtt_client->is_connected()) id(wcan)->zs.gesendet = false;
+          else if (!id(wcan)->zs.gesendet) id(zs_senden)->execute();
           #endif
 
 text:

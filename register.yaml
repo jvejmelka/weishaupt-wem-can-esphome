@@ -2,7 +2,7 @@
 # (WEM-Systemgeraet = Knoten 1, Kessel = Knoten 2).
 #
 # Aus dieser Datei erzeugt werkzeuge/register_erzeugen.py:
-#   - pakete/register_gen.h  (C++-Konstanten, die die YAML-Lambdas und regellogik.h benutzen)
+#   - components/weishaupt_can/register_gen.h  (C++-Konstanten fuer YAML-Lambdas und Bauteil)
 #   - die Tabellen zwischen <!-- REGISTER:BEGIN name --> und <!-- REGISTER:END name -->
 #     in PROTOKOLL.md und README.md
 # Nach jeder Aenderung: python3 werkzeuge/register_erzeugen.py && tests/run.sh

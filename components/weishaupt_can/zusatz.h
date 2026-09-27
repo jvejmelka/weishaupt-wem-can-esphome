@@ -258,4 +258,17 @@ inline uint32_t fnv(const std::string &s) {
   return h | 1;
 }
 
+// <geraet>/app/zusatz (retained): die Liste fuer die Handy-App
+inline std::string app_json(const std::string &firmware, int version) {
+  JsonDocument d;
+  JsonObject o = d.to<JsonObject>();
+  o["firmware"] = firmware;
+  if (version >= 0) o["version"] = version;
+  JsonArray a = o["eintraege"].to<JsonArray>();
+  for (auto &e : liste()) eintrag_json(a.add<JsonObject>(), e);
+  std::string s;
+  serializeJson(d, s);
+  return s;
+}
+
 }  // namespace zs

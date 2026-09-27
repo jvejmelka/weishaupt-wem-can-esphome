@@ -32,30 +32,6 @@ http_request:
   timeout: 10s
   verify_ssl: false
 
-globals:
-  - id: letzter_befehl          # millis() des letzten WEM-Aufrufs (Sperrminute)
-    type: uint32_t
-    initial_value: '0'
-  - id: schalt_ziel             # laufender Aufruf: 0 keiner, 1 Heizkreis, 2 Warmwasser, 3 Schreibbefehl
-    type: int
-    initial_value: '0'
-  - id: schalt_vg
-    type: std::string
-  - id: senden
-    type: bool
-    initial_value: 'false'
-  - id: pruefen                 # true, sobald die Kontroll-Leseanfrage am Bus raus ist
-    type: bool
-    initial_value: 'false'
-  # Warteschlange und Phasen der Befehle: bf::schaltung() in befehle.h
-  - id: protokoll
-    type: std::vector<std::string>
-  - id: letzter_gesehen         # fuer die Anzeige: wann die Sperrminute endet
-    type: uint32_t
-    initial_value: '0'
-  - id: frei_ab
-    type: std::string
-
 esphome:
   on_boot:
     priority: -100
@@ -80,7 +56,7 @@ script:
     then:
       - lambda: |-
           auto &s = bf::schaltung();
-          s.uhr = id(uhr).now().is_valid() ? (uint32_t) id(uhr).now().timestamp : 0;
+          s.uhr = id(wcan)->unix_zeit();
           bf::Anfrage a; a.quelle = quelle;
           std::string f;
           const char *zn = ziel == 1 ? "Heizkreis" : "Warmwasser";
@@ -88,9 +64,9 @@ script:
             s.ablehnen(ziel, a, f);
             id(schalt_status).publish_state(a.quelle + ": " + zn + " abgelehnt - " + f);
           } else {
-            uint32_t seit = millis() - id(letzter_befehl);
+            uint32_t seit = millis() - id(wcan)->schalten.letzter_befehl;
             int warten = id(wem_senden).is_running() ? 60 :
-                         (id(letzter_befehl) != 0 && seit < 60000) ? (int) ((60000 - seit) / 1000) + 1 : 0;
+                         (id(wcan)->schalten.letzter_befehl != 0 && seit < 60000) ? (int) ((60000 - seit) / 1000) + 1 : 0;
             if (ziel == 2 && s.hat_wunsch[1] && warten == 0) warten = 60;   // Heizkreis geht vor
             s.annehmen(ziel, a, warten);
             id(schalt_status).publish_state("vorgemerkt (" + a.quelle + "): " + zn + " " + bf::wert_text(ziel, a.wert) +
@@ -123,19 +99,11 @@ script:
       text: string
     then:
       - lambda: |-
-          std::string z = id(uhr).now().is_valid() ? id(uhr).now().strftime("%d.%m. %H:%M ") : std::string("");
-          auto &p = id(protokoll);
-          p.insert(p.begin(), z + text);
-          if (p.size() > 10) p.resize(10);
-          std::string kurz, lang;
-          for (auto &e : p) {
-            if (kurz.size() + e.size() + 3 <= 250) { if (!kurz.empty()) kurz += " | "; kurz += e; }
-            if (!lang.empty()) lang += "\n";
-            lang += e;
-          }
-          id(schalt_protokoll).publish_state(kurz);
+          auto &p = id(wcan)->schalten.protokoll;
+          p.neu(id(wcan)->zeit("%d.%m. %H:%M ") + text);
+          id(schalt_protokoll).publish_state(p.kurz());
           #ifdef USE_MQTT
-          mqtt::global_mqtt_client->publish("${geraet}/schaltprotokoll", lang, 0, true);
+          mqtt::global_mqtt_client->publish("${geraet}/schaltprotokoll", p.lang(), 0, true);
           #endif
 
   # Warteschlange abarbeiten: laeuft jede Sekunde, sendet hoechstens einen Befehl pro Minute
@@ -143,32 +111,23 @@ script:
     mode: single
     then:
       - lambda: |-
+          auto &sc = id(wcan)->schalten;
           // Anzeige der Warteschlange (nur bei Aenderung veroeffentlichen)
-          if (id(letzter_befehl) != id(letzter_gesehen)) {
-            id(letzter_gesehen) = id(letzter_befehl);
+          if (sc.letzter_befehl != sc.letzter_gesehen) {
+            sc.letzter_gesehen = sc.letzter_befehl;
             auto t = id(uhr).now();
-            if (t.is_valid()) { t = ESPTime::from_epoch_local(t.timestamp + 60); id(frei_ab) = t.strftime("%H:%M:%S"); }
-            else id(frei_ab) = "";
+            if (t.is_valid()) { t = ESPTime::from_epoch_local(t.timestamp + 60); sc.frei_ab = t.strftime("%H:%M:%S"); }
+            else sc.frei_ab = "";
           }
           auto &s = bf::schaltung();
-          s.uhr = id(uhr).now().is_valid() ? (uint32_t) id(uhr).now().timestamp : 0;
-          {
-            std::string w;
-            if (s.hat_wunsch[1]) w = std::string("1. Heizkreis -> ") + bf::hk_text(s.wunsch[1].wert) + " (" + s.wunsch[1].quelle + ")";
-            if (s.hat_wunsch[2]) {
-              if (!w.empty()) w += " | 2. "; else w = "1. ";
-              w += std::string("Warmwasser -> ") + bf::ww_text(s.wunsch[2].wert) + " (" + s.wunsch[2].quelle + ")";
-            }
-            bool gesperrt = id(wem_senden).is_running() || (id(letzter_befehl) != 0 && millis() - id(letzter_befehl) < 60000);
-            if (w.empty()) w = "leer";
-            else if (gesperrt) w += id(frei_ab).empty() ? " - wartet auf die Sperrminute" : " - naechster Befehl ab " + id(frei_ab);
-            if (id(warteschlange).state != w) id(warteschlange).publish_state(w);
-          }
-          id(senden) = false;
+          s.uhr = id(wcan)->unix_zeit();
+          std::string w = wc::warteschlange_text(s, id(wem_senden).is_running() || sc.sperrminute(millis()), sc.frei_ab);
+          if (id(warteschlange).state != w) id(warteschlange).publish_state(w);
+          sc.senden = false;
           if (id(wem_senden).is_running()) return;
-          if (id(letzter_befehl) != 0 && millis() - id(letzter_befehl) < 60000) return;
+          if (sc.sperrminute(millis())) return;
           if (s.laeuft) {                          // Sicherung: WEM-Aufruf fertig, Befehl aber noch offen
-            if (id(schalt_ziel) == 0) s.keine_rueckmeldung();
+            if (sc.ziel == 0) s.keine_rueckmeldung();
             return;
           }
           bf::Befehl bb;
@@ -177,18 +136,18 @@ script:
           // VG: CM 03, MI MX OX OS VS, Wert - z.B. 0302002533020001 + Wert (register.yaml)
           if (bb.ziel == 1) reg::json_vg_schreiben(b, sizeof(b), reg::HK_BETRIEBSART_JSON, bb.wert);   // MI02 HZK0 Betriebsart
           else              reg::json_vg_schreiben(b, sizeof(b), reg::WW_BETRIEBSART_JSON, bb.wert);   // MI03 WW0 Betriebsart
-          id(schalt_ziel) = bb.ziel; id(schalt_vg) = b;
-          id(letzter_befehl) = millis() | 1; id(eigener_befehl_ms) = id(letzter_befehl);
+          sc.ziel = bb.ziel; sc.vg = b;
+          sc.letzter_befehl = millis() | 1; id(wcan)->anlass.eigener_befehl_ms = sc.letzter_befehl;
           bf::status().setze(bf::status().frei_ab, s.uhr ? s.uhr + 60 : 0u);
-          id(senden) = true;
+          sc.senden = true;
       - script.execute: befehl_melden
       - if:
           condition:
-            lambda: 'return id(senden);'
+            lambda: 'return id(wcan)->schalten.senden;'
           then:
             - script.execute:
                 id: wem_senden
-                vg: !lambda 'return id(schalt_vg);'
+                vg: !lambda 'return id(wcan)->schalten.vg;'
 
   - id: wem_senden
     mode: single
@@ -196,8 +155,8 @@ script:
       vg: string
     then:
       - lambda: |-
-          id(pruefen) = false;
-          if (id(schalt_ziel) == 1 || id(schalt_ziel) == 2) id(schalt_status).publish_state("sende an WEM ...");
+          id(wcan)->schalten.pruefen = false;
+          if (id(wcan)->schalten.ziel == 1 || id(wcan)->schalten.ziel == 2) id(schalt_status).publish_state("sende an WEM ...");
       - http_request.post:
           url: !lambda 'return "http://" + id(wem_ip).state + "/ajax/CanApiJson.json";'
           request_headers:
@@ -211,36 +170,33 @@ script:
               r = "http://" + id(wem_ip).state + "/";
               return r.c_str();
             Content-Type: "application/json"
-          body: !lambda |-
-            return std::string("{\"ID\":\"") + to_string(millis() % 100000000) +
-                   "\",\"SRC\":\"DDC\",\"CAPI\":{\"NN\":1,\"N01\":{\"VG\":\"" + vg + "\"}}}";
+          body: !lambda 'return wc::wem_rumpf(millis(), vg);'
           capture_response: true
           max_response_buffer_size: 512
           on_response:
             then:
               - lambda: |-
-                  size_t p = body.find("\"VG\":\"");
-                  std::string rvg = p == std::string::npos ? std::string("") : body.substr(p + 6, body.find('"', p + 6) - p - 6);
+                  std::string rvg = wc::wem_vg(body);
                   std::string cm = rvg.size() >= 2 ? rvg.substr(0, 2) : std::string("--");
                   bool ok = response->status_code == 200 && (cm == "04" || cm == "02");
-                  std::string zeit = id(uhr).now().is_valid() ? id(uhr).now().strftime("%H:%M ") : std::string("");
-                  int ziel = id(schalt_ziel);
+                  std::string zeit = id(wcan)->zeit("%H:%M ");
+                  int ziel = id(wcan)->schalten.ziel;
                   if (ziel == 3) {
                     std::string t = cm == "04" ? "OK, WEM bestaetigt (VG " + rvg + ")" :
                                     cm == "05" ? "abgelehnt (CM=05): Objekt unbekannt oder nicht schreibbar - VG " + rvg :
                                     "unklare Antwort, HTTP " + to_string(response->status_code) + (rvg.empty() ? "" : ", VG " + rvg);
                     id(schreib_antwort).publish_state(t);
-                    id(protokoll_eintrag)->execute("Schreibbefehl " + id(schalt_vg) + ": " + t);
-                    id(schalt_ziel) = 0;
+                    id(protokoll_eintrag)->execute("Schreibbefehl " + id(wcan)->schalten.vg + ": " + t);
+                    id(wcan)->schalten.ziel = 0;
                   } else if (ziel == 1 || ziel == 2) {
                     auto &s = bf::schaltung();
-                    s.uhr = id(uhr).now().is_valid() ? (uint32_t) id(uhr).now().timestamp : 0;
+                    s.uhr = id(wcan)->unix_zeit();
                     std::string q = s.lauf.quelle;
                     if (cm == "05") {
                       s.wem_antwort(bf::Wem::CM05, "VG " + rvg);
                       id(schalt_status).publish_state(zeit + "abgelehnt (CM=05) - VG " + rvg);
                       id(protokoll_eintrag)->execute(std::string(ziel == 1 ? "Heizkreis" : "Warmwasser") + " (" + q + "): abgelehnt, CM=05");
-                      id(schalt_ziel) = 0;
+                      id(wcan)->schalten.ziel = 0;
                     } else {
                       s.wem_antwort(ok ? bf::Wem::BESTAETIGT : bf::Wem::UNKLAR,
                                     ok ? std::string("") : "HTTP " + to_string(response->status_code) + (rvg.empty() ? "" : ", VG " + rvg));
@@ -252,15 +208,15 @@ script:
           on_error:
             then:
               - lambda: |-
-                  std::string zeit = id(uhr).now().is_valid() ? id(uhr).now().strftime("%H:%M ") : std::string("");
-                  int ziel = id(schalt_ziel);
+                  std::string zeit = id(wcan)->zeit("%H:%M ");
+                  int ziel = id(wcan)->schalten.ziel;
                   if (ziel == 3) {
                     id(schreib_antwort).publish_state("WEM nicht erreichbar");
-                    id(protokoll_eintrag)->execute("Schreibbefehl " + id(schalt_vg) + ": WEM nicht erreichbar");
-                    id(schalt_ziel) = 0;
+                    id(protokoll_eintrag)->execute("Schreibbefehl " + id(wcan)->schalten.vg + ": WEM nicht erreichbar");
+                    id(wcan)->schalten.ziel = 0;
                   } else if (ziel == 1 || ziel == 2) {
                     auto &s = bf::schaltung();
-                    s.uhr = id(uhr).now().is_valid() ? (uint32_t) id(uhr).now().timestamp : 0;
+                    s.uhr = id(wcan)->unix_zeit();
                     s.wem_antwort(bf::Wem::NICHT_ERREICHBAR, "WEM nicht erreichbar");
                     id(schalt_status).publish_state("WEM nicht erreichbar, pruefe trotzdem am Bus ...");
                     id(befehl_melden)->execute();
@@ -269,22 +225,22 @@ script:
       # wurde schon geschaltet). Nach 3 s das Zielobjekt am Bus lesen.
       - delay: 3s
       - lambda: |-
-          if (id(schalt_ziel) != 1 && id(schalt_ziel) != 2) return;
-          const reg::Sdo &ziel = id(schalt_ziel) == 1 ? reg::HK_BETRIEBSART : reg::WW_BETRIEBSART;
-          id(pruefen) = true;
-          bf::status().anlass("schaltbefehl", id(schalt_ziel) == 1, id(schalt_ziel) == 2);
+          if (id(wcan)->schalten.ziel != 1 && id(wcan)->schalten.ziel != 2) return;
+          const reg::Sdo &ziel = id(wcan)->schalten.ziel == 1 ? reg::HK_BETRIEBSART : reg::WW_BETRIEBSART;
+          id(wcan)->schalten.pruefen = true;
+          bf::status().anlass("schaltbefehl", id(wcan)->schalten.ziel == 1, id(wcan)->schalten.ziel == 2);
           std::vector<uint8_t> d = reg::lese(ziel);
-          id(my_can_bus)->send_data(reg::anfrage_id(ziel), false, d);
+          id(wcan)->senden(reg::anfrage_id(ziel), d);
       - delay: 10s
       - lambda: |-
-          if (id(schalt_ziel) != 1 && id(schalt_ziel) != 2) return;
+          if (id(wcan)->schalten.ziel != 1 && id(wcan)->schalten.ziel != 2) return;
           auto &s = bf::schaltung();
-          s.uhr = id(uhr).now().is_valid() ? (uint32_t) id(uhr).now().timestamp : 0;
+          s.uhr = id(wcan)->unix_zeit();
           std::string q = s.lauf.quelle;
           s.keine_rueckmeldung();
           id(schalt_status).publish_state("keine Rueckmeldung vom Bus - Ergebnis unbekannt");
-          id(protokoll_eintrag)->execute(std::string(id(schalt_ziel) == 1 ? "Heizkreis" : "Warmwasser") + " (" + q + "): keine Rueckmeldung vom Bus");
-          id(schalt_ziel) = 0; id(pruefen) = false;
+          id(protokoll_eintrag)->execute(std::string(id(wcan)->schalten.ziel == 1 ? "Heizkreis" : "Warmwasser") + " (" + q + "): keine Rueckmeldung vom Bus");
+          id(wcan)->schalten.ziel = 0; id(wcan)->schalten.pruefen = false;
           id(befehl_melden)->execute();
 
 interval:
@@ -299,19 +255,18 @@ canbus:
           - lambda: |-
               if ((x[0] & 0xF0) != 0x40 || !reg::ist(reg::HK_BETRIEBSART, (x[2] << 8) | x[1], x[3])) return;
               uint8_t b = x[4];
-              static const char* n[] = {"?", "Standby", "Zeitprogramm 1", "Zeitprogramm 2", "Zeitprogramm 3", "Sommer", "Komfort", "Normal", "Absenk"};
-              if (b >= 1 && b <= 8) id(hk_setzen).publish_state(n[b]);
-              if (id(schalt_ziel) != 1 || !id(pruefen)) return;
+              if (b >= 1 && b <= 8) id(hk_setzen).publish_state(wc::hk_name(b, "?"));
+              if (id(wcan)->schalten.ziel != 1 || !id(wcan)->schalten.pruefen) return;
               auto &s = bf::schaltung();
-              s.uhr = id(uhr).now().is_valid() ? (uint32_t) id(uhr).now().timestamp : 0;
+              s.uhr = id(wcan)->unix_zeit();
               int soll = s.lauf.wert; std::string q = s.lauf.quelle;
               s.bus_wert(1, b);
-              std::string zeit = id(uhr).now().is_valid() ? id(uhr).now().strftime("%H:%M:%S ") : std::string("");
+              std::string zeit = id(wcan)->zeit("%H:%M:%S ");
               bool ok = b == soll;
-              std::string ist = b <= 8 ? n[b] : "?";
+              std::string ist = wc::hk_name(b, "?");
               id(schalt_status).publish_state(zeit + (ok ? "OK: Heizkreis steht auf " + ist : "NICHT uebernommen, Heizkreis steht auf " + ist));
               id(protokoll_eintrag)->execute("Heizkreis -> " + std::string(bf::hk_text(soll)) + " (" + q + "): " + (ok ? "ok" : "NICHT uebernommen, steht auf " + ist));
-              id(schalt_ziel) = 0; id(pruefen) = false;
+              id(wcan)->schalten.ziel = 0; id(wcan)->schalten.pruefen = false;
               id(befehl_melden)->execute();
 
 select:
@@ -335,44 +290,34 @@ button:
     web_server: { sorting_group_id: g_schreiben, sorting_weight: 2 }
     on_press:
       - lambda: |-
-          id(senden) = false;
-          if (id(wem_senden).is_running() || (id(letzter_befehl) != 0 && millis() - id(letzter_befehl) < 60000)) {
+          auto &sc = id(wcan)->schalten;
+          sc.senden = false;
+          if (id(wem_senden).is_running() || sc.sperrminute(millis())) {
             id(schreib_antwort).publish_state("bitte warten - hoechstens ein Befehl pro Minute"); return;
           }
-          // Format: MI MX OX OS WERT (hex), z.B. "03 00 2520 02 02" = Warmwasser Aus
-          unsigned mi = 0, mx = 0, ox = 0, os = 0; char w[12] = {0};
-          if (sscanf(id(schreib_eingabe).state.c_str(), "%x %x %x %x %10s", &mi, &mx, &ox, &os, w) != 5 ||
-              mx > 0xFF || ox > 0xFFFF || os > 0xFF) {
-            id(schreib_antwort).publish_state("ungueltig - Format: MI MX OX OS WERT, z.B. 03 00 2520 02 02"); return;
-          }
-          if (mi != 1 && mi != 2 && mi != 3) {   // nur Systemgeraet: SYSTEM0, HZK0, WW0 - nie der Kessel
-            id(schreib_antwort).publish_state("gesperrt: nur MI 01, 02, 03 erlaubt - der Kessel wird nie beschrieben"); return;
-          }
-          std::string v = w;
-          if (v.empty() || v.size() > 4 || v.find_first_not_of("0123456789abcdefABCDEF") != std::string::npos) {
-            id(schreib_antwort).publish_state("Wert: 1-4 Hexziffern"); return;
-          }
-          if (v.size() % 2) v = "0" + v;
-          char b[40];
-          snprintf(b, sizeof(b), "03%02X%02X%04X%02X%04X%s", mi, mx, ox, os, (unsigned) (v.size() / 2), v.c_str());
-          id(schalt_vg) = b; id(schalt_ziel) = 3;
-          id(letzter_befehl) = millis() | 1; id(eigener_befehl_ms) = id(letzter_befehl); id(senden) = true;
-          if (id(uhr).now().is_valid()) bf::status().setze(bf::status().frei_ab, (uint32_t) id(uhr).now().timestamp + 60);
-          id(schreib_antwort).publish_state(std::string("sende VG ") + b + " ...");
+          // Format: MI MX OX OS WERT (hex), z.B. "03 00 2520 02 02" = Warmwasser Aus.
+          // Nur Systemgeraet (MI 01 SYSTEM0, 02 HZK0, 03 WW0) - nie der Kessel (wc::schreib_vg)
+          std::string vg, fehler;
+          if (!wc::schreib_vg(id(schreib_eingabe).state, vg, fehler)) { id(schreib_antwort).publish_state(fehler); return; }
+          sc.vg = vg; sc.ziel = 3;
+          sc.letzter_befehl = millis() | 1; id(wcan)->anlass.eigener_befehl_ms = sc.letzter_befehl; sc.senden = true;
+          uint32_t u = id(wcan)->unix_zeit();
+          if (u != 0) bf::status().setze(bf::status().frei_ab, u + 60);
+          id(schreib_antwort).publish_state("sende VG " + vg + " ...");
       - if:
           condition:
-            lambda: 'return id(senden);'
+            lambda: 'return id(wcan)->schalten.senden;'
           then:
             - script.execute:
                 id: wem_senden
-                vg: !lambda 'return id(schalt_vg);'
+                vg: !lambda 'return id(wcan)->schalten.vg;'
   - platform: template
     name: "Warteschlange leeren"
     web_server: { sorting_group_id: g_schalten, sorting_weight: 5 }
     on_press:
       - lambda: |-
           auto &s = bf::schaltung();
-          s.uhr = id(uhr).now().is_valid() ? (uint32_t) id(uhr).now().timestamp : 0;
+          s.uhr = id(wcan)->unix_zeit();
           if (s.leeren() == 0) return;
           id(schalt_status).publish_state("Warteschlange geleert");
           id(protokoll_eintrag)->execute(std::string("Warteschlange von Hand geleert"));

@@ -47,6 +47,43 @@ H und L aus **demselben verdrillten Paar** nehmen. − und + bleiben frei.
 Busgeschwindigkeit 50 kbit/s. Am WEM muss die **JSON-Schnittstelle** eingeschaltet sein
 (Parameter 10.8.1, Fachmann-Ebene).
 
+## Aufbau
+
+```
+weishaupt-wem-can.yaml        wählt die Pakete aus (substitutions, WLAN, Weboberfläche)
+pakete/*.yaml                 Konfiguration und Verdrahtung: Entitäten, CAN-Takte, MQTT-Topics
+components/weishaupt_can/     ESPHome-Bauteil (external component): Zustand und Logik in C++-Klassen
+tests/                        Tests der Klassen auf dem PC (ohne ESPHome, ohne Board)
+```
+
+Seit v29 liegen Zustand und Logik im **Bauteil `weishaupt_can`**, die Pakete sind dünn: sie
+legen Entitäten an, schicken die CAN-Anfragen im Takt und rufen im Übrigen nur Methoden des
+Bauteils (`id(wcan)->…`). Die Klassen in [`kern.h`](components/weishaupt_can/kern.h):
+
+| Klasse | Aufgabe |
+|---|---|
+| `wc::Bus` | Lebenszeichen des Busses, Anlaufpause, Sendesperre |
+| `wc::Anlass` | wann die Betriebsarten nachgelesen werden (Start, Statusbits, Schaltbefehl, „Status lesen“, Regeln) |
+| `wc::Lesebefehl`, `wc::Scan` | Lesebefehl von Hand und Objektscan (nur Leseanfragen) |
+| `wc::Brenner` | Flankenerkennung, Brennerstarts (gespeichert) |
+| `wc::Schalten`, `wc::Protokoll` | Sperrminute, laufender WEM-Aufruf, Schreibbefehl, Schaltprotokoll |
+| `wc::Verdacht` | Laufzeitzustand der Regeln R1–R5 und der eigenen Regeln (teils gespeichert) |
+| `wc::Zusatz` | Zusatzanzeigen: Speicherform und Datei-Prüfsumme (gespeichert) |
+
+Dazu die reinen Logik-Dateien: [`regellogik.h`](components/weishaupt_can/regellogik.h)
+(Entscheidung der Regeln), [`befehle.h`](components/weishaupt_can/befehle.h) (Warteschlange,
+Befehlsphasen, Status-JSON), [`verdacht.h`](components/weishaupt_can/verdacht.h) und
+[`zusatz.h`](components/weishaupt_can/zusatz.h) (Parser, JSON), `register_gen.h` (erzeugt aus
+`register.yaml`). Das ESPHome-Gerüst [`weishaupt_can.h`](components/weishaupt_can/weishaupt_can.h)
+hält je eine Instanz und speichert, was einen Neustart überleben muss – unter denselben
+Schlüsseln wie bis v28, Einstellungen bleiben beim Update erhalten.
+
+**Bewusst YAML geblieben:** alle Entitäten (Namen, Einheiten, Gruppen der Weboberfläche), die
+CAN-Anfragen mit ihren Takten und Pausen (`interval` + `canbus.send`), die Zuordnung der
+Frames zu den Paketen (`on_frame`), die MQTT-Abos und der WEM-Aufruf (`http_request`). Das ist
+Konfiguration, die man beim Nachbau anpasst, und in ESPHome als YAML am lesbarsten; die
+Lambdas dort sind kurz und rufen nur das Bauteil.
+
 ## Pakete
 
 `weishaupt-wem-can.yaml` wählt nur aus; die Funktionen stehen in `pakete/`.
@@ -343,27 +380,30 @@ billiger, aber **ohne** galvanische Trennung.
 
 ## Tests & CI
 
-Die Entscheidungslogik der Regeln steht in [`pakete/regellogik.h`](pakete/regellogik.h), die
+Die Entscheidungslogik der Regeln steht in [`regellogik.h`](components/weishaupt_can/regellogik.h), die
 Schaltbefehle (Phasen, Warteschlange, Parser für `cmd/heizkreis`/`cmd/warmwasser`) und das
-Status-JSON in [`pakete/befehle.h`](pakete/befehle.h) – reines C++ ohne ESPHome. Getestet mit
+Status-JSON in [`befehle.h`](components/weishaupt_can/befehle.h), der Zustand des Boards in den
+Klassen von [`kern.h`](components/weishaupt_can/kern.h) – reines C++ ohne ESPHome. Die Tests der
+Klassen treiben den Code von v28 (als Vergleichsfassung im Test) und die Klassen mit denselben,
+teils zufälligen Eingaben und verlangen gleiches Ergebnis. Getestet mit
 ausgedachten Beispiel-Frames nach [PROTOKOLL.md](PROTOKOLL.md), zusammen mit den Parsern für
 `cmd/regeln`, `cmd/regel` und `cmd/zusatz`. Lokal (braucht `g++` und
 `curl`; ArduinoJson wird in der Board-Version 7.4.3 geladen und per SHA-256 geprüft):
 
 ```
-tests/run.sh                                     # Regellogik, Datei-Parser, Registertabelle
+tests/run.sh                                     # Regellogik, Klassen, Datei-Parser, Registertabelle
 python3 werkzeuge/register_erzeugen.py --pruefen # erzeugte Dateien passen zu register.yaml
 python3 tests/links.py                           # relative Links und Anker in allen .md-Dateien
 ```
 
 **Registertabelle:** alle CAN-Objekte stehen nur in [`register.yaml`](register.yaml); daraus
 erzeugt [`werkzeuge/register_erzeugen.py`](werkzeuge/register_erzeugen.py) die C++-Konstanten
-(`pakete/register_gen.h`) und die Tabellen in PROTOKOLL.md und hier. Ablauf zum Ändern:
+(`components/weishaupt_can/register_gen.h`) und die Tabellen in PROTOKOLL.md und hier. Ablauf zum Ändern:
 [INSTALL.md, Abschnitt 14](INSTALL.md#14-register-ändern).
 
 Bei jedem Push laufen alle drei in [GitHub Actions](https://github.com/jvejmelka/weishaupt-wem-can-esphome/actions/workflows/ci.yml), dazu wird die
 Firmware mit ESPHome 2026.9.0 und einer Dummy-`secrets.yaml` (aus `secrets.yaml.example`)
-kompiliert. Neue Regeln oder Änderungen an bestehenden bitte mit Test – der Fehler aus
+kompiliert – samt Bauteil `weishaupt_can`. Neue Regeln oder Änderungen an bestehenden bitte mit Test – der Fehler aus
 v22–v24 (R1 kannte nur `0x40`, der WEM fragt mit `0xA4`) hätte so nicht passieren können.
 
 ## Mithelfen

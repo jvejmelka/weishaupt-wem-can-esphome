@@ -6,7 +6,7 @@ bestehen (Übergangszeit), gelten aber als **veraltet** – siehe [unten](#veral
 
 Beide Topics sind reine Buchführung aus dem, was das Board ohnehin mithört oder liest:
 **keine zusätzliche CAN-Anfrage, keine periodische Abfrage der Betriebsarten, kein WEM-Aufruf.**
-Die Logik steht in [`pakete/befehle.h`](pakete/befehle.h) und ist in [`tests/`](tests/) getestet.
+Die Logik steht in [`befehle.h`](components/weishaupt_can/befehle.h) und ist in [`tests/`](tests/) getestet.
 
 | Topic | Richtung | retained | Inhalt |
 |---|---|---|---|

@@ -22,50 +22,22 @@ mqtt:
     - topic: ${geraet}/cmd/lesen
       then:
         - lambda: |-
-            unsigned kn = 0, idx = 0, sub = 0;
-            if (sscanf(x.c_str(), "%x %x %x", &kn, &idx, &sub) != 3 || kn < 1 || kn > 127 || idx > 0xFFFF || sub > 0xFF) {
-              id(lese_antwort).publish_state("ungueltig - Format: 01 2933 02"); return;
-            }
-            if (millis() - id(letzter_frame) > 30000) { id(lese_antwort).publish_state("Bus tot - nicht gesendet"); return; }
-            id(cmd_kn) = kn; id(cmd_idx) = idx; id(cmd_sub) = sub; id(cmd_aktiv) = true;
-            id(lese_antwort).publish_state("gesendet, warte ...");
-            std::vector<uint8_t> d = {0x40, (uint8_t)(idx & 0xFF), (uint8_t)(idx >> 8), (uint8_t)sub, 0, 0, 0, 0};
-            id(my_can_bus)->send_data(0x600 + kn, false, d);
+            std::string m; uint32_t cid = 0; std::vector<uint8_t> d;
+            bool senden = id(wcan)->lesen.starten(x, id(wcan)->bus.tot(millis()), m, cid, d);
+            id(lese_antwort).publish_state(m);
+            if (senden) id(wcan)->senden(cid, d);
     - topic: ${geraet}/cmd/scan
       then:
         - lambda: |-
-            unsigned kn = 0, a = 0, e = 0, ms = 0;
-            if (sscanf(x.c_str(), "%x %x %x %x", &kn, &a, &e, &ms) != 4 || kn < 1 || kn > 127 || a > e || e > 0xFFFF || ms > 10) {
-              ESP_LOGW("scan", "ungueltig '%s'", x.c_str()); return;
-            }
-            id(scan_knoten) = kn; id(scan_idx) = a; id(scan_ende) = e; id(scan_maxsub) = ms; id(scan_sub) = 0; id(scan_aktiv) = true;
-            ESP_LOGI("scan", "Objektscan Knoten %02X %04X-%04X Sub 0-%u", kn, a, e, ms);
+            auto &s = id(wcan)->scan;
+            if (!s.starten(x)) { ESP_LOGW("scan", "ungueltig '%s'", x.c_str()); return; }
+            ESP_LOGI("scan", "Objektscan Knoten %02X %04X-%04X Sub 0-%u", s.knoten, s.idx, s.ende, (unsigned) s.maxsub);
     - topic: ${geraet}/cmd/stop
       then:
-        - lambda: 'id(scan_aktiv) = false; ESP_LOGI("scan", "Objektscan abgebrochen");'
+        - lambda: 'id(wcan)->scan.aktiv = false; ESP_LOGI("scan", "Objektscan abgebrochen");'
     - topic: ${geraet}/cmd/status
       then:
         - script.execute: status_lesen
-
-globals:
-  - id: scan_aktiv
-    type: bool
-    initial_value: 'false'
-  - id: scan_knoten
-    type: int
-    initial_value: '1'
-  - id: scan_idx
-    type: int
-    initial_value: '0'
-  - id: scan_ende
-    type: int
-    initial_value: '0'
-  - id: scan_sub
-    type: int
-    initial_value: '0'
-  - id: scan_maxsub
-    type: int
-    initial_value: '0'
 
 interval:
   # status/json: nur bei Aenderung (bf::Status::geaendert), hoechstens alle 2 s
@@ -73,13 +45,14 @@ interval:
     then:
       - lambda: |-
           auto &st = bf::status();
+          auto &bus = id(wcan)->bus;
           uint32_t jetzt = millis();
-          bool lebt = id(bus_seit) != 0 && jetzt - id(letzter_frame) <= 30000;
+          bool lebt = bus.lebt(jetzt);
           st.setze(st.bus_lebt, lebt);
-          st.setze(st.anlaufpause, lebt && jetzt - id(bus_seit) <= id(pause_ms));
+          st.setze(st.anlaufpause, lebt && bus.in_pause(jetzt));
           if (!bf::senden_faellig(st, jetzt) || !mqtt::global_mqtt_client->is_connected()) return;
-          uint32_t ts = id(uhr).now().is_valid() ? (uint32_t) id(uhr).now().timestamp : 0;
-          long lf = id(letzter_frame) == 0 ? -1 : (long) ((jetzt - id(letzter_frame)) / 1000);
+          uint32_t ts = id(wcan)->unix_zeit();
+          long lf = bus.letzter_frame == 0 ? -1 : (long) (bus.still(jetzt) / 1000);
           std::string j = bf::status_json(st, bf::schaltung(), "${firmware}", ts, lf);
           if (mqtt::global_mqtt_client->publish("${geraet}/status/json", j, 0, true)) {
             st.geaendert = false; st.zuletzt_ms = jetzt | 1;
@@ -88,13 +61,10 @@ interval:
   - interval: 25ms
     then:
       - lambda: |-
-          if (!id(scan_aktiv) || millis() - id(letzter_frame) > 30000) return;
-          int idx = id(scan_idx), sub = id(scan_sub);
-          std::vector<uint8_t> d = {0x40, (uint8_t)(idx & 0xFF), (uint8_t)(idx >> 8), (uint8_t)sub, 0, 0, 0, 0};
-          id(my_can_bus)->send_data(0x600 + id(scan_knoten), false, d);
-          if (++sub > id(scan_maxsub)) { sub = 0; idx++; }
-          if (idx > id(scan_ende)) { id(scan_aktiv) = false; ESP_LOGI("scan", "Objektscan fertig"); }
-          id(scan_idx) = idx; id(scan_sub) = sub;
+          uint32_t cid = 0; std::vector<uint8_t> d; bool fertig = false;
+          if (!id(wcan)->scan.schritt(id(wcan)->bus.tot(millis()), cid, d, fertig)) return;
+          id(wcan)->senden(cid, d);
+          if (fertig) ESP_LOGI("scan", "Objektscan fertig");
 
 switch:
   # Rohmitschnitt: jeder Frame als "ID:DATEN" nach ${geraet}/canraw (~10 Frames/s).
@@ -113,7 +83,7 @@ canbus:
         can_id_mask: 0x000
         then:
           - lambda: |-
-              if (!id(canraw_an).state && !id(scan_aktiv)) return;
+              if (!id(canraw_an).state && !id(wcan)->scan.aktiv) return;
               char buf[48];
               int n = snprintf(buf, sizeof(buf), "%03X:", (unsigned) can_id);
               for (size_t i = 0; i < x.size() && n < (int) sizeof(buf) - 3; i++)

@@ -68,6 +68,56 @@ In `secrets.yaml` eintragen:
 
 `secrets.yaml` gehört nie in ein Repository (steht in `.gitignore`).
 
+### Das Bauteil `weishaupt_can`
+
+Zustand und Logik der Firmware stecken in einem ESPHome-Bauteil (external component) im Ordner
+[`components/weishaupt_can/`](components/weishaupt_can/). Mit dem geklonten Repository ist nichts
+zu tun: `weishaupt-wem-can.yaml` bindet es lokal ein, und das Paket `kessel` bringt den Block
+`weishaupt_can:` schon mit.
+
+```yaml
+external_components:
+  - source:
+      type: local
+      path: components
+    components: [weishaupt_can]
+```
+
+**Ohne Repository-Kopie** (eigene YAML, Pakete und Bauteil direkt von GitHub):
+
+```yaml
+external_components:
+  - source: github://jvejmelka/weishaupt-wem-can-esphome@main   # besser: fester Stand statt main
+    components: [weishaupt_can]
+
+packages:
+  weishaupt:
+    url: https://github.com/jvejmelka/weishaupt-wem-can-esphome
+    ref: main
+    files:
+      - pakete/kessel.yaml
+      - pakete/warmwasser.yaml
+      - pakete/mqtt.yaml
+      # weitere Pakete nach Bedarf, siehe Abschnitt 5
+```
+
+Die `substitutions:` (`geraet`, `firmware`, `can_anfragen_start`, Regel-Vorgaben …), `wifi:`,
+`web_server:` und `time:` mit `id: uhr` kommen dann aus der eigenen Datei – Vorlage ist
+`weishaupt-wem-can.yaml`.
+
+**Eigene YAML ohne die Pakete:** das Bauteil braucht nur einen CAN-Bus und (für Zeitangaben)
+eine Uhr:
+
+```yaml
+weishaupt_can:
+  id: wcan                # die Pakete sprechen es als id(wcan) an
+  canbus_id: my_can_bus
+  time_id: uhr            # optional
+  anlaufpause: 10min      # Ruhe nach einem Busausfall, bevor wieder gesendet wird
+```
+
+Das Bauteil selbst sendet nichts: welche Anfragen wann auf den Bus gehen, bestimmen die Pakete.
+
 ## 5. Pakete auswählen
 
 In `weishaupt-wem-can.yaml` unter `packages:` nicht benötigte Zeilen mit `#` auskommentieren:
@@ -281,7 +331,7 @@ esphome run weishaupt-wem-can.yaml --device <IP>   # per OTA
 Wer an den Paketen etwas ändert, prüft vor dem Flashen:
 
 ```
-tests/run.sh                                   # Regellogik, Schaltbefehle/Status-JSON, Datei-Parser, Registertabelle (g++, curl)
+tests/run.sh                                   # Regellogik, Klassen des Bauteils, Schaltbefehle/Status-JSON, Datei-Parser, Registertabelle (g++, curl)
 python3 werkzeuge/register_erzeugen.py --pruefen  # erzeugte Dateien passen zu register.yaml (PyYAML)
 python3 tests/links.py                         # Links in den .md-Dateien
 esphome compile weishaupt-wem-can.yaml         # Firmware baut
@@ -292,7 +342,7 @@ Dasselbe läuft bei jedem Push in GitHub Actions, siehe [README](README.md#tests
 ## 14. Register ändern
 
 Alle CAN-Objekte (Knoten, Index, Subindex, Faktor, Einheit, Stand, Beleg …) stehen **nur** in
-[`register.yaml`](register.yaml). Daraus werden `pakete/register_gen.h` und die Tabellen in
+[`register.yaml`](register.yaml). Daraus werden `components/weishaupt_can/register_gen.h` und die Tabellen in
 PROTOKOLL.md und README.md erzeugt – beides nie von Hand ändern.
 
 1. `register.yaml` bearbeiten (die Felder sind im Kopf der Datei erklärt). Ein neues Objekt, das
@@ -307,7 +357,7 @@ PROTOKOLL.md und README.md erzeugt – beides nie von Hand ändern.
 3. Prüfen: `tests/run.sh` und `esphome compile weishaupt-wem-can.yaml`. Ändert sich ein
    bestehender Wert (Faktor, Index), müssen die Tests `register_*_wie_v27` angepasst werden –
    das ist Absicht: so fällt jede Verhaltensänderung auf.
-4. Alles zusammen einchecken (`register.yaml`, `pakete/register_gen.h`, PROTOKOLL.md, README.md).
+4. Alles zusammen einchecken (`register.yaml`, `components/weishaupt_can/register_gen.h`, PROTOKOLL.md, README.md).
    Die CI lässt den Generator laufen und bricht ab, wenn danach etwas anders ist
    (`git diff --exit-code`); lokal geht dasselbe mit `python3 werkzeuge/register_erzeugen.py --pruefen`.
 

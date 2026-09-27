@@ -315,4 +315,44 @@ inline RegelBefehl befehl_zerlegen(const std::string &roh) {
   return r;
 }
 
+// <geraet>/regeln/stand (retained): aktiver Stand der Regeln. an/ab = Schalter und
+// Mindestabstaende R1-R5, version = zuletzt uebernommene Datei (-1 = keine)
+inline std::string stand_json(const std::string &firmware, int version, const bool an[5], const int ab[5], int max_h,
+                              bool eigene_an) {
+  static const char *rn[] = {"R1", "R2", "R3", "R4", "R5"};
+  JsonDocument d;
+  JsonObject o = d.to<JsonObject>();
+  o["firmware"] = firmware;
+  if (version >= 0) o["version"] = version;
+  for (int i = 0; i < 5; i++) {
+    JsonObject r = o[rn[i]].to<JsonObject>();
+    r["an"] = an[i];
+    r["abstand_min"] = ab[i];
+  }
+  o["max_pro_stunde"] = max_h;
+  o["eigene_regeln_an"] = eigene_an;
+  JsonArray a = o["eigene"].to<JsonArray>();
+  for (auto &r : eigene()) regel_json(a.add<JsonObject>(), r, true);
+  std::string s;
+  serializeJson(d, s);
+  return s;
+}
+
+// <geraet>/verdacht/ereignis (NICHT retained). phase: waere | ausgeloest | ergebnis | keine_antwort;
+// geaendert nur bei ergebnis (-1 = null); zeit leer = Uhr nicht gestellt (Feld fehlt dann)
+inline std::string ereignis_json(const std::string &regel, const std::string &phase, const std::string &ziel,
+                                 const std::string &wert, int geaendert, const std::string &zeit) {
+  JsonDocument d;
+  JsonObject o = d.to<JsonObject>();
+  o["regel"] = regel;
+  o["phase"] = phase;
+  o["ziel"] = ziel;
+  if (!wert.empty()) o["wert"] = wert;
+  if (phase == "ergebnis") { if (geaendert < 0) o["geaendert"] = nullptr; else o["geaendert"] = geaendert == 1; }
+  if (!zeit.empty()) o["zeit"] = zeit;
+  std::string s;
+  serializeJson(d, s);
+  return s;
+}
+
 }  // namespace vd

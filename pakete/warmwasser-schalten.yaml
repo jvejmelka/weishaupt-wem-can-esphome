@@ -24,17 +24,17 @@ canbus:
               if ((x[0] & 0xF0) != 0x40 || !reg::ist(reg::WW_BETRIEBSART, (x[2] << 8) | x[1], x[3])) return;
               uint8_t b = x[4];
               if (b == 1 || b == 2) id(ww_setzen).publish_state(b == 1 ? "Ein" : "Aus");
-              if (id(schalt_ziel) != 2 || !id(pruefen)) return;
+              if (id(wcan)->schalten.ziel != 2 || !id(wcan)->schalten.pruefen) return;
               auto &s = bf::schaltung();
-              s.uhr = id(uhr).now().is_valid() ? (uint32_t) id(uhr).now().timestamp : 0;
+              s.uhr = id(wcan)->unix_zeit();
               int soll = s.lauf.wert; std::string q = s.lauf.quelle;
               s.bus_wert(2, b);
-              std::string zeit = id(uhr).now().is_valid() ? id(uhr).now().strftime("%H:%M:%S ") : std::string("");
+              std::string zeit = id(wcan)->zeit("%H:%M:%S ");
               bool ok = b == soll;
-              std::string ist = b == 1 ? "Ein" : (b == 2 ? "Aus" : "?");
+              std::string ist = wc::ww_name(b, "?");
               id(schalt_status).publish_state(zeit + (ok ? "OK: Warmwasser " + ist : "NICHT uebernommen, Warmwasser " + ist));
               id(protokoll_eintrag)->execute(std::string("Warmwasser -> ") + bf::ww_text(soll) + " (" + q + "): " + (ok ? "ok" : "NICHT uebernommen, steht auf " + ist));
-              id(schalt_ziel) = 0; id(pruefen) = false; id(anlass_ms) = millis() | 1;
+              id(wcan)->schalten.ziel = 0; id(wcan)->schalten.pruefen = false; id(wcan)->anlass.anlass_ms = millis() | 1;
               bf::status().anlass("schaltbefehl", true, true);
               id(befehl_melden)->execute();
 

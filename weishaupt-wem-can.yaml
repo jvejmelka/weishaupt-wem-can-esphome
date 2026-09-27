@@ -7,7 +7,8 @@
 # Diese Datei waehlt nur die Pakete aus. Alles Persoenliche steht in secrets.yaml
 # (Vorlage: secrets.yaml.example). Nicht benoetigte Pakete auskommentieren.
 #
-#   pakete/kessel.yaml               Pflicht: Kesselwerte lesen, Diagnose, WLAN-Felder
+#   pakete/kessel.yaml               Pflicht: Kesselwerte lesen, Diagnose, WLAN-Felder (bindet das
+#                                    Bauteil weishaupt_can ein, das Zustand und Logik haelt)
 #   pakete/warmwasser.yaml           Warmwasserwerte (nur mit Warmwasserspeicher am WTC)
 #   pakete/mqtt.yaml                 Werte und Befehle ueber MQTT
 #   pakete/homeassistant-api.yaml    native Home-Assistant-API (statt oder neben MQTT)
@@ -21,7 +22,7 @@
 substitutions:
   geraet: weact-can485-weishaupt       # Geraetename = MQTT-Praefix
   anzeigename: Weishaupt WTC-GW 15-B
-  firmware: "v28 vom 27.09.2026"
+  firmware: "v29 vom 27.09.2026"
   # Eigene CAN-Leseanfragen beim ersten Start (danach gilt der Schalter in der Weboberflaeche):
   #   RESTORE_DEFAULT_OFF = nur mithoeren (Vorgabe, wenn die Zeile fehlt)
   #   RESTORE_DEFAULT_ON  = eigene Leseanfragen im Weishaupt-Takt
@@ -41,6 +42,16 @@ substitutions:
   regel_abstand_r5: "5"
   regeln_max_h: "6"                         # alle Regeln zusammen hoechstens so oft pro Stunde
   eigene_regeln_start: RESTORE_DEFAULT_OFF  # Hauptschalter NUR fuer die eigenen Regeln (experimentell)
+
+# Bauteil weishaupt_can (Zustand und Logik in C++-Klassen, components/weishaupt_can/).
+# Mit Repo-Kopie lokal einbinden; ohne Kopie direkt von GitHub (siehe INSTALL.md):
+external_components:
+  - source:
+      type: local
+      path: components
+    components: [weishaupt_can]
+  # - source: github://jvejmelka/weishaupt-wem-can-esphome@main
+  #   components: [weishaupt_can]
 
 packages:
   kessel: !include pakete/kessel.yaml

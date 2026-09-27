@@ -1,12 +1,14 @@
-// Tests der Regellogik (pakete/regellogik.h), der Datei-Parser (pakete/verdacht.h,
-// pakete/zusatz.h) und der Schaltbefehle/Status-JSON (pakete/befehle.h) - laeuft auf dem PC, ohne ESPHome, ohne Board, ohne Bus.
+// Tests des Bauteils weishaupt_can (components/weishaupt_can/): Regellogik (regellogik.h), Datei-Parser
+// (verdacht.h, zusatz.h), Schaltbefehle/Status-JSON (befehle.h) und die Zustandsklassen (kern.h) -
+// laeuft auf dem PC, ohne ESPHome, ohne Board, ohne Bus.
 // Alle Frames sind AUSGEDACHT nach den Mustern in PROTOKOLL.md, keine Mitschnitte.
 //
 // Bauen und starten: tests/run.sh
-#include "../pakete/regellogik.h"
-#include "../pakete/verdacht.h"
-#include "../pakete/zusatz.h"
-#include "../pakete/befehle.h"
+#include "../components/weishaupt_can/regellogik.h"
+#include "../components/weishaupt_can/verdacht.h"
+#include "../components/weishaupt_can/zusatz.h"
+#include "../components/weishaupt_can/befehle.h"
+#include "../components/weishaupt_can/kern.h"
 #include <cstdio>
 #include <fstream>
 #include <sstream>
@@ -806,6 +808,8 @@ TEST(register_json_schreiben_wie_v27) {
   // geschrieben wird nur im Systemgeraet (MI 01-03), nie der Kessel
   PRUEFE(reg::HK_BETRIEBSART_JSON.mi == 0x02 && reg::WW_BETRIEBSART_JSON.mi == 0x03);
 }
+
+#include "test_kern.inc"
 
 int main() {
   for (auto &t : tests()) {

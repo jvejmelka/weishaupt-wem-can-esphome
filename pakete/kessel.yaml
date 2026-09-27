@@ -28,12 +28,14 @@ substitutions:
   # RESTORE_DEFAULT_OFF = nur mithoeren (Vorgabe), RESTORE_DEFAULT_ON = eigene Leseanfragen.
   can_anfragen_start: RESTORE_DEFAULT_OFF
 
-# befehle.h: strukturierter Status (bf::status) - das Paket mqtt veroeffentlicht ihn als
-# ${geraet}/status/json, das Paket wem-schalten fuehrt darin die Schaltbefehle.
-esphome:
-  includes:
-    - pakete/register_gen.h
-    - pakete/befehle.h
+# Das Bauteil weishaupt_can (components/weishaupt_can) haelt Zustand und Logik: Bus-Waechter,
+# Anlass-Nachlesen, Lesebefehl, Scan, Brennerstarts, Regeln, Zusatzanzeigen, Schaltbefehle.
+# Die Lambdas unten verdrahten nur noch Entitaeten und Bus damit (id(wcan)->...).
+weishaupt_can:
+  id: wcan
+  canbus_id: my_can_bus
+  time_id: uhr
+  anlaufpause: ${anlaufpause_min}min
 
 web_server:
   sorting_groups:
@@ -62,81 +64,6 @@ web_server:
       name: "Firmware"
       sorting_weight: 100
 
-globals:
-  # Zeitpunkt des letzten empfangenen CAN-Frames (Bus-Waechter, Sendesperre)
-  - id: letzter_frame
-    type: uint32_t
-    initial_value: '0'
-  # seit wann der Bus (wieder) lebt - fuer die Anlaufpause; 0 = noch nie
-  - id: bus_seit
-    type: uint32_t
-    initial_value: '0'
-  # Anlass zum Nachlesen der Betriebsarten (siehe interval 5s)
-  - id: anlass_ms
-    type: uint32_t
-    initial_value: '0'
-  # Anlass nur fuer den Heizkreis bzw. nur fuer das Warmwasser (Paket verdacht)
-  - id: anlass_hk_ms
-    type: uint32_t
-    initial_value: '0'
-  - id: anlass_ww_ms
-    type: uint32_t
-    initial_value: '0'
-  # millis() des letzten eigenen Schaltbefehls ueber den WEM (Paket wem-schalten setzt ihn)
-  - id: eigener_befehl_ms
-    type: uint32_t
-    initial_value: '0'
-  # geaenderte Statusbits (0x1C1) loesen das Nachlesen aus - das Paket verdacht setzt das auf
-  # false und macht daraus die schaltbare Regel R3
-  - id: statusbits_anlass
-    type: bool
-    initial_value: 'true'
-  # Anlaufpause: 1 min nach Board-Start (der Bus lief ohnehin), ${anlaufpause_min} min wenn der
-  # Bus waehrend des Betriebs weg war und wiederkommt (Heizung war stromlos, WEM faehrt hoch)
-  - id: pause_ms
-    type: uint32_t
-    initial_value: '60000'
-  - id: start_gelesen
-    type: bool
-    initial_value: 'false'
-  - id: hk_erledigt
-    type: uint32_t
-    initial_value: '0'
-  - id: hk_letzte_lesung
-    type: uint32_t
-    initial_value: '0'
-  - id: hk_jetzt_lesen
-    type: bool
-    initial_value: 'false'
-  # letzte manuelle Status-Anforderung (Knopf "Status lesen" / MQTT cmd/status)
-  - id: status_manuell_ms
-    type: uint32_t
-    initial_value: '0'
-  - id: statusbits_vorher
-    type: int
-    initial_value: '-1'
-  # offener Lesebefehl (Antwort wird in "Lesebefehl Antwort" zugeordnet)
-  - id: cmd_aktiv
-    type: bool
-    initial_value: 'false'
-  - id: cmd_kn
-    type: int
-    initial_value: '0'
-  - id: cmd_idx
-    type: int
-    initial_value: '0'
-  - id: cmd_sub
-    type: int
-    initial_value: '0'
-  # Brenner-Flankenerkennung; brenner_starts zaehlt ab Inbetriebnahme des Boards
-  - id: brenner_vorher
-    type: int
-    initial_value: '-1'
-  - id: brenner_starts
-    type: int
-    restore_value: yes
-    initial_value: '0'
-
 interval:
   # Bus-Waechter: kommt N Minuten kein einziger Frame, Neustart (Bus-off-Falle).
   - interval: 60s
@@ -146,7 +73,7 @@ interval:
           if (isnan(m) || m <= 0) return;
           uint32_t grenze = (uint32_t) (m * 60000.0f);
           uint32_t jetzt = millis();
-          if (jetzt > grenze && jetzt - id(letzter_frame) > grenze) {
+          if (jetzt > grenze && id(wcan)->bus.still(jetzt) > grenze) {
             ESP_LOGW("waechter", "%.0f min kein CAN-Frame - Neustart", m);
             App.safe_reboot();
           }
@@ -155,7 +82,7 @@ interval:
     then:
       - if:
           condition:
-            lambda: 'return id(can_anfragen).state && millis() - id(letzter_frame) < 30000 && id(bus_seit) != 0 && millis() - id(bus_seit) > id(pause_ms);'
+            lambda: 'return id(can_anfragen).state && id(wcan)->bus.senden_erlaubt(millis());'
           then:
             - canbus.send: { canbus_id: my_can_bus, can_id: 0x602, data: !lambda 'return reg::lese(reg::KESSEL_TEMP);' }  # Kesseltemperatur
             - delay: 150ms
@@ -173,7 +100,7 @@ interval:
     then:
       - if:
           condition:
-            lambda: 'return id(can_anfragen).state && millis() - id(letzter_frame) < 30000 && id(bus_seit) != 0 && millis() - id(bus_seit) > id(pause_ms);'
+            lambda: 'return id(can_anfragen).state && id(wcan)->bus.senden_erlaubt(millis());'
           then:
             - delay: 7s
             - canbus.send: { canbus_id: my_can_bus, can_id: 0x602, data: !lambda 'return reg::lese(reg::VORLAUF_SOLL);' }  # Vorlauf Soll
@@ -190,7 +117,7 @@ interval:
     then:
       - if:
           condition:
-            lambda: 'return id(can_anfragen).state && millis() - id(letzter_frame) < 30000 && id(bus_seit) != 0 && millis() - id(bus_seit) > id(pause_ms);'
+            lambda: 'return id(can_anfragen).state && id(wcan)->bus.senden_erlaubt(millis());'
           then:
             - delay: 13s
             - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: !lambda 'return reg::lese(reg::RAUMSOLL);' }  # Raumsoll aktuell
@@ -202,25 +129,16 @@ interval:
   #   - nach einem eigenen Schaltbefehl (das Schalten-Paket liest dann gezielt nach)
   #   - auf Wunsch: Knopf "Status lesen" bzw. MQTT ${geraet}/cmd/status (Skript status_lesen,
   #     hebt die 2-min-Grenze fuer diese eine Lesung auf, nimmt Wuensche hoechstens alle 10 s an)
-  # anlass_ms = Zeitpunkt des Anlasses; gelesen wird 5 s danach, hoechstens alle 2 min.
+  # Anlass = Zeitpunkt; gelesen wird 5 s danach, hoechstens alle 2 min (wc::Anlass in kern.h).
   # Das Warmwasser-Paket haengt sich mit eigener Merkvariable an denselben Anlass.
   - interval: 5s
     then:
       - lambda: |-
           uint32_t jetzt = millis();
-          bool bus_ok = millis() - id(letzter_frame) < 30000 && id(bus_seit) != 0 && jetzt - id(bus_seit) > id(pause_ms);
-          if (!bus_ok) return;
-          if (!id(start_gelesen)) { id(start_gelesen) = true; id(anlass_ms) = (jetzt - 5000) | 1; bf::status().anlass("start", true, true); }
-          id(hk_jetzt_lesen) = false;
-          uint32_t a = id(anlass_ms);
-          if (id(anlass_hk_ms) != 0 && (a == 0 || (int32_t)(id(anlass_hk_ms) - a) > 0)) a = id(anlass_hk_ms);
-          if (a == 0 || a == id(hk_erledigt)) return;
-          if (jetzt - a < 5000) return;
-          if (id(hk_letzte_lesung) != 0 && jetzt - id(hk_letzte_lesung) < 120000) return;
-          id(hk_erledigt) = a; id(hk_letzte_lesung) = jetzt | 1; id(hk_jetzt_lesen) = true;
+          id(wcan)->anlass.hk_takt(id(wcan)->bus.senden_erlaubt(jetzt), jetzt);
       - if:
           condition:
-            lambda: 'return id(hk_jetzt_lesen);'
+            lambda: 'return id(wcan)->anlass.hk_jetzt;'
           then:
             - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: !lambda 'return reg::lese(reg::HK_BETRIEBSART);' }  # Heizkreis-Betriebsart
 
@@ -232,22 +150,14 @@ script:
     mode: single
     then:
       - lambda: |-
-          uint32_t jetzt = millis();
-          std::string z = id(uhr).now().is_valid() ? id(uhr).now().strftime("%H:%M:%S ") : std::string("");
-          if (id(bus_seit) == 0 || jetzt - id(letzter_frame) > 30000) {
-            id(status_gelesen).publish_state(z + "Bus schweigt - nicht gelesen"); return;
+          std::string z = id(wcan)->zeit("%H:%M:%S ");
+          // 2-min-Grenze fuer diese Lesung aufheben, naechster 5-s-Takt liest sofort
+          switch (id(wcan)->anlass.anfordern(id(wcan)->bus, millis())) {
+            case wc::Anlass::Status::SCHWEIGT: id(status_gelesen).publish_state(z + "Bus schweigt - nicht gelesen"); break;
+            case wc::Anlass::Status::VERWORFEN: ESP_LOGI("status", "Status-Anforderung verworfen (hoechstens alle 10 s)"); break;
+            case wc::Anlass::Status::PAUSE: id(status_gelesen).publish_state(z + "angefordert - Anlaufpause, liest danach"); break;
+            case wc::Anlass::Status::ANGEFORDERT: id(status_gelesen).publish_state(z + "angefordert ..."); break;
           }
-          if (id(status_manuell_ms) != 0 && jetzt - id(status_manuell_ms) < 10000) {
-            ESP_LOGI("status", "Status-Anforderung verworfen (hoechstens alle 10 s)"); return;
-          }
-          id(status_manuell_ms) = jetzt | 1;
-          id(hk_letzte_lesung) = 0;                  // 2-min-Grenze fuer diese Lesung aufheben
-          id(anlass_ms) = (jetzt - 5000) | 1;        // naechster 5-s-Takt liest sofort
-          bf::status().anlass("status", true, true);
-          if (jetzt - id(bus_seit) <= id(pause_ms))
-            id(status_gelesen).publish_state(z + "angefordert - Anlaufpause, liest danach");
-          else
-            id(status_gelesen).publish_state(z + "angefordert ...");
 
 canbus:
   - platform: esp32_can
@@ -262,25 +172,9 @@ canbus:
         can_id_mask: 0x000
         then:
           - lambda: |-
-              if (id(bus_seit) == 0) { id(bus_seit) = millis() | 1; id(pause_ms) = 60000; id(start_gelesen) = false; }
-              else if (millis() - id(letzter_frame) > 30000) { id(bus_seit) = millis() | 1; id(pause_ms) = ${anlaufpause_min} * 60000UL; id(start_gelesen) = false; }
-              id(letzter_frame) = millis();
-              if (!id(cmd_aktiv) || can_id != (uint32_t)(0x580 + id(cmd_kn)) || x.size() < 8) return;
-              if (((x[2] << 8) | x[1]) != id(cmd_idx) || x[3] != id(cmd_sub)) return;
-              char t[80];
-              if (x[0] == 0x80) {
-                snprintf(t, sizeof(t), "%02X %04X/%02X: Abbruch %02X%02X%02X%02X (Objekt fehlt?)",
-                         id(cmd_kn), id(cmd_idx), id(cmd_sub), x[7], x[6], x[5], x[4]);
-              } else {
-                int n = (x[0] == 0x4F) ? 1 : (x[0] == 0x4B) ? 2 : (x[0] == 0x47) ? 3 : 4;
-                uint32_t u = 0;
-                for (int i = n - 1; i >= 0; i--) u = (u << 8) | x[4 + i];
-                long v = (n == 2) ? (long)(int16_t) u : (n == 1) ? (long) u : (long)(int32_t) u;
-                snprintf(t, sizeof(t), "%02X %04X/%02X = %ld (0x%0*lX, %d Byte)",
-                         id(cmd_kn), id(cmd_idx), id(cmd_sub), v, n * 2, (unsigned long) u, n);
-              }
-              id(lese_antwort).publish_state(t);
-              id(cmd_aktiv) = false;
+              id(wcan)->frame(millis());
+              std::string t;
+              if (id(wcan)->lesen.antwort(can_id, x, t)) id(lese_antwort).publish_state(t);
 
       # PDO 0x201: Aussentemperatur + Systembetriebsart (Kessel sendet von selbst)
       - can_id: 0x201
@@ -289,8 +183,7 @@ canbus:
               id(wem_aussentemp).publish_state(reg::pdo_wert(reg::AUSSENTEMP, x));
               int sb = x[reg::SYSTEMBETRIEBSART.byte];
               id(wem_systembetriebsart_code).publish_state((float) sb);
-              static const char* n[] = {"Aus", "Standby", "Sommer", "Automatik"};
-              id(wem_systembetriebsart).publish_state(sb <= 3 ? n[sb] : "unbekannt");
+              id(wem_systembetriebsart).publish_state(wc::system_text(sb));
 
       # PDO 0x241: Heizanforderung (Bytes 0-1); Bytes 6-7 = Warmwasser (Paket warmwasser)
       - can_id: 0x241
@@ -305,9 +198,7 @@ canbus:
         then:
           - lambda: |-
               if (x.size() < 6) return;
-              char b[24];
-              snprintf(b, sizeof(b), "%02u.%02u.%04u %02u:%02u", x[4], x[3], 2000 + x[2], x[0], x[1]);
-              id(heizung_uhr).publish_state(b);
+              id(heizung_uhr).publish_state(wc::uhr_text(x));
 
       # SDO-Download an Knoten 0x42 (0x6C2): der Kessel meldet alle ~5 s Werte weiter.
       # Rein passiv mitgelesen. Objekte laut geronet1/wem-python, Werte an der Anlage plausibel.
@@ -328,16 +219,7 @@ canbus:
         then:
           - lambda: |-
               uint8_t st = x[reg::KESSELSTATUS.byte];
-              const char* s = "unbekannt";
-              switch (st) {
-                case 0:   s = "Standby"; break;
-                case 1:   s = "Aus"; break;
-                case 10:  s = "Heizbetrieb"; break;
-                case 15:  s = "Warmwasserbetrieb"; break;
-                case 101: s = "Kaminfeger"; break;
-                case 104: s = "Wartung"; break;
-              }
-              id(wem_kesselstatus).publish_state(s);
+              id(wem_kesselstatus).publish_state(bf::kessel_text(st));
               bf::status().setze(bf::status().kesselstatus, (int) st);
               id(wem_kesselstatus_code).publish_state((float) st);
 
@@ -346,17 +228,8 @@ canbus:
         then:
           - lambda: |-
               uint16_t m = (x[reg::STATUSBITS_PDO.byte + 1] << 8) | x[reg::STATUSBITS_PDO.byte];
-              int kern = m & ~0x0050;
-              if (id(statusbits_anlass) && id(statusbits_vorher) >= 0 && kern != id(statusbits_vorher)) {
-                id(anlass_ms) = millis() | 1; bf::status().anlass("statusbits", true, true);
-              }
-              bf::status().setze(bf::status().hk_bits, (int) m);
-              id(statusbits_vorher) = kern;
-              std::string s = (m & 0x1000) ? "Standby" : "Zeitprogramm";
-              if (m & 0x0010) s += " + WW-Ladung";
-              uint16_t rest = m & ~0x1010;
-              if (rest) { char b[12]; snprintf(b, sizeof(b), " (0x%04X)", rest); s += b; }
-              id(wem_betriebsart_hk).publish_state(s);
+              id(wcan)->anlass.statusbits(m, millis());
+              id(wem_betriebsart_hk).publish_state(wc::hk_status_text(m));
               id(wem_betriebsart_hk_code).publish_state((float) m);
 
       # SDO-Antworten Knoten 1 (Systemgeraet)
@@ -368,24 +241,18 @@ canbus:
               uint8_t sub = x[3];
               if (reg::ist(reg::STATUSBITS, idx, sub)) {
                 uint16_t m = (x[5] << 8) | x[4];
-                std::string s = (m & 0x1000) ? "Standby" : "Zeitprogramm";
-                if (m & 0x0010) s += " + WW-Ladung";
-                uint16_t rest = m & ~0x1010;
-                if (rest) { char b[12]; snprintf(b, sizeof(b), " (0x%04X)", rest); s += b; }
                 id(wem_betriebsart_hk_code).publish_state((float) m);
-                id(wem_betriebsart_hk).publish_state(s);
+                id(wem_betriebsart_hk).publish_state(wc::hk_status_text(m));
                 bf::status().setze(bf::status().hk_bits, (int) m);
               } else if (reg::ist(reg::VL_SOLL_ANF, idx, sub)) {
                 id(wem_ww_vlsoll).publish_state(reg::wert(reg::VL_SOLL_ANF, (int16_t)((x[5] << 8) | x[4])));
               } else if (reg::ist(reg::HK_BETRIEBSART, idx, sub)) {
                 // Heizkreis-Betriebsart (JSON MI02 0x2533/02)
                 uint8_t b = x[4];
-                static const char* n[] = {"?", "Standby", "Zeitprogramm 1", "Zeitprogramm 2", "Zeitprogramm 3", "Sommer", "Komfort", "Normal", "Absenk"};
                 id(hk_betriebsart_code).publish_state((float) b);
-                id(hk_betriebsart).publish_state(b <= 8 ? n[b] : "unbekannt");
-                bf::status().hk_gelesen(b, (id(uhr).now().is_valid() ? (uint32_t) id(uhr).now().timestamp : 0u));
-                std::string z = id(uhr).now().is_valid() ? id(uhr).now().strftime("%d.%m. %H:%M:%S ") : std::string("");
-                id(status_gelesen).publish_state(z + "gelesen");
+                id(hk_betriebsart).publish_state(wc::hk_name(b, "unbekannt"));
+                bf::status().hk_gelesen(b, id(wcan)->unix_zeit());
+                id(status_gelesen).publish_state(id(wcan)->zeit("%d.%m. %H:%M:%S ") + "gelesen");
               } else if (reg::ist(reg::RAUMSOLL, idx, sub) || reg::ist(reg::HK_VORLAUF, idx, sub)) {
                 int16_t v = (int16_t)((x[5] << 8) | x[4]);
                 if (v == (int16_t) 0x8000) return;
@@ -409,19 +276,13 @@ canbus:
               else if (reg::ist(reg::KESSEL_TEMP, idx, sub)) id(wem_kessel).publish_state(reg::wert(reg::KESSEL_TEMP, v));
               else if (reg::ist(reg::VORLAUF_SOLL, idx, sub)) id(wem_vorlauf_soll).publish_state(reg::wert(reg::VORLAUF_SOLL, v));
               else if (reg::ist(reg::BRENNER, idx, sub)) {
-                // Betriebsphase Brenner (Weishaupt-Registertabelle): 0 aus, 1 Vorbelueftung,
-                // 2 Steuerbetrieb, 3 Regelbetrieb, 4 Nachbelueftung. "Ein" nur mit Flamme (2/3).
-                int ph = v & 0xFF;
-                static const char* n[] = {"Aus", "Vorlueften", "Ein", "Ein", "Nachlueften"};
-                int b = (ph == 2 || ph == 3) ? 1 : 0;
+                // Betriebsphase Brenner: "Ein" nur mit Flamme (2/3); Flanke 0 -> 1 zaehlt einen Start
+                int ph = v & 0xFF, b = 0;
+                bool start = id(wcan)->brenner.phase(ph, b);
                 id(wem_brennerphase).publish_state((float) ph);
                 id(wem_brenner).publish_state((float) b);
-                id(wem_brenner_text).publish_state(ph <= 4 ? n[ph] : "unbekannt");
-                if (b == 1 && id(brenner_vorher) == 0) {
-                  id(brenner_starts) += 1;
-                  id(wem_brennerstarts).publish_state((float) id(brenner_starts));
-                }
-                id(brenner_vorher) = b;
+                id(wem_brenner_text).publish_state(wc::brenner_text(ph));
+                if (start) id(wem_brennerstarts).publish_state((float) id(wcan)->brenner.starts);
               }
               else if (reg::ist(reg::VOLUMENSTROM, idx, sub)) id(wem_volumenstrom).publish_state(reg::wert(reg::VOLUMENSTROM, v));
               else if (reg::ist(reg::WM_HEIZUNG, idx, sub)) id(wem_wm_heizung).publish_state(reg::wert(reg::WM_HEIZUNG, v));
@@ -465,12 +326,7 @@ text_sensor:
     name: "Eigene CAN-Anfragen"
     update_interval: 30s
     web_server: { sorting_group_id: g_diag, sorting_weight: 4 }
-    lambda: |-
-      if (!id(can_anfragen).state) return {"aus - nur mithoeren (Betriebsarten bei Anlass)"};
-      if (id(bus_seit) == 0 || millis() - id(letzter_frame) >= 30000) return {"aus - Bus schweigt"};
-      uint32_t pause = id(pause_ms), seit = millis() - id(bus_seit);
-      if (seit <= pause) return {"Anlaufpause, noch " + to_string((pause - seit) / 60000 + 1) + " min nur mithoeren"};
-      return {"aktiv (40 s / 60 s / 5 min)"};
+    lambda: 'return {wc::anfragen_text(id(can_anfragen).state, id(wcan)->bus, millis())};'
   - platform: template
     name: "WLAN-Wechsel"
     id: wlan_ergebnis
@@ -536,15 +392,10 @@ button:
     web_server: { sorting_group_id: g_lesen, sorting_weight: 2 }
     on_press:
       - lambda: |-
-          unsigned kn = 0, idx = 0, sub = 0;
-          if (sscanf(id(lese_eingabe).state.c_str(), "%x %x %x", &kn, &idx, &sub) != 3 || kn < 1 || kn > 127 || idx > 0xFFFF || sub > 0xFF) {
-            id(lese_antwort).publish_state("ungueltig - Format: 01 2933 02"); return;
-          }
-          if (millis() - id(letzter_frame) > 30000) { id(lese_antwort).publish_state("Bus tot - nicht gesendet"); return; }
-          id(cmd_kn) = kn; id(cmd_idx) = idx; id(cmd_sub) = sub; id(cmd_aktiv) = true;
-          id(lese_antwort).publish_state("gesendet, warte ...");
-          std::vector<uint8_t> d = {0x40, (uint8_t)(idx & 0xFF), (uint8_t)(idx >> 8), (uint8_t)sub, 0, 0, 0, 0};
-          id(my_can_bus)->send_data(0x600 + kn, false, d);
+          std::string m; uint32_t cid = 0; std::vector<uint8_t> d;
+          bool senden = id(wcan)->lesen.starten(id(lese_eingabe).state, id(wcan)->bus.tot(millis()), m, cid, d);
+          id(lese_antwort).publish_state(m);
+          if (senden) id(wcan)->senden(cid, d);
   # WLAN wechseln: neue Daten eintragen, dann diesen Knopf. Klappt die Verbindung
   # binnen 30 s, werden die Daten gespeichert; sonst bleibt das bisherige WLAN.
   # Letzter Rueckweg ist der Notfall-Hotspot (ap) mit Captive Portal.
@@ -588,7 +439,7 @@ switch:
                           id(hk_vorlauf), id(wem_ww_vlsoll), id(hk_raumsoll_akt)})
             s->publish_state(NAN);
           id(wem_brenner_text).publish_state("unbekannt");
-          id(brenner_vorher) = -1;
+          id(wcan)->brenner.vorher = -1;
 
 number:
   - platform: template
@@ -829,5 +680,5 @@ sensor:
     unit_of_measurement: "s"
     accuracy_decimals: 0
     update_interval: 30s
-    lambda: 'return (millis() - id(letzter_frame)) / 1000.0f;'
+    lambda: 'return id(wcan)->bus.still(millis()) / 1000.0f;'
     web_server: { sorting_group_id: g_diag, sorting_weight: 4 }

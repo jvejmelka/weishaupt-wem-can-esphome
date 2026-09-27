@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Erzeugt aus register.yaml (der einzigen Registertabelle):
 
-  - pakete/register_gen.h   C++-Konstanten fuer die YAML-Lambdas und regellogik.h
+  - components/weishaupt_can/register_gen.h   C++-Konstanten fuer die YAML-Lambdas und das Bauteil
   - die Tabellen in PROTOKOLL.md und README.md zwischen
         <!-- REGISTER:BEGIN name -->  und  <!-- REGISTER:END name -->
 
@@ -21,7 +21,7 @@ import yaml
 
 WURZEL = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 TABELLE = os.path.join(WURZEL, "register.yaml")
-HEADER = os.path.join(WURZEL, "pakete", "register_gen.h")
+HEADER = os.path.join(WURZEL, "components", "weishaupt_can", "register_gen.h")
 DOKU = ["PROTOKOLL.md", "README.md"]
 
 WEGE = {"pdo", "wem_antwort", "eigene_anfrage", "wem_schreibt", "telegramm_6c2", "wem_liest"}
@@ -90,22 +90,24 @@ def pakete_pruefen(objekte):
     hilfen = {"Sdo", "Pdo", "Json", "lese", "ist", "wert", "pdo_i16", "pdo_wert", "anfrage_id",
               "antwort_id", "json_vg_schreiben"}
     fehler = []
-    ordner = os.path.join(WURZEL, "pakete")
-    for datei in sorted(os.listdir(ordner)):
-        if not datei.endswith((".yaml", ".h")) or datei == "register_gen.h":
-            continue
-        text = open(os.path.join(ordner, datei), encoding="utf-8").read()
+    dateien = []
+    for ordner in ("pakete", os.path.join("components", "weishaupt_can")):
+        for datei in sorted(os.listdir(os.path.join(WURZEL, ordner))):
+            if datei.endswith((".yaml", ".h", ".cpp")) and datei != "register_gen.h":
+                dateien.append(os.path.join(ordner, datei))
+    for datei in dateien:
+        text = open(os.path.join(WURZEL, datei), encoding="utf-8").read()
         for m in re.finditer(r"\breg::([A-Za-z_][A-Za-z0-9_]*)", text):
             n = m.group(1)
             if n not in namen and n not in hilfen:
                 zeile = text.count("\n", 0, m.start()) + 1
-                fehler.append(f"pakete/{datei}:{zeile}: reg::{n} steht nicht in register.yaml")
+                fehler.append(f"{datei}:{zeile}: reg::{n} steht nicht in register.yaml")
         for m in re.finditer(r"canbus\.send:\s*\{[^}]*?can_id:\s*(0x[0-9A-Fa-f]+)[^}]*?reg::lese\(reg::(\w+)\)", text):
             can_id, n = int(m.group(1), 16), m.group(2)
             o = nach_id.get(n)
             if o and can_id != 0x600 + o["knoten"]:
                 zeile = text.count("\n", 0, m.start()) + 1
-                fehler.append(f"pakete/{datei}:{zeile}: can_id 0x{can_id:X} passt nicht zu {n} (Knoten {o['knoten']})")
+                fehler.append(f"{datei}:{zeile}: can_id 0x{can_id:X} passt nicht zu {n} (Knoten {o['knoten']})")
     if fehler:
         raise Fehler("\n".join(fehler))
 
