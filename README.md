@@ -1,5 +1,7 @@
 # Weishaupt WEM am CAN-Bus – ESPHome-Firmware
 
+> 🇬🇧 English version: [README.en.md](README.en.md)
+
 [![CI](https://github.com/jvejmelka/weishaupt-wem-can-esphome/actions/workflows/ci.yml/badge.svg)](https://github.com/jvejmelka/weishaupt-wem-can-esphome/actions/workflows/ci.yml)
 
 Firmware für ein **WeAct CAN485 DevBoard V1** (ESP32, galvanisch getrennter CAN-Transceiver),

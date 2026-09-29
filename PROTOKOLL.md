@@ -1,5 +1,7 @@
 # Protokoll: CAN-Bus und WEM-JSON
 
+> 🇬🇧 English version: [PROTOKOLL.en.md](PROTOKOLL.en.md)
+
 Was auf dem CAN-Bus einer Weishaupt-Brennwertheizung mit WEM-Systemgerät passiert, was diese
 Firmware davon mithört, was sie selbst anfragt und wie sie über die JSON-Schnittstelle des WEM
 schaltet. Gemessen an einer **WTC-GW 15-B** mit WEM-Systemgerät; wo eine Angabe nur aus fremden
