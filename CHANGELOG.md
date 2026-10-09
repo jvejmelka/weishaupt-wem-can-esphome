@@ -3,6 +3,7 @@
 
 ## App – 2026-10-09
 - **Fortschrittszeile blieb dauerhaft stehen:** Am 08.10. lief Warmwasser Ein/Aus am Board sauber durch (Schaltprotokoll: „ok“), in der App blieb die Zeile aber auf „Bus liest nach“ stehen statt nach 3 min zu verschwinden. Ursache: Die App liest den Stand eines Befehls aus zwei getrennten Meldungen (`befehl/status` und `status/json`, beide QoS 0). Fehlte in **einer** der beiden der Abschluss, hielt sie sich an den letzten Zwischenstand, und zwar so lange, bis die fehlende Meldung kam, also nie. Jetzt gilt für dieselbe Kennung der Abschluss aus der Quelle, die ihn hat. Als Notbremse verschwindet ein Befehl ohne Abschluss nach 10 min (Board-Zeit). Mit beiden Fehlerbildern (verlorene Meldung, veraltetes `status/json`) nachgestellt: vorher Dauerlauf, jetzt Abschluss ✓ und nach 3 min weg.
+- **Neue Version kommt ohne Warten an:** Hinter einem Reverse Proxy mit eigenem Cache-Header (bei uns NPMplus, `max-age=14400`) holte der Service-Worker die Startseite bis zu 4 h aus dem HTTP-Cache. Sie verweist auf `app.js?v=<Version>`, also lief so lange die alte App. Jetzt fragt der Service-Worker immer beim Server nach (`cache: 'no-cache'`, ungeändert nur ein 304), und beim Installieren füllt er seinen Cache am HTTP-Cache vorbei.
 
 ## App – 2026-09-27 (nach v30)
 - **Knopf-Rahmen am Handy:** der Maus-über-Effekt der Betriebsart-Knöpfe gilt nur noch bei echter Maus (`@media (hover: hover)`). Auf Touch-Geräten blieb sonst der zuletzt berührte Knopf umrandet und sah aus wie eine zweite aktive Betriebsart. Nach dem Update die App einmal neu laden.
