@@ -209,14 +209,21 @@ function eigeneAufraeumen(data) {
 // ── Fortschritt eines Schaltbefehls ───────────────────────────
 // Zeile unter den Knoepfen des betroffenen Blocks, allein aus der Phase des Befehls:
 //   vorgemerkt (ab HH:MM) → an WEM gesendet (JSON) → Bus liest nach → bestätigt ✓ / ✗ Grund
-// Nach dem Abschluss 3 min stehen lassen (Zeit des Boards, sonst erste Sichtung), ohne Befehl keine Zeile.
+// Nach dem Abschluss 1 min stehen lassen (Zeit des Boards, sonst erste Sichtung), ohne Befehl keine Zeile.
+// Heizkreis und Warmwasser haben je eine eigene Zeile - ein zweiter Befehl verdraengt den ersten nicht.
+const STEHEN_MS = 60000;
+// Notbremse: das Board schliesst einen gesendeten Befehl nach spaetestens ~70 s ab (Sperrminute + 10 s);
+// ohne Abschluss 2 min nach der letzten Phase ist er verwaist. Vorgemerkte erst, wenn ihre Wartezeit vorbei ist.
+const VERWAIST_MS = 120000;
 const SCHRITTE = ['vorgemerkt', 'an WEM gesendet (JSON)', 'Bus liest nach', 'bestätigt'];
 const gesehen = {};           // id+phase -> erste Sichtung (fuer Befehle ohne Board-Uhrzeit)
 function fortschrittStand(ziel, data) {
   const b = befehlFuer(ziel, data);
   if (!b || b.phase === 'ersetzt') return null;
-  // Notbremse: ein Befehl ohne Abschluss nach 10 min (Board-Zeit) ist verwaist - Zeile weg statt Dauerlauf
-  if (!ist_ende(b) && b.zeit && Date.now() - b.zeit * 1000 > 600000) return null;
+  if (!ist_ende(b) && b.zeit && Date.now() - b.zeit * 1000 > VERWAIST_MS) {
+    const fa = data.schalten && data.schalten.frei_ab;
+    if (!OFFEN.has(b.phase) || !fa || Date.now() - fa * 1000 > VERWAIST_MS) return null;
+  }
   if (OFFEN.has(b.phase)) {
     const fa = data.schalten && data.schalten.frei_ab;
     return { schritt: 0, ab: fa && fa * 1000 > Date.now() ? uhrzeit(fa) : null };
@@ -228,7 +235,7 @@ function fortschrittStand(ziel, data) {
   const k = String(b.id) + ':' + b.phase;
   if (!gesehen[k]) gesehen[k] = Date.now();
   const fertig = b.zeit ? Math.min(b.zeit * 1000, gesehen[k]) : gesehen[k];
-  if (Date.now() - fertig > 180000) return null;
+  if (Date.now() - fertig > STEHEN_MS) return null;
   if (b.phase === 'bestaetigt') return { schritt: 3, ok: true };
   const steht = b.grund === 'nicht_uebernommen' && b.ist_text ? ` (steht auf ${b.ist_text})` : '';
   return { schritt: 3, ok: false, kurz: kurzGrund(b) + steht,
