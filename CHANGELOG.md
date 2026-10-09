@@ -1,6 +1,9 @@
 # Changelog – ESP-CAN-Brücke Weishaupt (WeAct CAN485, ESPHome)
 
 
+## App – 2026-10-09
+- **Fortschrittszeile blieb dauerhaft stehen:** Am 08.10. lief Warmwasser Ein/Aus am Board sauber durch (Schaltprotokoll: „ok“), in der App blieb die Zeile aber auf „Bus liest nach“ stehen statt nach 3 min zu verschwinden. Ursache: Die App liest den Stand eines Befehls aus zwei getrennten Meldungen (`befehl/status` und `status/json`, beide QoS 0). Fehlte in **einer** der beiden der Abschluss, hielt sie sich an den letzten Zwischenstand, und zwar so lange, bis die fehlende Meldung kam, also nie. Jetzt gilt für dieselbe Kennung der Abschluss aus der Quelle, die ihn hat. Als Notbremse verschwindet ein Befehl ohne Abschluss nach 10 min (Board-Zeit). Mit beiden Fehlerbildern (verlorene Meldung, veraltetes `status/json`) nachgestellt: vorher Dauerlauf, jetzt Abschluss ✓ und nach 3 min weg.
+
 ## App – 2026-09-27 (nach v30)
 - **Knopf-Rahmen am Handy:** der Maus-über-Effekt der Betriebsart-Knöpfe gilt nur noch bei echter Maus (`@media (hover: hover)`). Auf Touch-Geräten blieb sonst der zuletzt berührte Knopf umrandet und sah aus wie eine zweite aktive Betriebsart. Nach dem Update die App einmal neu laden.
 - **Live erprobt (Firmware v30 + App):** Warmwasser Ein/Aus und Heizkreis Standby/Zeitprogramm 1 aus der App, einzeln und schnell hintereinander. Der zweite Befehl wurde innerhalb der Sperrminute vorgemerkt und danach automatisch gesendet; alle Befehle liefen angenommen → gesendet → WEM bestätigt → am Bus bestätigt. „Status lesen“ holte den geänderten Warmwasser-Sollwert.

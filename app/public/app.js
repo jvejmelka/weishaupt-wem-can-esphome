@@ -141,8 +141,17 @@ function befehlFuer(ziel, data) {
     if (gemeldet) { if (!b || String(b.id) === e.id) b = gemeldet; }
     else if (Date.now() - e.t < 60000) return { id: e.id, ziel: zn, wert: ziel === 'hk' ? e.wert : null, wert_text: ziel === 'ww' ? e.wert : null, phase: 'angenommen' };
   }
+  // status/json und befehl/status kommen getrennt (QoS 0): hat eine der beiden Quellen fuer dieselbe
+  // Kennung schon einen Abschluss, gilt der - sonst haengt die Zeile auf "Bus liest nach", bis eine
+  // verlorene Meldung nachkommt (also nie). Gesehen 08.10.2026 bei Warmwasser Ein/Aus.
+  if (b && !ist_ende(b)) b = abschlussFuer(b.id, zn, data) || b;
   if (b) return b;
   return sc.letzte ? sc.letzte[zn] || null : null;
+}
+function abschlussFuer(id, zn, data) {
+  const l = data.schalten && data.schalten.letzte ? data.schalten.letzte[zn] : null;
+  if (l && String(l.id) === String(id) && ist_ende(l)) return l;
+  return (data.befehle || []).find(x => String(x.id) === String(id) && ist_ende(x)) || null;
 }
 function ist_ende(b) { return !!b && (b.ende === true || ['bestaetigt', 'gescheitert', 'ersetzt', 'abgelehnt'].includes(b.phase)); }
 
@@ -193,7 +202,7 @@ function eigeneAufraeumen(data) {
     const e = eigene[z];
     if (!e) continue;
     const g = (data.befehle || []).find(x => String(x.id) === e.id);
-    if ((g && ist_ende(g)) || (!g && Date.now() - e.t > 60000)) delete eigene[z];
+    if ((g && ist_ende(g)) || abschlussFuer(e.id, ZIELNAME[z], data) || (!g && Date.now() - e.t > 60000)) delete eigene[z];
   }
 }
 
@@ -206,6 +215,8 @@ const gesehen = {};           // id+phase -> erste Sichtung (fuer Befehle ohne B
 function fortschrittStand(ziel, data) {
   const b = befehlFuer(ziel, data);
   if (!b || b.phase === 'ersetzt') return null;
+  // Notbremse: ein Befehl ohne Abschluss nach 10 min (Board-Zeit) ist verwaist - Zeile weg statt Dauerlauf
+  if (!ist_ende(b) && b.zeit && Date.now() - b.zeit * 1000 > 600000) return null;
   if (OFFEN.has(b.phase)) {
     const fa = data.schalten && data.schalten.frei_ab;
     return { schritt: 0, ab: fa && fa * 1000 > Date.now() ? uhrzeit(fa) : null };
