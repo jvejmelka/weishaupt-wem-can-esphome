@@ -202,9 +202,9 @@ left untranslated so they can be matched against the code.
 | `0x602` | SDO write telegram from the WEM to the boiler, object `0x252C`/0 | Heating circuit flow setpoint (also appears in PDO `0x241` B0–1) | – | not evaluated | plausible |
 | `0x602` | SDO write telegram from the WEM to the boiler, object `0x252D`/0 | ramps up during DHW charging (observed up to 50 °C) | – | not evaluated | plausible |
 | `0x602` | SDO write telegram from the WEM to the boiler, object `0x2709`/0 | 0x64 heat demand active, 0x32 overrun | – | not evaluated | plausible |
-| `0x6C2` | SDO write telegram, object `0x2699`/1 | Return temperature VPT | 0.1 °C | Ruecklauf | plausible |
-| `0x6C2` | SDO write telegram, object `0x2697`/1 | Flow temperature VPT | 0.1 °C | Vorlauf VPT | plausible |
-| `0x6C2` | SDO write telegram, object `0x2698`/1 | Target output | 0.01 % | Sollleistung | plausible |
+| `0x6C2` | SDO write telegram, object `0x2699`/1 | Return temperature VPT | 0.1 °C | Ruecklauf | **verified** (compared with the WEM portal, installer view, burner running, 26 Oct 2026: portal 35.7 °C, bus 35.6–36.7 °C) |
+| `0x6C2` | SDO write telegram, object `0x2697`/1 | Flow temperature VPT | 0.1 °C | Vorlauf VPT | **verified** (compared with the WEM portal, installer view, burner running, 26 Oct 2026: portal 49.9 °C, bus 49.7–50.2 °C) |
+| `0x6C2` | SDO write telegram, object `0x2698`/1 | Target output | 0.01 % | Sollleistung | **verified** (compared with the WEM portal, installer view, burner running, 26 Oct 2026: portal 66.98 %, bus 66–67 %) |
 
 <!-- REGISTER:END mithoeren -->
 
@@ -242,7 +242,7 @@ objects – so their values arrive even with own requests switched off:
 | `0x2727`/2 | Wärmemenge Vortag WW | yes – **only** this way, the firmware never requests it itself |
 | `0x2728`/2 | Wärmemenge Vortag Gesamt | yes – **only** this way, the firmware never requests it itself |
 | `0x2731`/2 | not evaluated (current heat output) | yes |
-| `0x2533`/2 | not evaluated (return temperature VPT, candidate) | yes |
+| `0x2533`/2 | not evaluated (return temperature VPT) | yes |
 | `0x2536`/0 | Vorlauf | **no** – only arrives with own requests |
 | `0x2540`/0 | Drehzahl | **no** – only arrives with own requests |
 
@@ -255,7 +255,7 @@ Vorlauf = flow, Drehzahl = fan speed.)
 
 The WEM requests further objects (among others `0x2530`, `0x2531`, `0x2739`, `0x2753`/2) that the
 firmware does not evaluate. According to the Weishaupt register table and geronet1, `0x2533`/2 is the
-return temperature VPT – **not yet checked** on the installation.
+return temperature VPT – **verified** on 26 Oct 2026 against the WEM portal (portal 35.7 °C, bus 35.6–36.7 °C; same value as `0x2699`).
 
 How often the WEM requests an object varies greatly; “rarely” means: considerably less often than once
 per minute. The list comes from a capture in summer mode and is not complete.
@@ -287,13 +287,13 @@ signed (operating modes: 1 byte). The value `0x8000` means “no value” and is
 | Node | Object | Factor | Rate | Class | Name in the firmware | Status |
 |---|---|---|---|---|---|---|
 | 2 | `0x2532`/0 | 0.1 °C | 40 s | s | Kesseltemperatur | **verified** (display) |
-| 2 | `0x2537`/0 | 0.1 °C | 40 s | – | Abgastemperatur | **unconfirmed** – called “return” in some templates |
-| 2 | `0x2536`/0 | 0.1 °C | 40 s | – | Vorlauf | **unconfirmed** – responds; the interpretation can only be checked with the burner running (flow must then be above boiler) |
-| 2 | `0x2534`/0 | 0.01 % | 40 s | – | Leistung | **unconfirmed** – taken over from the template, check with the burner running |
-| 2 | `0x2540`/0 | 1 rpm | 40 s | – | Drehzahl | **unconfirmed** – taken over from the template, check with the burner running |
+| 2 | `0x2537`/0 | 0.1 °C | 40 s | – | Abgastemperatur | **verified** (compared with the WEM portal, installer view, burner running, 26 Oct 2026: portal 49 °C, bus 49.3 °C; display 53 °C / bus 53.9 °C on 26 Sep) – some templates call it “return”, which is wrong |
+| 2 | `0x2536`/0 | 0.1 °C | 40 s | – | Vorlauf | **verified** (compared with the WEM portal, installer view, burner running, 26 Oct 2026: portal “Vorlauftemperatur” 52.1 °C, bus 52.7 °C; boiler flow, not VPT) |
+| 2 | `0x2534`/0 | 0.01 % | 40 s | – | Leistung | **verified** (compared with the WEM portal, installer view, burner running, 26 Oct 2026: portal “Istleistung” 66.88 %, bus 65.30 %) |
+| 2 | `0x2540`/0 | 1 rpm | 40 s | – | Drehzahl | **verified** (compared with the WEM portal, installer view, burner running, 26 Oct 2026: portal “Gebläsedrehzahl” 3478 rpm, bus 3478 / 3380 rpm) |
 | 2 | `0x2541`/0 | Phase: 0 off, 1 pre-purge, 2 control operation, 3 modulating operation, 4 post-purge | 40 s | s | Brenner Status, Brenner, Brennerphase, Brennerstarts | **verified** (display “Heizkreise inaktiv”) |
-| 2 | `0x2545`/0 | 0.1 °C | 60 s | m | Vorlauf Soll | **unconfirmed** |
-| 2 | `0x2713`/2 | 1 l/h | 60 s | m | Volumenstrom | **unconfirmed** – taken over from the template, check with the burner running |
+| 2 | `0x2545`/0 | 0.1 °C | 60 s | m | Vorlauf Soll | **verified** (compared with the WEM portal, installer view, burner running, 26 Oct 2026: portal 50 °C, bus 50.0 °C) |
+| 2 | `0x2713`/2 | 1 l/h | 60 s | m | Volumenstrom | **verified** (compared with the WEM portal, installer view, burner running, 26 Oct 2026: portal “Volumenstrom VPT” 529 l/h, bus 531 l/h) |
 | 2 | `0x2714`/2 | 0.01 bar | 60 s | m | Anlagendruck | **verified** (display) |
 | 1 | `0x2907`/2 | 0.1 °C | 60 s | s | Vorlauf Heizkreis | plausible (JSON MI 02 `0x2507` actual flow temperature, +0x400) |
 | 1 | `0x2640`/3 | 0.1 °C | 60 s | – | Vorlaufsoll Anforderung | plausible (50 °C observed with DHW on, 23 °C with off) |

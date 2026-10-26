@@ -310,17 +310,17 @@ Overview of all objects the firmware evaluates (details and evidence in
 | PDO `0x182` B0 | Kesselstatus, Warmwasser aktiv (Status 15) (boiler status, DHW active) | PDO | **confirmed** |
 | PDO `0x1C1` B2–3 | Heizkreis Status (heating circuit status) | PDO | plausible |
 | Node 2 `0x252B`/0 | Regeln R2/R4 (rules R2/R4) | WEM writes | plausible |
-| `0x6C2` `0x2699`/1 | Ruecklauf (return) | telegram 0x6C2 | plausible |
-| `0x6C2` `0x2697`/1 | Vorlauf VPT (flow VPT) | telegram 0x6C2 | plausible |
-| `0x6C2` `0x2698`/1 | Sollleistung (target output) | telegram 0x6C2 | plausible |
+| `0x6C2` `0x2699`/1 | Ruecklauf (return) | telegram 0x6C2 | **confirmed** |
+| `0x6C2` `0x2697`/1 | Vorlauf VPT (flow VPT) | telegram 0x6C2 | **confirmed** |
+| `0x6C2` `0x2698`/1 | Sollleistung (target output) | telegram 0x6C2 | **confirmed** |
 | Node 2 `0x2532`/0 | Kesseltemperatur (boiler temperature) | own request, response to the WEM | **confirmed** |
-| Node 2 `0x2537`/0 | Abgastemperatur (flue gas temperature) | own request, response to the WEM | **unconfirmed** |
-| Node 2 `0x2536`/0 | Vorlauf (flow) | own request | **unconfirmed** |
-| Node 2 `0x2534`/0 | Leistung (output) | own request, response to the WEM | **unconfirmed** |
-| Node 2 `0x2540`/0 | Drehzahl (fan speed) | own request | **unconfirmed** |
+| Node 2 `0x2537`/0 | Abgastemperatur (flue gas temperature) | own request, response to the WEM | **confirmed** |
+| Node 2 `0x2536`/0 | Vorlauf (flow) | own request | **confirmed** |
+| Node 2 `0x2534`/0 | Leistung (output) | own request, response to the WEM | **confirmed** |
+| Node 2 `0x2540`/0 | Drehzahl (fan speed) | own request | **confirmed** |
 | Node 2 `0x2541`/0 | Brenner Status, Brenner, Brennerphase, Brennerstarts (burner status, burner, burner phase, burner starts) | own request, response to the WEM | **confirmed** |
-| Node 2 `0x2545`/0 | Vorlauf Soll (flow setpoint) | own request, response to the WEM | **unconfirmed** |
-| Node 2 `0x2713`/2 | Volumenstrom (volume flow) | own request, response to the WEM | **unconfirmed** |
+| Node 2 `0x2545`/0 | Vorlauf Soll (flow setpoint) | own request, response to the WEM | **confirmed** |
+| Node 2 `0x2713`/2 | Volumenstrom (volume flow) | own request, response to the WEM | **confirmed** |
 | Node 2 `0x2714`/2 | Anlagendruck (system pressure) | own request, response to the WEM | **confirmed** |
 | Node 2 `0x2726`/2 | Wärmemenge Vortag Heizung (heat quantity previous day, heating) | response to the WEM | **confirmed** |
 | Node 2 `0x2727`/2 | Wärmemenge Vortag WW (heat quantity previous day, DHW) | response to the WEM | **confirmed** |
@@ -465,7 +465,6 @@ Open questions that can only be resolved on other installations or in a differen
 |---|---|
 | Heating circuit codes 6–8 (Comfort, Normal, Setback) have never been seen on the bus | a capture of a switch to these operating modes |
 | Switching via the WEM portal or WEM app has never been captured | a raw capture during a portal switch (see [PROTOKOLL.en.md](PROTOKOLL.en.md#detecting-passively-what-works-and-what-does-not)) |
-| Return temperature candidate `0x2533`/2 is unverified | values with the burner running, next to the display readings |
 | Back-calculation of the room setpoint level only calibrated for outdoor temperatures of 12.9–15.2 °C | winter data (outdoor temperature 0–8 °C, 10–15 min steady state per operating mode) |
 | What does a Weishaupt room unit send? | captures, see [IDEEN.md, idea 4](IDEEN.md#gesucht-jemand-mit-weishaupt-raumgerät-am-bus) (German) |
 

@@ -293,17 +293,17 @@ Kurzübersicht aller Objekte, die die Firmware auswertet (Einzelheiten und Beleg
 | PDO `0x182` B0 | Kesselstatus, Warmwasser aktiv (Status 15) | PDO | **belegt** |
 | PDO `0x1C1` B2–3 | Heizkreis Status | PDO | plausibel |
 | Knoten 2 `0x252B`/0 | Regeln R2/R4 | WEM schreibt | plausibel |
-| `0x6C2` `0x2699`/1 | Ruecklauf | Telegramm 0x6C2 | plausibel |
-| `0x6C2` `0x2697`/1 | Vorlauf VPT | Telegramm 0x6C2 | plausibel |
-| `0x6C2` `0x2698`/1 | Sollleistung | Telegramm 0x6C2 | plausibel |
+| `0x6C2` `0x2699`/1 | Ruecklauf | Telegramm 0x6C2 | **belegt** |
+| `0x6C2` `0x2697`/1 | Vorlauf VPT | Telegramm 0x6C2 | **belegt** |
+| `0x6C2` `0x2698`/1 | Sollleistung | Telegramm 0x6C2 | **belegt** |
 | Knoten 2 `0x2532`/0 | Kesseltemperatur | eigene Anfrage, Antwort an den WEM | **belegt** |
-| Knoten 2 `0x2537`/0 | Abgastemperatur | eigene Anfrage, Antwort an den WEM | **unbestätigt** |
-| Knoten 2 `0x2536`/0 | Vorlauf | eigene Anfrage | **unbestätigt** |
-| Knoten 2 `0x2534`/0 | Leistung | eigene Anfrage, Antwort an den WEM | **unbestätigt** |
-| Knoten 2 `0x2540`/0 | Drehzahl | eigene Anfrage | **unbestätigt** |
+| Knoten 2 `0x2537`/0 | Abgastemperatur | eigene Anfrage, Antwort an den WEM | **belegt** |
+| Knoten 2 `0x2536`/0 | Vorlauf | eigene Anfrage | **belegt** |
+| Knoten 2 `0x2534`/0 | Leistung | eigene Anfrage, Antwort an den WEM | **belegt** |
+| Knoten 2 `0x2540`/0 | Drehzahl | eigene Anfrage | **belegt** |
 | Knoten 2 `0x2541`/0 | Brenner Status, Brenner, Brennerphase, Brennerstarts | eigene Anfrage, Antwort an den WEM | **belegt** |
-| Knoten 2 `0x2545`/0 | Vorlauf Soll | eigene Anfrage, Antwort an den WEM | **unbestätigt** |
-| Knoten 2 `0x2713`/2 | Volumenstrom | eigene Anfrage, Antwort an den WEM | **unbestätigt** |
+| Knoten 2 `0x2545`/0 | Vorlauf Soll | eigene Anfrage, Antwort an den WEM | **belegt** |
+| Knoten 2 `0x2713`/2 | Volumenstrom | eigene Anfrage, Antwort an den WEM | **belegt** |
 | Knoten 2 `0x2714`/2 | Anlagendruck | eigene Anfrage, Antwort an den WEM | **belegt** |
 | Knoten 2 `0x2726`/2 | Wärmemenge Vortag Heizung | Antwort an den WEM | **belegt** |
 | Knoten 2 `0x2727`/2 | Wärmemenge Vortag WW | Antwort an den WEM | **belegt** |
@@ -446,7 +446,6 @@ Offene Punkte, die sich nur an anderen Anlagen oder zu anderer Jahreszeit kläre
 |---|---|
 | Heizkreis-Codes 6–8 (Komfort, Normal, Absenk) wurden nie am Bus gesehen | Mitschnitt einer Umschaltung auf diese Betriebsarten |
 | Umschaltungen über WEM-Portal oder WEM-App wurden nie mitgeschnitten | Rohmitschnitt während einer Portal-Umschaltung (s. [PROTOKOLL.md](PROTOKOLL.md#passiv-erkennen-was-geht-und-was-nicht)) |
-| Rücklauf-Kandidat `0x2533`/2 ist ungeprüft | Werte bei laufendem Brenner neben dem Display |
 | Rückrechnung der Raumsoll-Stufe nur für AT 12,9–15,2 °C geeicht | Winterdaten (AT 0–8 °C, je Betriebsart 10–15 min stationär) |
 | Was sendet ein Weishaupt-Raumgerät? | Mitschnitte, s. [IDEEN.md, Idee 4](IDEEN.md#gesucht-jemand-mit-weishaupt-raumgerät-am-bus) |
 

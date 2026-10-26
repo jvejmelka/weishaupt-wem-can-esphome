@@ -55,7 +55,7 @@ constexpr Json KESSEL_TEMP_JSON{0x07, 0x00, 0x2532, 0x00, 2};
 constexpr Sdo ABGAS{2, 0x2537, 0x00, 0.1f};  // Abgastemperatur
 constexpr Sdo VORLAUF{2, 0x2536, 0x00, 0.1f};  // Vorlauf
 constexpr Sdo LEISTUNG{2, 0x2534, 0x00, 0.01f};  // Leistung
-constexpr Sdo DREHZAHL{2, 0x2540, 0x00, 1.0f};  // Drehzahl
+constexpr Sdo DREHZAHL{2, 0x2540, 0x00, 1.0f};  // Gebläsedrehzahl
 constexpr Sdo BRENNER{2, 0x2541, 0x00, 1.0f};  // Betriebsphase Brenner
 constexpr Json BRENNER_JSON{0x07, 0x00, 0x2541, 0x00, 1};
 constexpr Sdo VORLAUF_SOLL{2, 0x2545, 0x00, 0.1f};  // Vorlauf Soll
@@ -72,7 +72,7 @@ constexpr Sdo WM_GESAMT{2, 0x2728, 0x02, 0.01f};  // Wärmemenge Vortag gesamt
 constexpr Json WM_GESAMT_JSON{0x09, 0x01, 0x2628, 0x02, 4};
 constexpr Sdo WAERMELEISTUNG{2, 0x2731, 0x02, 0.01f};  // Wärmeleistung aktuell
 constexpr Json WAERMELEISTUNG_JSON{0x09, 0x01, 0x2631, 0x02, 4};
-constexpr Sdo RUECKLAUF_KANDIDAT{2, 0x2533, 0x02, 0.1f};  // Rücklauftemperatur VPT, Kandidat
+constexpr Sdo RUECKLAUF_KANDIDAT{2, 0x2533, 0x02, 0.1f};  // Rücklauftemperatur VPT
 constexpr Sdo R1_A{2, 0x2101, 0x0A, 1.0f};  // 1. Glied der Warmwasser-Folge
 constexpr Sdo R1_B{2, 0x2102, 0x0D, 1.0f};  // 2. Glied der Warmwasser-Folge
 constexpr Sdo R1_C{2, 0x2102, 0x01, 1.0f};  // 3. Glied der Warmwasser-Folge

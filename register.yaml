@@ -150,7 +150,8 @@ objekte:
     faktor: 0.1
     einheit: °C
     weg: [telegramm_6c2]
-    status: plausibel
+    status: belegt
+    beleg: "Vergleich mit dem WEM-Portal (Fachmann-Ansicht) bei laufendem Brenner, 26.10.2026: Portal 35,7 °C, Bus 35,6–36,7 °C"
     quelle: geronet1/wem-python
   - id: VORLAUF_VPT
     name: Vorlauftemperatur VPT
@@ -162,7 +163,8 @@ objekte:
     faktor: 0.1
     einheit: °C
     weg: [telegramm_6c2]
-    status: plausibel
+    status: belegt
+    beleg: "Vergleich mit dem WEM-Portal (Fachmann-Ansicht) bei laufendem Brenner, 26.10.2026: Portal 49,9 °C, Bus 49,7–50,2 °C"
     quelle: geronet1/wem-python
   - id: SOLLLEISTUNG
     name: Sollleistung
@@ -174,7 +176,8 @@ objekte:
     faktor: 0.01
     einheit: "%"
     weg: [telegramm_6c2]
-    status: plausibel
+    status: belegt
+    beleg: "Vergleich mit dem WEM-Portal (Fachmann-Ansicht) bei laufendem Brenner, 26.10.2026: Portal 66,98 %, Bus 66–67 %"
     quelle: geronet1/wem-python
 
   # ---------------------------------------------------------------- Kessel (Knoten 2), SDO
@@ -206,8 +209,8 @@ objekte:
     weg: [eigene_anfrage, wem_antwort]
     takt: 40 s
     wem_fragt: ja
-    status: unbestaetigt
-    beleg: in manchen Vorlagen „Rücklauf“ genannt
+    status: belegt
+    beleg: "Vergleich mit dem WEM-Portal (Fachmann-Ansicht) bei laufendem Brenner, 26.10.2026: Portal 49 °C, Bus 49,3 °C; Display 53 °C/Bus 53,9 °C am 26.09."
   - id: VORLAUF
     name: Vorlauf
     firmware: Vorlauf
@@ -220,8 +223,8 @@ objekte:
     weg: [eigene_anfrage]
     takt: 40 s
     wem_fragt: nein
-    status: unbestaetigt
-    beleg: antwortet, Deutung erst bei laufendem Brenner prüfbar (Vorlauf muss dann über Kessel liegen)
+    status: belegt
+    beleg: "Vergleich mit dem WEM-Portal (Fachmann-Ansicht) bei laufendem Brenner, 26.10.2026: Portal „Vorlauftemperatur“ 52,1 °C, Bus 52,7 °C (Kesselvorlauf, nicht VPT)"
   - id: LEISTUNG
     name: Leistung
     firmware: Leistung
@@ -234,11 +237,11 @@ objekte:
     weg: [eigene_anfrage, wem_antwort]
     takt: 40 s
     wem_fragt: ja
-    status: unbestaetigt
-    beleg: aus der Vorlage übernommen, bei laufendem Brenner prüfen
+    status: belegt
+    beleg: "Vergleich mit dem WEM-Portal (Fachmann-Ansicht) bei laufendem Brenner, 26.10.2026: Portal „Istleistung“ 66,88 %, Bus 65,30 %"
     quelle: MenkeC/Weishaupt-C3supermini
   - id: DREHZAHL
-    name: Drehzahl
+    name: Gebläsedrehzahl
     firmware: Drehzahl
     knoten: 2
     index: 0x2540
@@ -249,8 +252,8 @@ objekte:
     weg: [eigene_anfrage]
     takt: 40 s
     wem_fragt: nein
-    status: unbestaetigt
-    beleg: aus der Vorlage übernommen, bei laufendem Brenner prüfen
+    status: belegt
+    beleg: "Vergleich mit dem WEM-Portal (Fachmann-Ansicht) bei laufendem Brenner, 26.10.2026: Portal „Gebläsedrehzahl“ 3478 U/min, Bus 3478 bzw. 3380 U/min"
     quelle: MenkeC/Weishaupt-C3supermini
   - id: BRENNER
     name: Betriebsphase Brenner
@@ -281,7 +284,8 @@ objekte:
     takt: 60 s
     wem_fragt: selten
     klasse: m
-    status: unbestaetigt
+    status: belegt
+    beleg: "Vergleich mit dem WEM-Portal (Fachmann-Ansicht) bei laufendem Brenner, 26.10.2026: Portal „Vorlaufsolltemperatur“ 50 °C, Bus 50,0 °C"
     json: {mi: 0x07, mx: 0x00, ox: 0x2545, os: 0x00, vs: 2}
   - id: VOLUMENSTROM
     name: Volumenstrom
@@ -296,8 +300,8 @@ objekte:
     takt: 60 s
     wem_fragt: selten
     klasse: m
-    status: unbestaetigt
-    beleg: aus der Vorlage übernommen, bei laufendem Brenner prüfen
+    status: belegt
+    beleg: "Vergleich mit dem WEM-Portal (Fachmann-Ansicht) bei laufendem Brenner, 26.10.2026: Portal „Volumenstrom VPT“ 529 l/h, Bus 531 l/h"
     json: {mi: 0x09, mx: 0x01, ox: 0x2613, os: 0x02, vs: 2}
   - id: DRUCK
     name: Anlagendruck
@@ -379,7 +383,7 @@ objekte:
     json: {mi: 0x09, mx: 0x01, ox: 0x2631, os: 0x02, vs: 4}
     json_lesen: {inhalt: Wärmeleistung aktuell}
   - id: RUECKLAUF_KANDIDAT
-    name: Rücklauftemperatur VPT, Kandidat
+    name: Rücklauftemperatur VPT
     knoten: 2
     index: 0x2533
     sub: 2
@@ -388,8 +392,8 @@ objekte:
     einheit: °C
     weg: [wem_antwort]
     wem_fragt: ja
-    status: vermutung
-    beleg: laut Weishaupt-Registertabelle und geronet1 Rücklauf VPT – an der Anlage noch nicht geprüft
+    status: belegt
+    beleg: "Vergleich mit dem WEM-Portal (Fachmann-Ansicht) bei laufendem Brenner, 26.10.2026: Portal „Rücklauftemperatur VPT“ 35,7 °C, Bus 35,6–36,7 °C (gleich `0x2699`)"
     quelle: Weishaupt-Registertabelle, geronet1/wem-python
 
   # R1: Folge, die der WEM bei jeder Warmwasser-Umschaltung vom Kessel liest (Kommandobyte 0xA4)

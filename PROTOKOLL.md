@@ -197,9 +197,9 @@ Die Tabellen in den Abschnitten 3–5 werden aus [`register.yaml`](register.yaml
 | `0x602` | SDO-Schreibtelegramm des WEM an den Kessel, Objekt `0x252C`/0 | Vorlaufsoll Heizkreis (erscheint auch in PDO `0x241` B0–1) | – | nicht ausgewertet | plausibel |
 | `0x602` | SDO-Schreibtelegramm des WEM an den Kessel, Objekt `0x252D`/0 | steigt beim Warmwasserladen rampenförmig (auf 50 °C beobachtet) | – | nicht ausgewertet | plausibel |
 | `0x602` | SDO-Schreibtelegramm des WEM an den Kessel, Objekt `0x2709`/0 | 0x64 Heizanforderung aktiv, 0x32 Nachlauf | – | nicht ausgewertet | plausibel |
-| `0x6C2` | SDO-Schreibtelegramm, Objekt `0x2699`/1 | Rücklauftemperatur VPT | 0,1 °C | Ruecklauf | plausibel |
-| `0x6C2` | SDO-Schreibtelegramm, Objekt `0x2697`/1 | Vorlauftemperatur VPT | 0,1 °C | Vorlauf VPT | plausibel |
-| `0x6C2` | SDO-Schreibtelegramm, Objekt `0x2698`/1 | Sollleistung | 0,01 % | Sollleistung | plausibel |
+| `0x6C2` | SDO-Schreibtelegramm, Objekt `0x2699`/1 | Rücklauftemperatur VPT | 0,1 °C | Ruecklauf | **belegt** (Vergleich mit dem WEM-Portal (Fachmann-Ansicht) bei laufendem Brenner, 26.10.2026: Portal 35,7 °C, Bus 35,6–36,7 °C) |
+| `0x6C2` | SDO-Schreibtelegramm, Objekt `0x2697`/1 | Vorlauftemperatur VPT | 0,1 °C | Vorlauf VPT | **belegt** (Vergleich mit dem WEM-Portal (Fachmann-Ansicht) bei laufendem Brenner, 26.10.2026: Portal 49,9 °C, Bus 49,7–50,2 °C) |
+| `0x6C2` | SDO-Schreibtelegramm, Objekt `0x2698`/1 | Sollleistung | 0,01 % | Sollleistung | **belegt** (Vergleich mit dem WEM-Portal (Fachmann-Ansicht) bei laufendem Brenner, 26.10.2026: Portal 66,98 %, Bus 66–67 %) |
 
 <!-- REGISTER:END mithoeren -->
 
@@ -237,7 +237,7 @@ deren Werte kommen also auch bei ausgeschalteten eigenen Anfragen:
 | `0x2727`/2 | Wärmemenge Vortag WW | ja – **nur** so, die Firmware fragt es nie selbst |
 | `0x2728`/2 | Wärmemenge Vortag Gesamt | ja – **nur** so, die Firmware fragt es nie selbst |
 | `0x2731`/2 | nicht ausgewertet (Wärmeleistung aktuell) | ja |
-| `0x2533`/2 | nicht ausgewertet (Rücklauftemperatur VPT, Kandidat) | ja |
+| `0x2533`/2 | nicht ausgewertet (Rücklauftemperatur VPT) | ja |
 | `0x2536`/0 | Vorlauf | **nein** – kommt nur mit eigenen Anfragen |
 | `0x2540`/0 | Drehzahl | **nein** – kommt nur mit eigenen Anfragen |
 
@@ -245,7 +245,7 @@ deren Werte kommen also auch bei ausgeschalteten eigenen Anfragen:
 
 Der WEM fragt noch weitere Objekte ab (u. a. `0x2530`, `0x2531`, `0x2739`, `0x2753`/2), die die
 Firmware nicht auswertet. `0x2533`/2 ist laut Weishaupt-Registertabelle und geronet1 die
-Rücklauftemperatur VPT – an der Anlage **noch nicht geprüft**.
+Rücklauftemperatur VPT – am 26.10.2026 mit dem WEM-Portal **bestätigt** (Portal 35,7 °C, Bus 35,6–36,7 °C; derselbe Wert wie `0x2699`).
 
 Wie oft der WEM ein Objekt abfragt, schwankt stark; „selten“ heißt: deutlich seltener als einmal
 pro Minute. Die Liste stammt aus einem Mitschnitt im Sommerbetrieb und ist nicht vollständig.
@@ -277,13 +277,13 @@ Vorzeichen (Betriebsarten: 1 Byte). Der Wert `0x8000` bedeutet „kein Wert“ u
 | Knoten | Objekt | Faktor | Takt | Klasse | Name in der Firmware | Stand |
 |---|---|---|---|---|---|---|
 | 2 | `0x2532`/0 | 0,1 °C | 40 s | s | Kesseltemperatur | **belegt** (Display) |
-| 2 | `0x2537`/0 | 0,1 °C | 40 s | – | Abgastemperatur | **unbestätigt** – in manchen Vorlagen „Rücklauf“ genannt |
-| 2 | `0x2536`/0 | 0,1 °C | 40 s | – | Vorlauf | **unbestätigt** – antwortet, Deutung erst bei laufendem Brenner prüfbar (Vorlauf muss dann über Kessel liegen) |
-| 2 | `0x2534`/0 | 0,01 % | 40 s | – | Leistung | **unbestätigt** – aus der Vorlage übernommen, bei laufendem Brenner prüfen |
-| 2 | `0x2540`/0 | 1 U/min | 40 s | – | Drehzahl | **unbestätigt** – aus der Vorlage übernommen, bei laufendem Brenner prüfen |
+| 2 | `0x2537`/0 | 0,1 °C | 40 s | – | Abgastemperatur | **belegt** (Vergleich mit dem WEM-Portal (Fachmann-Ansicht) bei laufendem Brenner, 26.10.2026: Portal 49 °C, Bus 49,3 °C; Display 53 °C/Bus 53,9 °C am 26.09.) |
+| 2 | `0x2536`/0 | 0,1 °C | 40 s | – | Vorlauf | **belegt** (Vergleich mit dem WEM-Portal (Fachmann-Ansicht) bei laufendem Brenner, 26.10.2026: Portal „Vorlauftemperatur“ 52,1 °C, Bus 52,7 °C (Kesselvorlauf, nicht VPT)) |
+| 2 | `0x2534`/0 | 0,01 % | 40 s | – | Leistung | **belegt** (Vergleich mit dem WEM-Portal (Fachmann-Ansicht) bei laufendem Brenner, 26.10.2026: Portal „Istleistung“ 66,88 %, Bus 65,30 %) |
+| 2 | `0x2540`/0 | 1 U/min | 40 s | – | Drehzahl | **belegt** (Vergleich mit dem WEM-Portal (Fachmann-Ansicht) bei laufendem Brenner, 26.10.2026: Portal „Gebläsedrehzahl“ 3478 U/min, Bus 3478 bzw. 3380 U/min) |
 | 2 | `0x2541`/0 | Phase: 0 aus, 1 Vorbelüftung, 2 Steuerbetrieb, 3 Regelbetrieb, 4 Nachbelüftung | 40 s | s | Brenner Status, Brenner, Brennerphase, Brennerstarts | **belegt** (Display „Heizkreise inaktiv“) |
-| 2 | `0x2545`/0 | 0,1 °C | 60 s | m | Vorlauf Soll | **unbestätigt** |
-| 2 | `0x2713`/2 | 1 l/h | 60 s | m | Volumenstrom | **unbestätigt** – aus der Vorlage übernommen, bei laufendem Brenner prüfen |
+| 2 | `0x2545`/0 | 0,1 °C | 60 s | m | Vorlauf Soll | **belegt** (Vergleich mit dem WEM-Portal (Fachmann-Ansicht) bei laufendem Brenner, 26.10.2026: Portal „Vorlaufsolltemperatur“ 50 °C, Bus 50,0 °C) |
+| 2 | `0x2713`/2 | 1 l/h | 60 s | m | Volumenstrom | **belegt** (Vergleich mit dem WEM-Portal (Fachmann-Ansicht) bei laufendem Brenner, 26.10.2026: Portal „Volumenstrom VPT“ 529 l/h, Bus 531 l/h) |
 | 2 | `0x2714`/2 | 0,01 bar | 60 s | m | Anlagendruck | **belegt** (Display) |
 | 1 | `0x2907`/2 | 0,1 °C | 60 s | s | Vorlauf Heizkreis | plausibel (JSON MI 02 `0x2507` Vorlaufisttemperatur, +0x400) |
 | 1 | `0x2640`/3 | 0,1 °C | 60 s | – | Vorlaufsoll Anforderung | plausibel (50 °C bei Warmwasser Ein, 23 °C bei Aus beobachtet) |
