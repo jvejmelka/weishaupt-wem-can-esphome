@@ -1,6 +1,9 @@
 # Changelog – ESP-CAN-Brücke Weishaupt (WeAct CAN485, ESPHome)
 
 
+## v31 – 2026-10-26
+- **Nachkommastellen wie vom Bus geliefert:** Sollleistung und Leistung mit 2 Stellen (0,01 %), die drei Wärmemengen Vortag mit 2 Stellen (0,01 kWh); Drehzahl und Volumenstrom ohne „,0“. Bisher wurde die Sollleistung auf ganze Prozent und die Wärmemenge auf 0,1 kWh gerundet. Sonst unverändert; die App rundet ihre Anzeige selbst.
+
 ## Doku – 2026-10-26
 - **Alle bisher unbestätigten Kesselregister bestätigt.** Vergleich mit der Fachmann-Ansicht des WEM-Portals bei laufendem Brenner (Warmwasserladung, ~66 %), Bus-Werte per Lesebefehl im selben Augenblick: Abgas `0x2537` (49 / 49,3 °C), Vorlauf `0x2536` (52,1 / 52,7 °C, Kesselvorlauf, nicht VPT), Leistung `0x2534` (Istleistung 66,88 / 65,30 %), Drehzahl `0x2540` (3478 / 3478 U/min), Vorlauf Soll `0x2545` (50 / 50,0 °C), Volumenstrom `0x2713`/2 (529 / 531 l/h). Ebenso die drei Werte aus dem Telegramm `0x6C2` (Rücklauf VPT, Vorlauf VPT, Sollleistung) und `0x2533`/2 = Rücklauftemperatur VPT (35,7 / 35,6–36,7 °C). Einige Vorlagen nennen `0x2537` „Rücklauf“ und `0x2533` „Abgas“ – das ist vertauscht. Firmware unverändert.
 

@@ -516,7 +516,7 @@ sensor:
     name: "Sollleistung"             # 0x2698, passiv aus 0x6C2
     id: wem_sollleistung
     unit_of_measurement: "%"
-    accuracy_decimals: 0
+    accuracy_decimals: 2             # Bus liefert 0,01 %
     update_interval: never
     web_server: { sorting_group_id: g_kessel, sorting_weight: 8 }
   - platform: template
@@ -540,12 +540,14 @@ sensor:
     id: wem_leistung
     unit_of_measurement: "%"
     device_class: power_factor
+    accuracy_decimals: 2             # Bus liefert 0,01 %
     update_interval: never
     web_server: { sorting_group_id: g_kessel, sorting_weight: 8 }
   - platform: template
     name: "Drehzahl"
     id: wem_drehzahl
     unit_of_measurement: "U/min"
+    accuracy_decimals: 0
     update_interval: never
     web_server: { sorting_group_id: g_kessel, sorting_weight: 9 }
   - platform: template
@@ -560,6 +562,7 @@ sensor:
     name: "Volumenstrom"
     id: wem_volumenstrom
     unit_of_measurement: "l/h"
+    accuracy_decimals: 0
     update_interval: never
     web_server: { sorting_group_id: g_kessel, sorting_weight: 11 }
   - platform: template
@@ -615,6 +618,7 @@ sensor:
     name: "Wärmemenge Vortag Heizung"
     id: wem_wm_heizung
     unit_of_measurement: "kWh"
+    accuracy_decimals: 2             # Bus liefert 0,01 kWh
     device_class: energy
     state_class: total_increasing
     update_interval: never
@@ -623,6 +627,7 @@ sensor:
     name: "Wärmemenge Vortag WW"
     id: wem_wm_ww
     unit_of_measurement: "kWh"
+    accuracy_decimals: 2             # Bus liefert 0,01 kWh
     device_class: energy
     state_class: total_increasing
     update_interval: never
@@ -631,6 +636,7 @@ sensor:
     name: "Wärmemenge Vortag Gesamt"
     id: wem_wm_gesamt
     unit_of_measurement: "kWh"
+    accuracy_decimals: 2             # Bus liefert 0,01 kWh
     device_class: energy
     state_class: total_increasing
     update_interval: never
