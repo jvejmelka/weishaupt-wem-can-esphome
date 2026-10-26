@@ -287,6 +287,13 @@ TEST(kern_lesebefehl_segmentiert) {
   PRUEFE(t == "01 273F/00 = 11 22 33 44 55 66 77 88 (8 Byte, Teilstuecke)");
   PRUEFE(!n.aktiv && !n.weiter(cid, d, 1150));
   PRUEFE(n.roh == ">403F270000000000 <413F270008000000 >6000000000000000 <1009090909090909 <0011223344556677 >7000000000000000 <1D88000000000000");
+  // am Kessel per Einstellung gesperrt
+  n.lang_am_kessel = false;
+  PRUEFE(n.starten("02 2531 00", false, m, cid, d));
+  PRUEFE(n.antwort(0x582, F{0x41, 0x31, 0x25, 0x00, 6, 0, 0, 0}, t, 0) && t == "02 2531/00: langes Objekt (6 Byte) - Teilstuecke am Kessel gesperrt");
+  PRUEFE(!n.aktiv && !n.weiter(cid, d, 999));
+  PRUEFE(!n.starten("02 2531 00 B", false, m, cid, d));
+  n.lang_am_kessel = true;
   // Ankuendigung ohne Groesse (0x40), ein einziges letztes Teilstueck mit 3 Byte
   PRUEFE(n.starten("02 2531 00", false, m, cid, d));
   PRUEFE(!n.antwort(0x582, F{0x40, 0x31, 0x25, 0x00, 0, 0, 0, 0}, t, 0) && n.weiter(cid, d, 50) && cid == 0x602);
@@ -319,7 +326,9 @@ TEST(kern_lesebefehl_block) {
   PRUEFE(n.antwort(0x581, F{0x80, 0x3F, 0x27, 0x00, 0x01, 0x00, 0x04, 0x05}, t, 120));
   PRUEFE(t == "01 273F/00 [Teilstuecke: Abbruch 05040001]: Block: Abbruch 05040001" && !n.aktiv && !n.weiter(cid, d, 999));
   // Zusatz "B": gleich Block, nur am WEM
-  PRUEFE(!n.starten("02 2A00 00 B", false, m, cid, d) && m == "Block nur am WEM (Knoten 01)");
+  n.lang_am_kessel = false;
+  PRUEFE(!n.starten("02 2A00 00 B", false, m, cid, d) && m.find("Block nur am WEM") == 0);
+  n.lang_am_kessel = true;
   PRUEFE(n.starten("01 273F 00 B", false, m, cid, d) && cid == 0x601 && d == (F{0xA4, 0x3F, 0x27, 0x00, 8, 0, 0, 0}));
   PRUEFE(!n.antwort(0x581, F{0xC6, 0x3F, 0x27, 0x00, 0x08, 0, 0, 0}, t, 0) && n.weiter(cid, d, 0) && d[0] == 0xA3);
   PRUEFE(!n.antwort(0x581, F{0x81, 1, 2, 3, 4, 5, 6, 7}, t, 5) && n.weiter(cid, d, 5) && d == (F{0xA2, 1, 8, 0, 0, 0, 0, 0}));
@@ -331,6 +340,49 @@ TEST(kern_lesebefehl_block) {
   PRUEFE(n.starten("01 273F 00", false, m, cid, d));
   PRUEFE(!n.antwort(0x582, F{0x41, 0x3F, 0x27, 0x00, 0x08, 0, 0, 0}, t, 0) && !n.antwort(0x581, F{0x41, 0x40, 0x27, 0x00, 8, 0, 0, 0}, t, 0));
   PRUEFE(!n.weiter(cid, d, 999) && n.aktiv);
+}
+
+TEST(kern_can_schreiben) {
+  wc::CanSchreibbefehl c; std::string f, t; uint32_t cid = 0; F d;
+  PRUEFE(wc::can_schreib_lesen("01 2933 02 01", c, f) && c.kn == 1 && c.idx == 0x2933 && c.sub == 2 && c.daten == (F{1}));
+  PRUEFE(wc::can_schreib_lesen("01 2A38 02 1F4 2", c, f) && c.daten == (F{0xF4, 0x01}));
+  PRUEFE(wc::can_schreib_lesen("01 2A38 02 12345678 4", c, f) && c.daten == (F{0x78, 0x56, 0x34, 0x12}));
+  PRUEFE(wc::can_schreib_lesen("01 2A38 02 = 1 2 3 4 5 6 7 8 9", c, f) && c.daten.size() == 9);
+  PRUEFE(!wc::can_schreib_lesen("02 2532 00 01", c, f) && f.find("Kessel") != std::string::npos);   // nie der Kessel
+  PRUEFE(!wc::can_schreib_lesen("01 1017 00 00", c, f));                                             // nie Kommunikationsobjekte
+  PRUEFE(!wc::can_schreib_lesen("01 6000 00 00", c, f));
+  PRUEFE(!wc::can_schreib_lesen("01 2933 02 100", c, f));                                            // passt nicht in 1 Byte
+  PRUEFE(!wc::can_schreib_lesen("01 2933 02 01 3", c, f));
+  PRUEFE(!wc::can_schreib_lesen("01 2933", c, f));
+  PRUEFE(!wc::can_schreib_lesen("01 2933 02 =", c, f));
+  PRUEFE(!wc::can_schreib_lesen("01 2933 02 = 100", c, f));
+
+  // einfach: 1 Byte -> 2F, bestaetigt
+  wc::CanSchreiben w;
+  wc::can_schreib_lesen("01 2933 02 01", c, f);
+  w.starten(c, cid, d);
+  PRUEFE(cid == 0x601 && d == (F{0x2F, 0x33, 0x29, 0x02, 0x01, 0, 0, 0}));
+  PRUEFE(!w.antwort(0x581, F{0x4F, 0x33, 0x29, 0x02, 2, 0, 0, 0}, t));                 // Lese-Antwort: nicht unsere
+  PRUEFE(!w.antwort(0x581, F{0x60, 0x20, 0x2A, 0x02, 0, 0, 0, 0}, t));                 // anderes Objekt
+  PRUEFE(w.antwort(0x581, F{0x60, 0x33, 0x29, 0x02, 0, 0, 0, 0}, t) && t == "01 2933/02: geschrieben, 1 Byte, bestaetigt" && !w.aktiv);
+  PRUEFE(w.roh == ">2F33290201000000 <6033290200000000");
+  // 2 und 4 Byte
+  wc::can_schreib_lesen("01 2A38 02 1F4 2", c, f); w.starten(c, cid, d);
+  PRUEFE(d == (F{0x2B, 0x38, 0x2A, 0x02, 0xF4, 0x01, 0, 0}));
+  wc::can_schreib_lesen("01 2A38 02 12345678 4", c, f); w.starten(c, cid, d);
+  PRUEFE(d[0] == 0x23);
+  // Abbruch
+  PRUEFE(w.antwort(0x581, F{0x80, 0x38, 0x2A, 0x02, 0x00, 0x00, 0x01, 0x06}, t) && t == "01 2A38/02: abgelehnt, Abbruch 06010000" && !w.aktiv);
+  // Teilstuecke: 9 Byte -> 21 (Groesse 9), Pause, 00 + 7 Byte, Quittung 20, 1D? -> 13 (2 Byte, letztes, toggle 1)
+  wc::can_schreib_lesen("01 2A38 02 = 1 2 3 4 5 6 7 8 9", c, f); w.starten(c, cid, d);
+  PRUEFE(d == (F{0x21, 0x38, 0x2A, 0x02, 9, 0, 0, 0}));
+  PRUEFE(!w.antwort(0x581, F{0x60, 0x38, 0x2A, 0x02, 0, 0, 0, 0}, t, 1000) && !w.weiter(cid, d, 1049));
+  PRUEFE(w.weiter(cid, d, 1050) && d == (F{0x00, 1, 2, 3, 4, 5, 6, 7}));
+  PRUEFE(!w.antwort(0x581, F{0x30, 0, 0, 0, 0, 0, 0, 0}, t, 1060) && !w.weiter(cid, d, 1060));   // falscher Toggle
+  PRUEFE(!w.antwort(0x581, F{0x20, 0, 0, 0, 0, 0, 0, 0}, t, 1060));
+  PRUEFE(w.weiter(cid, d, 1060) && d == (F{0x1B, 8, 9, 0, 0, 0, 0, 0}));                         // toggle 1, n = 5, letztes
+  PRUEFE(w.antwort(0x581, F{0x30, 0, 0, 0, 0, 0, 0, 0}, t, 1070) && t == "01 2A38/02: geschrieben, 9 Byte in Teilstuecken, bestaetigt");
+  PRUEFE(wc::hex_bytes(F{0x2F, 0x33}) == "2F33");
 }
 
 TEST(kern_scan_wie_v28) {

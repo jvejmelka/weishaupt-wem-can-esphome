@@ -5,7 +5,8 @@
 #   ${geraet}/cmd/status (beliebig)                   liest Heizkreis- und Warmwasser-Betriebsart einmal
 #                                                     vom Bus (hoechstens alle 10 s), Zeitpunkt in "Status gelesen"
 # Schaltbefehle (cmd/heizkreis, cmd/warmwasser) kommen aus den Schalten-Paketen.
-# Die Befehle koennen nur LESEN: das Kommandobyte ist fest 0x40 (SDO-Upload).
+# Diese Befehle koennen nur LESEN (SDO-Upload; lange Objekte in Teilstuecken, mit "B" per Block).
+# Schreiben per CAN (cmd/can_schreiben) steht im Paket wem-schalten und ist ab Werk gesperrt.
 #
 # Strukturierter Status (ab v27): ${geraet}/status/json, retained, fester Aufbau (befehle.h,
 # TOPICS.md). Veroeffentlicht nur bei Aenderung, hoechstens alle 2 s - reine Buchfuehrung

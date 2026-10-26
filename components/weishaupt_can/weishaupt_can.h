@@ -63,6 +63,7 @@ class WeishauptCan : public Component {
   wc::Bus bus;
   wc::Anlass anlass;
   wc::Lesebefehl lesen;
+  wc::CanSchreiben schreiben;
   wc::Scan scan;
   wc::Brenner brenner;
   wc::Schalten schalten;

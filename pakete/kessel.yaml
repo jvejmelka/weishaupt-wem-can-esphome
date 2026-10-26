@@ -178,6 +178,12 @@ canbus:
               // Teilstuecke/Block: naechste Leseanfrage (nach der Pause), Block-Ende quittieren
               uint32_t fid = 0; std::vector<uint8_t> fd;
               if (id(wcan)->lesen.weiter(fid, fd, millis())) id(wcan)->senden(fid, fd);
+              // Schreibbefehl per CAN (ab v35, ab Werk aus): Antwort auswerten, naechstes Teilstueck
+              std::string st;
+              if (id(wcan)->schreiben.antwort(can_id, x, st, millis())) {
+                id(wcan)->schalten.can_fertig = true; id(wcan)->schalten.can_text = st;
+              }
+              if (id(wcan)->schreiben.weiter(fid, fd, millis())) id(wcan)->senden(fid, fd);
               if (fertig) {
                 id(lese_antwort).publish_state(t);
                 id(lese_roh).publish_state(id(wcan)->lesen.roh);
@@ -452,6 +458,18 @@ switch:
             s->publish_state(NAN);
           id(wem_brenner_text).publish_state("unbekannt");
           id(wcan)->brenner.vorher = -1;
+  # Lange Lesedialoge (Teilstuecke/Block) auch am Kessel. Ab Werk AN. Dort teilt sich das Board den
+  # SDO-Kanal 0x602 mit dem WEM, der den Kessel selbst ~3x pro Sekunde abfragt - aus = nur kurze Werte.
+  - platform: template
+    name: "Lange Lesebefehle auch am Kessel"
+    id: lang_am_kessel
+    restore_mode: RESTORE_DEFAULT_ON
+    lambda: 'return id(wcan)->lesen.lang_am_kessel;'
+    turn_on_action:
+      - lambda: 'id(wcan)->lesen.lang_am_kessel = true;'
+    turn_off_action:
+      - lambda: 'id(wcan)->lesen.lang_am_kessel = false;'
+    web_server: { sorting_group_id: g_lesen, sorting_weight: 5 }
 
 number:
   - platform: template

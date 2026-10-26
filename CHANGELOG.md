@@ -1,6 +1,14 @@
 # Changelog – ESP-CAN-Brücke Weishaupt (WeAct CAN485, ESPHome)
 
 
+## v35 – 2026-10-26
+- **Schreiben per CAN an den WEM, ab Werk AUS** (Gruppe „Schreiben per CAN“ in der Weboberfläche):
+  - „Schalten per CAN statt JSON (Heizkreis, Warmwasser)“: App, `cmd/heizkreis`, `cmd/warmwasser` schreiben per SDO-Download `0x2933`/2 bzw. `0x2A20`/2 statt über JSON; Warteschlange, Sperrminute und Kontrolle am Bus unverändert.
+  - „Freies CAN-Schreiben (Experten)“: Eingabefeld und `cmd/can_schreiben` (`KN IDX SUB WERT [LÄNGE]` oder `KN IDX SUB = Bytes`, bis 64 Byte, lange Daten in Teilstücken). Nur Knoten 01, nur Objekte 2000–5FFF.
+  - An der WTC-GW 15-B bestätigt: Heizkreis Standby/Zeitprogramm 1 und Warmwasser Aus/Ein per CAN, WEM antwortet `60`, Regelung, Display und App übernehmen den Wert.
+- **„Lange Lesebefehle auch am Kessel“** (ab Werk an): abschaltbar, dann liest der Lesebefehl am Kessel nur kurze Werte.
+- Kontrolle am Bus nach einem Schaltbefehl als eigenes Skript (`bus_kontrolle`) für JSON- und CAN-Weg. Tests: `kern_can_schreiben`.
+
 ## v34 – 2026-10-26
 - **Lesebefehl mit Zusatz `B` liest gleich per SDO-Block-Upload** (`01 273F 00 B`) – **nur am WEM (Knoten 1)**. Am Kessel (Knoten 2) teilt sich das Board den SDO-Kanal `0x602`/`0x582` mit dem WEM, der dort selbst ständig per Block abfragt; ein langer Dialog von uns könnte dessen Abfragen stören. Dort bleibt es beim einfachen Lesen.
 - **An der WTC-GW 15-B bestätigt:** Der WEM beherrscht Block-Upload auch als Antwortender. `01 273F 00 B` → `>A4… <C6…08 >A3 <01… <82… >A2 02 08 <D9… >A1` = 8 Byte, gleiches Ergebnis wie in Teilstücken.

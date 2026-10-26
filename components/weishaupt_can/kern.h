@@ -194,6 +194,9 @@ struct Lesebefehl {
   uint32_t groesse = 0, faellig = 0;
   std::vector<uint8_t> puffer, naechst;
   std::string vorweg, roh;
+  // Einstellung (ab v35, ab Werk an): Teilstuecke/Block auch am Kessel. Dort teilt sich das Board den
+  // SDO-Kanal 0x602 mit dem WEM, ein langer Dialog kann dessen eigene Abfragen stoeren - abschaltbar.
+  bool lang_am_kessel = true;
 
   // true = senden (can_id, daten gesetzt); meldung immer gesetzt
   bool starten(const std::string &eingabe, bool bus_tot, std::string &meldung, uint32_t &can_id,
@@ -207,7 +210,7 @@ struct Lesebefehl {
     // Zusatz "B": gleich Block-Upload - nur am WEM (Knoten 1); am Kessel teilt sich das Board den
     // SDO-Kanal mit dem WEM, ein langer Dialog dort koennte dessen eigene Abfragen stoeren
     bool block = n == 4 && (std::string(z) == "B" || std::string(z) == "b");
-    if (block && k != 1) { meldung = "Block nur am WEM (Knoten 01)"; return false; }
+    if (block && k != 1 && !lang_am_kessel) { meldung = "Block nur am WEM (Knoten 01) - am Kessel per Einstellung gesperrt"; return false; }
     if (bus_tot) { meldung = "Bus tot - nicht gesendet"; return false; }
     kn = k; idx = i; sub = s; aktiv = true;
     phase = block ? BLOCK_START : EINFACH; folge = false; block_versucht = block;
@@ -245,8 +248,13 @@ struct Lesebefehl {
     }
     if (phase == EINFACH && (x[0] == 0x41 || x[0] == 0x40)) {
       // Ankuendigung: Objekt ist laenger als 4 Byte, Groesse in Byte 4-7 (bei 0x41)
-      phase = STUECK; toggle = 0; puffer.clear();
       groesse = (x[0] == 0x41) ? (uint32_t) (x[4] | (x[5] << 8) | (x[6] << 16) | ((uint32_t) x[7] << 24)) : 0;
+      if (kn != 1 && !lang_am_kessel) {
+        snprintf(t, sizeof(t), "langes Objekt (%u Byte) - Teilstuecke am Kessel gesperrt", (unsigned) groesse);
+        fertig(text, t);
+        return true;
+      }
+      phase = STUECK; toggle = 0; puffer.clear();
       plane({0x60, 0, 0, 0, 0, 0, 0, 0}, jetzt);
       return false;
     }
@@ -432,6 +440,10 @@ struct Schalten {
   Protokoll protokoll;
   uint32_t letzter_gesehen = 0;  // Anzeige: wann die Sperrminute endet
   std::string frei_ab;
+  // Schreiben per CAN (ab v35): Ergebnis des laufenden Schreibbefehls fuer die Skripte
+  bool can_fertig = false;
+  bool can_frei_gesendet = false;  // freier Schreibbefehl ist raus, Ergebnis abholen
+  std::string can_text;
 
   bool sperrminute(uint32_t j) const { return letzter_befehl != 0 && j - letzter_befehl < SPERRMINUTE_MS; }
   // Sekunden, bis ein neuer Wunsch gesendet werden darf
@@ -625,5 +637,140 @@ template<size_t N> inline bool speicher_schreiben(std::array<char, N> &m, const 
   for (size_t i = 0; i < s.size(); i++) m[i] = s[i];
   return true;
 }
+
+// ---------------------------------------------------------------- Schreiben per CAN (ab v35)
+
+// SDO-Download an den WEM. Ab Werk AUS (Schalter in der Weboberflaeche). Erlaubt nur Knoten 1 (WEM)
+// und nur den Herstellerbereich 0x2000-0x5FFF: nie die Kommunikationsobjekte 0x1000-0x1FFF
+// (Heartbeat, COB-IDs ...), nie den Kessel (dort schreibt der WEM selbst alle ~5 s und teilt sich
+// den SDO-Kanal mit dem Board). Bis 4 Byte in einem Frame, laengere Daten (bis 64 Byte) in
+// Teilstuecken.
+inline std::string hex_bytes(const std::vector<uint8_t> &d) {
+  std::string t; char b[4];
+  for (auto c : d) { snprintf(b, sizeof(b), "%02X", c); t += b; }
+  return t;
+}
+
+struct CanSchreibbefehl { int kn = 0, idx = 0, sub = 0; std::vector<uint8_t> daten; };
+
+// Eingabe hex: "KN IDX SUB WERT [LAENGE]" (LAENGE 1/2/4 Byte, Vorgabe 1, little endian), z. B.
+// "01 2933 02 01", oder Rohbytes "KN IDX SUB = B1 B2 ..." (1-64 Byte, ab 5 Byte in Teilstuecken)
+inline bool can_schreib_lesen(const std::string &e, CanSchreibbefehl &c, std::string &fehler) {
+  unsigned k = 0, i = 0, s = 0;
+  int pos = 0;
+  if (sscanf(e.c_str(), "%x %x %x%n", &k, &i, &s, &pos) < 3) {
+    fehler = "ungueltig - Format: KN IDX SUB WERT [LAENGE] oder KN IDX SUB = B1 B2 ... (hex)"; return false;
+  }
+  if (k != 1) { fehler = "nur Knoten 01 (WEM) - der Kessel wird nie beschrieben"; return false; }
+  if (i < 0x2000 || i > 0x5FFF) { fehler = "nur Objekte 2000-5FFF (Herstellerbereich)"; return false; }
+  if (s > 0xFF) { fehler = "Subindex hoechstens FF"; return false; }
+  std::string rest = e.substr(pos);
+  std::vector<uint8_t> d;
+  size_t gl = rest.find('=');
+  if (gl != std::string::npos) {
+    const char *p = rest.c_str() + gl + 1;
+    unsigned b = 0; int n = 0;
+    while (sscanf(p, "%x%n", &b, &n) == 1) {
+      if (b > 0xFF) { fehler = "Rohbytes je hoechstens FF"; return false; }
+      d.push_back((uint8_t) b); p += n;
+    }
+    if (d.empty() || d.size() > 64) { fehler = "1 bis 64 Rohbytes"; return false; }
+  } else {
+    unsigned w = 0, l = 1;
+    int n = sscanf(rest.c_str(), "%x %x", &w, &l);
+    if (n < 1) { fehler = "Wert fehlt"; return false; }
+    if (l != 1 && l != 2 && l != 4) { fehler = "Laenge 1, 2 oder 4 Byte"; return false; }
+    if (l < 4 && w >> (8 * l)) { fehler = "Wert passt nicht in die Laenge"; return false; }
+    for (unsigned j = 0; j < l; j++) d.push_back((uint8_t) ((w >> (8 * j)) & 0xFF));
+  }
+  c.kn = k; c.idx = i; c.sub = s; c.daten = d;
+  return true;
+}
+
+// Laufender Schreibbefehl: starten() -> antwort() je Frame -> weiter() fuer das naechste Teilstueck
+struct CanSchreiben {
+  static constexpr uint32_t PAUSE_MS = 50;
+  bool aktiv = false, segmentiert = false, folge = false, ok = false;
+  int kn = 0, idx = 0, sub = 0;
+  std::vector<uint8_t> daten, naechst;
+  size_t pos = 0;
+  uint8_t toggle = 0;
+  uint32_t faellig = 0;
+  std::string roh;
+
+  void starten(const CanSchreibbefehl &c, uint32_t &can_id, std::vector<uint8_t> &d) {
+    kn = c.kn; idx = c.idx; sub = c.sub; daten = c.daten; pos = 0; toggle = 0; folge = false;
+    aktiv = true; ok = false; roh.clear();
+    segmentiert = daten.size() > 4;
+    d = {0, (uint8_t) (idx & 0xFF), (uint8_t) (idx >> 8), (uint8_t) sub, 0, 0, 0, 0};
+    if (!segmentiert) {
+      d[0] = (uint8_t) (0x23 | ((4 - daten.size()) << 2));            // 2F/2B/27/23
+      for (size_t j = 0; j < daten.size(); j++) d[4 + j] = daten[j];
+    } else {
+      uint32_t n = daten.size();
+      d[0] = 0x21;                                                      // Teilstuecke, Groesse angegeben
+      d[4] = n & 0xFF; d[5] = (n >> 8) & 0xFF; d[6] = (n >> 16) & 0xFF; d[7] = (n >> 24) & 0xFF;
+    }
+    can_id = 0x600 + kn;
+    notiere('>', d);
+  }
+
+  // true = erledigt, text gesetzt
+  bool antwort(uint32_t can_id, const std::vector<uint8_t> &x, std::string &text, uint32_t jetzt = 0) {
+    if (!aktiv || can_id != (uint32_t) (0x580 + kn) || x.size() < 8) return false;
+    bool unser = ((x[2] << 8) | x[1]) == idx && x[3] == sub;
+    char t[96];
+    if (x[0] == 0x80 && unser) {
+      notiere('<', x);
+      uint32_t code = x[4] | (x[5] << 8) | (x[6] << 16) | ((uint32_t) x[7] << 24);
+      snprintf(t, sizeof(t), "%02X %04X/%02X: abgelehnt, Abbruch %08X", kn, idx, sub, (unsigned) code);
+      text = t; aktiv = false; folge = false;
+      return true;
+    }
+    if (x[0] == 0x60 && unser && pos == 0) {
+      notiere('<', x);
+      if (!segmentiert) return fertig(text);
+      plane(jetzt, PAUSE_MS);                                           // WEM braucht eine kurze Pause
+      return false;
+    }
+    if (segmentiert && pos > 0 && (x[0] & 0xEF) == 0x20) {
+      notiere('<', x);
+      if ((x[0] & 0x10) != (toggle ^ 0x10)) return false;               // Quittung zum letzten Teilstueck
+      if (pos >= daten.size()) return fertig(text);
+      plane(jetzt, 0);
+      return false;
+    }
+    return false;
+  }
+
+  bool weiter(uint32_t &can_id, std::vector<uint8_t> &d, uint32_t jetzt) {
+    if (!aktiv || !folge || (int32_t) (jetzt - faellig) < 0) return false;
+    folge = false;
+    size_t n = daten.size() - pos < 7 ? daten.size() - pos : 7;
+    bool letztes = pos + n >= daten.size();
+    d = {(uint8_t) (toggle | ((7 - n) << 1) | (letztes ? 1 : 0)), 0, 0, 0, 0, 0, 0, 0};
+    for (size_t j = 0; j < n; j++) d[1 + j] = daten[pos + j];
+    pos += n;
+    toggle ^= 0x10;
+    can_id = 0x600 + kn;
+    notiere('>', d);
+    return true;
+  }
+
+ private:
+  void plane(uint32_t jetzt, uint32_t pause) { folge = true; faellig = jetzt + pause; }
+  bool fertig(std::string &text) {
+    char t[64];
+    snprintf(t, sizeof(t), "%02X %04X/%02X: geschrieben, %u Byte%s, bestaetigt", kn, idx, sub,
+             (unsigned) daten.size(), segmentiert ? " in Teilstuecken" : "");
+    text = t; aktiv = false; folge = false; ok = true;
+    return true;
+  }
+  void notiere(char r, const std::vector<uint8_t> &d) {
+    if (roh.size() > 600) return;
+    if (!roh.empty()) roh += ' ';
+    roh += r; roh += hex_bytes(d);
+  }
+};
 
 }  // namespace wc

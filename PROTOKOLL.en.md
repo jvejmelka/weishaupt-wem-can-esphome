@@ -130,7 +130,8 @@ scans over `0x602` made the WEM portal stall until the scan stopped. Nobody else
 (`0x601`) – long dialogues are harmless there.
 
 Conversely, **only the WEM** writes to the boiler: seven values every ~5 s (`0x2709`, `0x270A`,
-`0x252B`–`0x252F`: demand, flow and DHW setpoint). The board never writes on the bus.
+`0x252B`–`0x252F`: demand, flow and DHW setpoint). By default the board never writes on the bus
+(writing via CAN to the WEM can be enabled from v35, see [Writing via CAN](#writing-via-can-from-v35-off-by-default)).
 
 ### Start-up, system table and identity
 
@@ -513,8 +514,31 @@ belong to modules that the measured installation does not have. **Help wanted:**
 heating circuit, solar or room units can check with single read commands on the WEM (`0x601`) where
 their objects are.
 
-**The firmware never writes directly via SDO** – neither to the boiler nor to the WEM. Writing
-is done exclusively via JSON; the bus serves only for verification.
+### Writing via CAN (from v35, off by default)
+
+By default the firmware **never** writes via SDO on the bus; switching goes through JSON, the bus
+serves for verification. From v35 there are three switches in the web interface (group “Schreiben per
+CAN”):
+
+| Switch | default | effect |
+|---|---|---|
+| Schalten per CAN statt JSON (Heizkreis, Warmwasser) | off | app buttons, `cmd/heizkreis`, `cmd/warmwasser` write via SDO download to the WEM: `0x2933`/2 or `0x2A20`/2, 1 byte. Queue, lock minute and bus verification as on the JSON path; WEM abort = “rejected” |
+| Freies CAN-Schreiben (Experten) | off | input field and `cmd/can_schreiben`: `NODE IDX SUB VALUE [LENGTH]` or `NODE IDX SUB = B1 B2 …` (hex, up to 64 bytes, from 5 bytes segmented with a 50 ms pause). **Node 01 only, 2000–5FFF only** – never the boiler, never communication objects (0x1000–0x1FFF) |
+| Lange Lesebefehle auch am Kessel | **on** | segmented/block reads also on node 2 (there the board shares the channel with the WEM) |
+
+**Confirmed on the WTC-GW 15-B (WEM 428.226) on 2026-10-26:**
+
+| Command | WEM | effect |
+|---|---|---|
+| `601: 2F 33 29 02 02` (heating circuit = TP 1, same value) | `60` confirmed | none |
+| `601: 2F 33 29 02 01` (standby) | `60` | within 1 s heat demand 0, boiler off; display “Heizkreise inaktiv”, mode “Standby”, “Heizung aus”, “Warmwasser aus”; app standby |
+| `601: 2F 33 29 02 02` (back to TP 1) | `60` | boiler heats again, display “Automatik/Heizbetrieb” |
+| `601: 2F 20 2A 02 02` / `01` (DHW off/on, via the switch) | `60` | current DHW setpoint 8 °C or 35 °C, bus verification confirmed |
+
+So the WEM accepts a value written via CAN like one written via JSON (control, display, app). Open:
+portal, behaviour after a restart, other installations. Every changed value probably ends up in the
+WEM's EEPROM – never write periodically. Other reports that the devices reject SDO writes probably
+concerned other objects or the boiler.
 
 ### Sequence in the firmware
 

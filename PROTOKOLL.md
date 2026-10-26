@@ -128,7 +128,8 @@ Anlage ließen Scans über `0x602` das WEM-Portal stocken, bis der Scan aufhört
 sonst niemand – dort sind auch lange Dialoge unkritisch.
 
 Umgekehrt schreibt **nur der WEM** in den Kessel: alle ~5 s sieben Werte (`0x2709`, `0x270A`,
-`0x252B`–`0x252F`: Anforderung, Vorlauf- und Warmwasser-Soll). Das Board schreibt nie auf den Bus.
+`0x252B`–`0x252F`: Anforderung, Vorlauf- und Warmwasser-Soll). Das Board schreibt ab Werk nie auf den Bus
+(Schreiben per CAN an den WEM ist ab v35 einschaltbar, siehe [Schreiben per CAN](#schreiben-per-can-ab-v35-ab-werk-aus)).
 
 ### Anlauf, Systemtabelle und Kennung
 
@@ -494,8 +495,30 @@ Modulen, die es an der gemessenen Anlage nicht gibt. **Mithilfe gesucht:** Wer e
 Heizkreis, Solar oder Raumgeräte hat, kann mit einzelnen Lesebefehlen am WEM (`0x601`) prüfen,
 wo deren Objekte liegen.
 
-**Direkt per SDO schreibt die Firmware nie** – weder auf den Kessel noch auf den WEM. Schreiben
-läuft ausschließlich über JSON; der Bus dient nur zur Kontrolle.
+### Schreiben per CAN (ab v35, ab Werk aus)
+
+Ab Werk schreibt die Firmware **nie** per SDO auf den Bus; geschaltet wird über JSON, der Bus dient
+zur Kontrolle. Ab v35 gibt es drei Schalter in der Weboberfläche (Gruppe „Schreiben per CAN“):
+
+| Schalter | ab Werk | Wirkung |
+|---|---|---|
+| Schalten per CAN statt JSON (Heizkreis, Warmwasser) | aus | App-Knöpfe, `cmd/heizkreis`, `cmd/warmwasser` schreiben per SDO-Download an den WEM: `0x2933`/2 bzw. `0x2A20`/2, 1 Byte. Warteschlange, Sperrminute und Kontrolle am Bus wie beim JSON-Weg; Abbruch des WEM = „abgelehnt“ |
+| Freies CAN-Schreiben (Experten) | aus | Eingabefeld und `cmd/can_schreiben`: `KN IDX SUB WERT [LÄNGE]` oder `KN IDX SUB = B1 B2 …` (hex, bis 64 Byte, ab 5 Byte in Teilstücken mit 50 ms Pause). **Nur Knoten 01, nur 2000–5FFF** – nie der Kessel, nie Kommunikationsobjekte (0x1000–0x1FFF) |
+| Lange Lesebefehle auch am Kessel | **an** | Teilstücke/Block beim Lesen auch an Knoten 2 (dort teilt sich das Board den Kanal mit dem WEM) |
+
+**An der WTC-GW 15-B (WEM 428.226) am 26.10.2026 bestätigt:**
+
+| Befehl | WEM | Folge |
+|---|---|---|
+| `601: 2F 33 29 02 02` (Heizkreis = ZP 1, gleicher Wert) | `60` bestätigt | nichts |
+| `601: 2F 33 29 02 01` (Standby) | `60` | binnen 1 s Heizanforderung 0, Kessel aus; Display „Heizkreise inaktiv“, Betriebsart „Standby“, „Heizung aus“, „Warmwasser aus“; App Standby |
+| `601: 2F 33 29 02 02` (zurück ZP 1) | `60` | Kessel heizt wieder, Display „Automatik/Heizbetrieb“ |
+| `601: 2F 20 2A 02 02` / `01` (Warmwasser Aus/Ein, über den Schalter) | `60` | WW-Soll aktuell 8 °C bzw. 35 °C, Bus-Kontrolle bestätigt |
+
+Der WEM übernimmt den per CAN geschriebenen Wert also wie einen per JSON geschriebenen (Regelung,
+Display, App). Offen: Portal, Verhalten nach einem Neustart, andere Anlagen. Jeder geänderte Wert
+landet vermutlich im EEPROM des WEM – nie im Takt schreiben. Andere Berichte, nach denen die
+Geräte SDO-Schreiben ablehnen, betrafen vermutlich andere Objekte oder den Kessel.
 
 ### Ablauf in der Firmware
 

@@ -1,6 +1,13 @@
 # Paket WEM-SCHALTEN: Heizkreis-Betriebsart ueber die WEM-JSON-Schnittstelle
 # (http://<WEM>/ajax/CanApiJson.json), Kontrolle danach am CAN-Bus.
-# Braucht das Paket kessel. Geschrieben wird NIE auf den Bus, nur ueber den WEM.
+# Braucht das Paket kessel. Ab Werk wird NIE auf den Bus geschrieben, nur ueber den WEM.
+#
+# Ab v35, ab Werk AUS (Schalter in der Weboberflaeche, Gruppe "Schreiben per CAN"):
+#   - "Schalten per CAN statt JSON": Heizkreis/Warmwasser per SDO-Download an den WEM
+#     (0x2933/2, 0x2A20/2), sonst alles wie beim JSON-Weg (Warteschlange, Sperrminute, Kontrolle).
+#   - "Freies CAN-Schreiben (Experten)": Eingabefeld und ${geraet}/cmd/can_schreiben,
+#     "KN IDX SUB WERT [LAENGE]" oder "KN IDX SUB = B1 B2 ..." (hex), nur Knoten 01, nur 2000-5FFF.
+#   An einer WTC-GW 15-B (WEM 428.226) bestaetigt; andere Anlagen: auf eigene Gefahr.
 #
 # Warum so vorsichtig: die JSON-Schnittstelle des WEM ist empfindlich. Regelmaessiges
 # Abfragen hat sie mehrfach dauerhaft lahmgelegt (nur Stromlos-Machen half), und jede
@@ -27,6 +34,9 @@ web_server:
     - id: g_schreiben
       name: "Schreibbefehl ueber WEM (Experten)"
       sorting_weight: 45
+    - id: g_can_schreiben
+      name: "Schreiben per CAN (experimentell, ab Werk aus)"
+      sorting_weight: 46
 
 http_request:
   timeout: 10s
@@ -40,6 +50,9 @@ esphome:
           #ifdef USE_MQTT
           mqtt::global_mqtt_client->subscribe("${geraet}/cmd/heizkreis", [](const std::string &t, const std::string &p) {
             id(befehl_eingang)->execute(1, p, std::string("MQTT"));
+          });
+          mqtt::global_mqtt_client->subscribe("${geraet}/cmd/can_schreiben", [](const std::string &t, const std::string &p) {
+            id(can_frei_senden)->execute(p);
           });
           #endif
 
@@ -65,7 +78,7 @@ script:
             id(schalt_status).publish_state(a.quelle + ": " + zn + " abgelehnt - " + f);
           } else {
             uint32_t seit = millis() - id(wcan)->schalten.letzter_befehl;
-            int warten = id(wem_senden).is_running() ? 60 :
+            int warten = (id(wem_senden).is_running() || id(can_senden).is_running() || id(can_frei_senden).is_running()) ? 60 :
                          (id(wcan)->schalten.letzter_befehl != 0 && seit < 60000) ? (int) ((60000 - seit) / 1000) + 1 : 0;
             if (ziel == 2 && s.hat_wunsch[1] && warten == 0) warten = 60;   // Heizkreis geht vor
             s.annehmen(ziel, a, warten);
@@ -121,10 +134,10 @@ script:
           }
           auto &s = bf::schaltung();
           s.uhr = id(wcan)->unix_zeit();
-          std::string w = wc::warteschlange_text(s, id(wem_senden).is_running() || sc.sperrminute(millis()), sc.frei_ab);
+          std::string w = wc::warteschlange_text(s, (id(wem_senden).is_running() || id(can_senden).is_running() || id(can_frei_senden).is_running()) || sc.sperrminute(millis()), sc.frei_ab);
           if (id(warteschlange).state != w) id(warteschlange).publish_state(w);
           sc.senden = false;
-          if (id(wem_senden).is_running()) return;
+          if ((id(wem_senden).is_running() || id(can_senden).is_running() || id(can_frei_senden).is_running())) return;
           if (sc.sperrminute(millis())) return;
           if (s.laeuft) {                          // Sicherung: WEM-Aufruf fertig, Befehl aber noch offen
             if (sc.ziel == 0) s.keine_rueckmeldung();
@@ -143,11 +156,128 @@ script:
       - script.execute: befehl_melden
       - if:
           condition:
-            lambda: 'return id(wcan)->schalten.senden;'
+            lambda: 'return id(wcan)->schalten.senden && id(can_schalten).state;'
           then:
-            - script.execute:
-                id: wem_senden
-                vg: !lambda 'return id(wcan)->schalten.vg;'
+            - script.execute: can_senden
+          else:
+            - if:
+                condition:
+                  lambda: 'return id(wcan)->schalten.senden;'
+                then:
+                  - script.execute:
+                      id: wem_senden
+                      vg: !lambda 'return id(wcan)->schalten.vg;'
+
+  # Schalten per CAN (ab v35, Schalter, ab Werk aus): Betriebsart per SDO-Download an den WEM
+  # (Knoten 1, 0x2933/2 bzw. 0x2A20/2, 1 Byte). Antwort 0x60 = bestaetigt, 0x80 = abgelehnt.
+  # Danach wie beim JSON-Weg: der Bus entscheidet (Kontroll-Lesung nach 3 s).
+  - id: can_senden
+    mode: single
+    then:
+      - lambda: |-
+          auto &sc = id(wcan)->schalten;
+          const reg::Sdo &o = sc.ziel == 1 ? reg::HK_BETRIEBSART : reg::WW_BETRIEBSART;
+          wc::CanSchreibbefehl c; c.kn = o.knoten; c.idx = o.index; c.sub = o.sub;
+          c.daten = {(uint8_t) bf::schaltung().lauf.wert};
+          sc.pruefen = false; sc.can_fertig = false; sc.can_text.clear();
+          uint32_t cid = 0; std::vector<uint8_t> d;
+          id(wcan)->schreiben.starten(c, cid, d);
+          id(schalt_status).publish_state("sende per CAN an WEM ...");
+          id(wcan)->senden(cid, d);
+      - delay: 1s
+      - lambda: |-
+          auto &sc = id(wcan)->schalten;
+          int ziel = sc.ziel;
+          if (ziel != 1 && ziel != 2) return;
+          auto &s = bf::schaltung();
+          s.uhr = id(wcan)->unix_zeit();
+          std::string q = s.lauf.quelle;
+          ESP_LOGI("schalten", "CAN: %s | roh: %s", sc.can_text.c_str(), id(wcan)->schreiben.roh.c_str());
+          if (sc.can_fertig && id(wcan)->schreiben.ok) {
+            s.wem_antwort(bf::Wem::BESTAETIGT, "");
+            id(schalt_status).publish_state("WEM hat per CAN bestaetigt, pruefe am Bus ...");
+          } else if (sc.can_fertig) {
+            s.wem_antwort(bf::Wem::CM05, "CAN: " + sc.can_text);
+            id(schalt_status).publish_state(id(wcan)->zeit("%H:%M ") + "per CAN " + sc.can_text);
+            id(protokoll_eintrag)->execute(std::string(ziel == 1 ? "Heizkreis" : "Warmwasser") + " (" + q + "): per CAN " + sc.can_text);
+            sc.ziel = 0;
+          } else {
+            id(wcan)->schreiben.aktiv = false;
+            s.wem_antwort(bf::Wem::NICHT_ERREICHBAR, "CAN: keine Antwort vom WEM");
+            id(schalt_status).publish_state("keine CAN-Antwort vom WEM, pruefe trotzdem am Bus ...");
+          }
+          id(befehl_melden)->execute();
+      - delay: 2s
+      - script.execute: bus_kontrolle
+      - script.wait: bus_kontrolle
+
+  # Freies CAN-Schreiben (ab v35, Schalter "Experten", ab Werk aus): Eingabefeld oder cmd/can_schreiben.
+  # Nur Knoten 01 (WEM), nur Objekte 2000-5FFF (wc::can_schreib_lesen), Sperrminute wie beim Schalten.
+  - id: can_frei_senden
+    mode: queued
+    max_runs: 5
+    parameters:
+      eingabe: string
+    then:
+      - lambda: |-
+          auto &sc = id(wcan)->schalten;
+          sc.can_frei_gesendet = false;
+          if (!id(can_frei).state) { id(can_antwort).publish_state("gesperrt - Schalter \"Freies CAN-Schreiben\" ist aus"); return; }
+          if (id(wem_senden).is_running() || id(can_senden).is_running() || sc.sperrminute(millis())) {
+            id(can_antwort).publish_state("bitte warten - hoechstens ein Befehl pro Minute"); return;
+          }
+          if (id(wcan)->bus.tot(millis())) { id(can_antwort).publish_state("Bus tot - nicht gesendet"); return; }
+          wc::CanSchreibbefehl c; std::string f;
+          if (!wc::can_schreib_lesen(eingabe, c, f)) { id(can_antwort).publish_state(f); return; }
+          sc.letzter_befehl = millis() | 1; id(wcan)->anlass.eigener_befehl_ms = sc.letzter_befehl;
+          uint32_t u = id(wcan)->unix_zeit();
+          if (u != 0) bf::status().setze(bf::status().frei_ab, u + 60);
+          uint32_t cid = 0; std::vector<uint8_t> d;
+          sc.can_fertig = false; sc.can_text.clear();
+          id(wcan)->schreiben.starten(c, cid, d);
+          id(can_antwort).publish_state("gesendet, warte ...");
+          ESP_LOGW("schreiben", "CAN-Schreibbefehl %s", eingabe.c_str());
+          id(wcan)->senden(cid, d);
+          sc.can_frei_gesendet = true;
+      - if:
+          condition:
+            lambda: 'return id(wcan)->schalten.can_frei_gesendet;'
+          then:
+            - delay: 2s
+            - lambda: |-
+                auto &sc = id(wcan)->schalten;
+                auto &w = id(wcan)->schreiben;
+                sc.can_frei_gesendet = false;
+                std::string t = sc.can_fertig ? sc.can_text : "keine Antwort vom WEM";
+                if (!sc.can_fertig) w.aktiv = false;
+                id(can_antwort).publish_state(t);
+                id(can_roh).publish_state(w.roh);
+                id(protokoll_eintrag)->execute("CAN-Schreibbefehl: " + t);
+                ESP_LOGI("schreiben", "%s | roh: %s", t.c_str(), w.roh.c_str());
+
+  # Kontrolle am Bus nach einem Schaltbefehl (JSON oder CAN): der Bus entscheidet, nicht die
+  # Antwort (auch nach einer leeren JSON-Antwort wurde schon geschaltet).
+  - id: bus_kontrolle
+    mode: single
+    then:
+      - lambda: |-
+          if (id(wcan)->schalten.ziel != 1 && id(wcan)->schalten.ziel != 2) return;
+          const reg::Sdo &ziel = id(wcan)->schalten.ziel == 1 ? reg::HK_BETRIEBSART : reg::WW_BETRIEBSART;
+          id(wcan)->schalten.pruefen = true;
+          bf::status().anlass("schaltbefehl", id(wcan)->schalten.ziel == 1, id(wcan)->schalten.ziel == 2);
+          std::vector<uint8_t> d = reg::lese(ziel);
+          id(wcan)->senden(reg::anfrage_id(ziel), d);
+      - delay: 10s
+      - lambda: |-
+          if (id(wcan)->schalten.ziel != 1 && id(wcan)->schalten.ziel != 2) return;
+          auto &s = bf::schaltung();
+          s.uhr = id(wcan)->unix_zeit();
+          std::string q = s.lauf.quelle;
+          s.keine_rueckmeldung();
+          id(schalt_status).publish_state("keine Rueckmeldung vom Bus - Ergebnis unbekannt");
+          id(protokoll_eintrag)->execute(std::string(id(wcan)->schalten.ziel == 1 ? "Heizkreis" : "Warmwasser") + " (" + q + "): keine Rueckmeldung vom Bus");
+          id(wcan)->schalten.ziel = 0; id(wcan)->schalten.pruefen = false;
+          id(befehl_melden)->execute();
 
   - id: wem_senden
     mode: single
@@ -221,27 +351,10 @@ script:
                     id(schalt_status).publish_state("WEM nicht erreichbar, pruefe trotzdem am Bus ...");
                     id(befehl_melden)->execute();
                   }
-      # Der Bus entscheidet, nicht die WEM-Antwort (auch nach einer leeren Antwort
-      # wurde schon geschaltet). Nach 3 s das Zielobjekt am Bus lesen.
+      # Der Bus entscheidet, nicht die WEM-Antwort: nach 3 s das Zielobjekt am Bus lesen.
       - delay: 3s
-      - lambda: |-
-          if (id(wcan)->schalten.ziel != 1 && id(wcan)->schalten.ziel != 2) return;
-          const reg::Sdo &ziel = id(wcan)->schalten.ziel == 1 ? reg::HK_BETRIEBSART : reg::WW_BETRIEBSART;
-          id(wcan)->schalten.pruefen = true;
-          bf::status().anlass("schaltbefehl", id(wcan)->schalten.ziel == 1, id(wcan)->schalten.ziel == 2);
-          std::vector<uint8_t> d = reg::lese(ziel);
-          id(wcan)->senden(reg::anfrage_id(ziel), d);
-      - delay: 10s
-      - lambda: |-
-          if (id(wcan)->schalten.ziel != 1 && id(wcan)->schalten.ziel != 2) return;
-          auto &s = bf::schaltung();
-          s.uhr = id(wcan)->unix_zeit();
-          std::string q = s.lauf.quelle;
-          s.keine_rueckmeldung();
-          id(schalt_status).publish_state("keine Rueckmeldung vom Bus - Ergebnis unbekannt");
-          id(protokoll_eintrag)->execute(std::string(id(wcan)->schalten.ziel == 1 ? "Heizkreis" : "Warmwasser") + " (" + q + "): keine Rueckmeldung vom Bus");
-          id(wcan)->schalten.ziel = 0; id(wcan)->schalten.pruefen = false;
-          id(befehl_melden)->execute();
+      - script.execute: bus_kontrolle
+      - script.wait: bus_kontrolle
 
 interval:
   - interval: 1s
@@ -292,7 +405,7 @@ button:
       - lambda: |-
           auto &sc = id(wcan)->schalten;
           sc.senden = false;
-          if (id(wem_senden).is_running() || sc.sperrminute(millis())) {
+          if ((id(wem_senden).is_running() || id(can_senden).is_running() || id(can_frei_senden).is_running()) || sc.sperrminute(millis())) {
             id(schreib_antwort).publish_state("bitte warten - hoechstens ein Befehl pro Minute"); return;
           }
           // Format: MI MX OX OS WERT (hex), z.B. "03 00 2520 02 02" = Warmwasser Aus.
@@ -311,6 +424,13 @@ button:
             - script.execute:
                 id: wem_senden
                 vg: !lambda 'return id(wcan)->schalten.vg;'
+  - platform: template
+    name: "CAN schreiben"
+    web_server: { sorting_group_id: g_can_schreiben, sorting_weight: 4 }
+    on_press:
+      - script.execute:
+          id: can_frei_senden
+          eingabe: !lambda 'return id(can_eingabe).state;'
   - platform: template
     name: "Warteschlange leeren"
     web_server: { sorting_group_id: g_schalten, sorting_weight: 5 }
@@ -349,6 +469,13 @@ text:
     mode: password
     max_length: 32
   - platform: template
+    name: "CAN-Schreibbefehl (KN IDX SUB WERT [LAENGE] hex)"
+    id: can_eingabe
+    optimistic: true
+    mode: text
+    max_length: 255
+    web_server: { sorting_group_id: g_can_schreiben, sorting_weight: 3 }
+  - platform: template
     name: "Schreibbefehl (MI MX OX OS WERT hex)"
     id: schreib_eingabe
     optimistic: true
@@ -373,4 +500,26 @@ text_sensor:
     name: "Schreibbefehl Antwort"
     id: schreib_antwort
     web_server: { sorting_group_id: g_schreiben, sorting_weight: 3 }
+  - platform: template
+    name: "CAN-Schreibbefehl Antwort"
+    id: can_antwort
+    web_server: { sorting_group_id: g_can_schreiben, sorting_weight: 5 }
+  - platform: template
+    name: "CAN-Schreibbefehl Rohdaten"
+    id: can_roh
+    web_server: { sorting_group_id: g_can_schreiben, sorting_weight: 6 }
+
+switch:
+  - platform: template
+    name: "Schalten per CAN statt JSON (Heizkreis, Warmwasser)"
+    id: can_schalten
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    web_server: { sorting_group_id: g_can_schreiben, sorting_weight: 1 }
+  - platform: template
+    name: "Freies CAN-Schreiben (Experten)"
+    id: can_frei
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    web_server: { sorting_group_id: g_can_schreiben, sorting_weight: 2 }
 

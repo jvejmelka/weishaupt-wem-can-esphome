@@ -28,10 +28,12 @@ that listens passively on the CAN bus of a Weishaupt condensing boiler with a **
 
 ## Safety rules – please read
 
-1. **The boiler (node 2) is never written to.** On the bus the firmware only sends
-   read requests (SDO 0x40).
-2. **Writing is done exclusively via the WEM** (JSON). The write field only allows the modules
-   SYSTEM0 (MI 01), heating circuit HZK0 (MI 02) and DHW WW0 (MI 03).
+1. **The boiler (node 2) is never written to.** By default the firmware only sends read
+   requests on the bus.
+2. **By default, writing is done exclusively via the WEM** (JSON). The write field only allows the
+   modules SYSTEM0 (MI 01), heating circuit HZK0 (MI 02) and DHW WW0 (MI 03). **Writing via CAN**
+   to the WEM is available from v35 as a switch, **off by default** – confirmed only on a
+   WTC-GW 15-B, at your own risk ([PROTOKOLL.en.md – Writing via CAN](PROTOKOLL.en.md#writing-via-can-from-v35-off-by-default)).
 3. **The WEM is fragile.** Frequent JSON requests, requests for non-existent objects or
    several clients at the same time can knock out its JSON interface until the next power cycle.
    Hence: at least one minute between two commands, no polling via JSON.
@@ -155,7 +157,8 @@ the previous Wi-Fi is kept. The last fallback is the emergency hotspot with capt
 |---|---|---|
 | `<gerät>/cmd/heizkreis` | `1`–`8`, name (`Zeitprogramm 1`) or `ZP1`; from v27 also JSON `{"id":17,"wert":"ZP2"}` | heating circuit operating mode (queued); every phase on `befehl/status` |
 | `<gerät>/cmd/warmwasser` | `Ein` / `Aus`; from v27 also JSON `{"id":18,"wert":"Aus"}` | DHW (queued); every phase on `befehl/status` |
-| `<gerät>/cmd/lesen` | `01 2933 02` (node index sub, hex) | read one object |
+| `<gerät>/cmd/lesen` | `01 2933 02` (node index sub, hex), with `B` at the end by block | read one object; long objects automatically segmented |
+| `<gerät>/cmd/can_schreiben` | `01 2933 02 01` (node index sub value [length 1/2/4], hex) or `01 2xxx 00 = 11 22 33 …` | **locked by default** (switch “Freies CAN-Schreiben”); node 01 only, objects 2000–5FFF only |
 | `<gerät>/cmd/scan` | `01 2A00 2AFF 3` | read a range, responses in `<gerät>/canraw` |
 | `<gerät>/cmd/stop` | anything | abort scan |
 | `<gerät>/cmd/status` | anything | read heating circuit and DHW operating mode from the bus once (at most every 10 s, read requests only); timestamp in „Status gelesen“ ("status read") |

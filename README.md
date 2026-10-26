@@ -28,10 +28,12 @@ das am CAN-Bus einer Weishaupt-Brennwertheizung mit **WEM-Systemgerät** (z. B. 
 
 ## Sicherheitsregeln – bitte lesen
 
-1. **Auf den Kessel (Knoten 2) wird nie geschrieben.** Die Firmware schickt am Bus nur
-   Lese-Anfragen (SDO 0x40).
-2. **Schreiben geht ausschließlich über den WEM** (JSON). Das Schreibfeld erlaubt nur die Module
-   SYSTEM0 (MI 01), Heizkreis HZK0 (MI 02) und Warmwasser WW0 (MI 03).
+1. **Auf den Kessel (Knoten 2) wird nie geschrieben.** Ab Werk schickt die Firmware am Bus nur
+   Lese-Anfragen.
+2. **Schreiben geht ab Werk ausschließlich über den WEM** (JSON). Das Schreibfeld erlaubt nur die
+   Module SYSTEM0 (MI 01), Heizkreis HZK0 (MI 02) und Warmwasser WW0 (MI 03). **Schreiben per CAN**
+   an den WEM gibt es ab v35 als Schalter, **ab Werk aus** – bestätigt nur an einer WTC-GW 15-B,
+   auf eigene Gefahr ([PROTOKOLL.md – Schreiben per CAN](PROTOKOLL.md#schreiben-per-can-ab-v35-ab-werk-aus)).
 3. **Der WEM ist empfindlich.** Häufige JSON-Anfragen, Anfragen an nicht vorhandene Objekte oder
    mehrere Clients gleichzeitig können seine JSON-Schnittstelle bis zum nächsten Stromlos-Machen
    lahmlegen. Deshalb: mindestens eine Minute zwischen zwei Befehlen, kein Polling über JSON.
@@ -144,7 +146,8 @@ bleibt das bisherige WLAN. Letzter Rückweg ist der Notfall-Hotspot mit Captive 
 |---|---|---|
 | `<gerät>/cmd/heizkreis` | `1`–`8`, Name (`Zeitprogramm 1`) oder `ZP1`; ab v27 auch JSON `{"id":17,"wert":"ZP2"}` | Heizkreis-Betriebsart (Warteschlange); jede Phase auf `befehl/status` |
 | `<gerät>/cmd/warmwasser` | `Ein` / `Aus`; ab v27 auch JSON `{"id":18,"wert":"Aus"}` | Warmwasser (Warteschlange); jede Phase auf `befehl/status` |
-| `<gerät>/cmd/lesen` | `01 2933 02` (Knoten Index Sub, hex) | ein Objekt lesen |
+| `<gerät>/cmd/lesen` | `01 2933 02` (Knoten Index Sub, hex), mit `B` am Ende per Block | ein Objekt lesen; lange Objekte automatisch in Teilstücken |
+| `<gerät>/cmd/can_schreiben` | `01 2933 02 01` (Knoten Index Sub Wert [Länge 1/2/4], hex) oder `01 2xxx 00 = 11 22 33 …` | **ab Werk gesperrt** (Schalter „Freies CAN-Schreiben“); nur Knoten 01, nur Objekte 2000–5FFF |
 | `<gerät>/cmd/scan` | `01 2A00 2AFF 3` | Bereich lesen, Antworten in `<gerät>/canraw` |
 | `<gerät>/cmd/stop` | beliebig | Scan abbrechen |
 | `<gerät>/cmd/status` | beliebig | Heizkreis- und Warmwasser-Betriebsart einmal vom Bus lesen (höchstens alle 10 s, nur Leseanfragen); Zeitpunkt in „Status gelesen“ |
