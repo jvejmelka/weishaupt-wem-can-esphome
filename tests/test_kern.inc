@@ -268,6 +268,33 @@ TEST(kern_lesebefehl_wie_v28) {
   PRUEFE(n.antwort(0x581, F{0x80, 0x33, 0x29, 0x02, 0x00, 0x00, 0x02, 0x06}, t) && t == "01 2933/02: Abbruch 06020000 (Objekt fehlt?)");
 }
 
+TEST(kern_lesebefehl_segmentiert) {
+  wc::Lesebefehl n; std::string t, m; uint32_t cid = 0; F d;
+  PRUEFE(n.starten("01 273F 00", false, m, cid, d));
+  // Ankuendigung 8 Byte -> kein Text, erste Teilstueck-Anfrage 0x60
+  PRUEFE(!n.antwort(0x581, F{0x41, 0x3F, 0x27, 0x00, 0x08, 0, 0, 0}, t));
+  PRUEFE(n.weiter(cid, d) && cid == 0x601 && d == (F{0x60, 0, 0, 0, 0, 0, 0, 0}));
+  PRUEFE(!n.weiter(cid, d));
+  // falscher Toggle (fremdes Teilstueck) wird ignoriert
+  PRUEFE(!n.antwort(0x581, F{0x10, 9, 9, 9, 9, 9, 9, 9}, t) && !n.weiter(cid, d));
+  // 1. Teilstueck: 7 Byte, nicht das letzte -> Anfrage 0x70
+  PRUEFE(!n.antwort(0x581, F{0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77}, t));
+  PRUEFE(n.weiter(cid, d) && d[0] == 0x70);
+  // 2. Teilstueck: 1 Byte (n = 6 ungenutzt), letztes
+  PRUEFE(n.antwort(0x581, F{0x1D, 0x88, 0, 0, 0, 0, 0, 0}, t));
+  PRUEFE(t == "01 273F/00 = 11 22 33 44 55 66 77 88 (8 Byte)");
+  PRUEFE(!n.aktiv && !n.weiter(cid, d));
+  // Abbruch mitten im Upload
+  PRUEFE(n.starten("01 273F 00", false, m, cid, d));
+  PRUEFE(!n.antwort(0x581, F{0x41, 0x3F, 0x27, 0x00, 0x08, 0, 0, 0}, t) && n.weiter(cid, d));
+  PRUEFE(n.antwort(0x581, F{0x80, 0x3F, 0x27, 0x00, 0x00, 0x00, 0x04, 0x05}, t));
+  PRUEFE(t == "01 273F/00: Abbruch 05040000 (Objekt fehlt?)" && !n.aktiv);
+  // Ankuendigung ohne Groesse (0x40), ein einziges letztes Teilstueck mit 3 Byte
+  PRUEFE(n.starten("02 2531 00", false, m, cid, d));
+  PRUEFE(!n.antwort(0x582, F{0x40, 0x31, 0x25, 0x00, 0, 0, 0, 0}, t) && n.weiter(cid, d) && cid == 0x602);
+  PRUEFE(n.antwort(0x582, F{0x09, 0xAA, 0xBB, 0xCC, 0, 0, 0, 0}, t) && t == "02 2531/00 = AA BB CC (3 Byte)");
+}
+
 TEST(kern_scan_wie_v28) {
   for (const char *e : {"01 2A00 2A03 2", "01 2A00 2A00 0", "02 0 1 10", "01 2A03 2A00 1", "01 0 0 11", "80 0 1 0", "x"}) {
     alt::Scan sa; wc::Scan sn;

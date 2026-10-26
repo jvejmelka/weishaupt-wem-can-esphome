@@ -1,6 +1,10 @@
 # Changelog – ESP-CAN-Brücke Weishaupt (WeAct CAN485, ESPHome)
 
 
+## v32 – 2026-10-26
+- **Lesebefehl kann Objekte über 4 Byte lesen (segmentierter SDO-Upload).** Kündigt die Gegenstelle ein längeres Objekt an (0x41/0x40), holt das Board die Teilstücke mit 0x60/0x70 ab – weiterhin nur Leseanfragen, höchstens 64 Byte; Ausgabe als Hex-Bytes. Getestet in `tests/` (`kern_lesebefehl_segmentiert`).
+- **An der WTC-GW 15-B ausprobiert:** Fehlerblock des WEM (Knoten 1 `0x273F`/0, laut Gateway-Tabelle 8 Byte: Fehler/Warnung, Fehlernummer, Modul) – der WEM kündigt 8 Byte an, lehnt die Teilstück-Anfrage aber mit Abbruch `05040001` (Kommando unbekannt) ab; Unterindizes 1–4 gibt es nicht. Der Fehlerblock bleibt am Bus vorerst unlesbar.
+
 ## v31 – 2026-10-26
 - **Nachkommastellen wie vom Bus geliefert:** Sollleistung und Leistung mit 2 Stellen (0,01 %), die drei Wärmemengen Vortag mit 2 Stellen (0,01 kWh); Drehzahl und Volumenstrom ohne „,0“. Bisher wurde die Sollleistung auf ganze Prozent und die Wärmemenge auf 0,1 kWh gerundet. Sonst unverändert; die App rundet ihre Anzeige selbst.
 

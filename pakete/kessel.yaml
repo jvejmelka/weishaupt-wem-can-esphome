@@ -175,6 +175,8 @@ canbus:
               id(wcan)->frame(millis());
               std::string t;
               if (id(wcan)->lesen.antwort(can_id, x, t)) id(lese_antwort).publish_state(t);
+              uint32_t fid = 0; std::vector<uint8_t> fd;   // segmentiert: naechstes Teilstueck anfordern
+              if (id(wcan)->lesen.weiter(fid, fd)) id(wcan)->senden(fid, fd);
 
       # PDO 0x201: Aussentemperatur + Systembetriebsart (Kessel sendet von selbst)
       - can_id: 0x201

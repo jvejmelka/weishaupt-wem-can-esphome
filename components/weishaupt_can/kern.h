@@ -181,6 +181,12 @@ struct Anlass {
 struct Lesebefehl {
   bool aktiv = false;
   int kn = 0, idx = 0, sub = 0;
+  // Segmentierter Upload (Objekte > 4 Byte): nach der Ankuendigung 0x41/0x40 holt das Board die
+  // Teilstuecke mit 0x60/0x70 (Toggle) ab - weiterhin nur Leseanfragen. Hoechstens 64 Byte.
+  bool segmentiert = false, folge = false;
+  uint8_t toggle = 0;
+  uint32_t groesse = 0;
+  std::vector<uint8_t> puffer;
 
   // true = senden (can_id, daten gesetzt); meldung immer gesetzt
   bool starten(const std::string &eingabe, bool bus_tot, std::string &meldung, uint32_t &can_id,
@@ -191,6 +197,7 @@ struct Lesebefehl {
     }
     if (bus_tot) { meldung = "Bus tot - nicht gesendet"; return false; }
     kn = k; idx = i; sub = s; aktiv = true;
+    segmentiert = false; folge = false; puffer.clear();
     meldung = "gesendet, warte ...";
     can_id = 0x600 + k;
     daten = {0x40, (uint8_t) (i & 0xFF), (uint8_t) (i >> 8), (uint8_t) s, 0, 0, 0, 0};
@@ -200,8 +207,16 @@ struct Lesebefehl {
   // jeder Frame: Antwort auf den offenen Lesebefehl? true = text gesetzt, Befehl erledigt
   bool antwort(uint32_t can_id, const std::vector<uint8_t> &x, std::string &text) {
     if (!aktiv || can_id != (uint32_t) (0x580 + kn) || x.size() < 8) return false;
+    if (segmentiert && (x[0] & 0xE0) == 0x00) return teilstueck(x, text);
     if (((x[2] << 8) | x[1]) != idx || x[3] != sub) return false;
     char t[80];
+    if (!segmentiert && (x[0] == 0x41 || x[0] == 0x40)) {
+      // Ankuendigung: Objekt ist laenger als 4 Byte, Groesse in Byte 4-7 (bei 0x41)
+      segmentiert = true; folge = true; toggle = 0; puffer.clear();
+      groesse = (x[0] == 0x41) ? (uint32_t) (x[4] | (x[5] << 8) | (x[6] << 16) | ((uint32_t) x[7] << 24)) : 0;
+      return false;
+    }
+    segmentiert = false;
     if (x[0] == 0x80) {
       snprintf(t, sizeof(t), "%02X %04X/%02X: Abbruch %02X%02X%02X%02X (Objekt fehlt?)", kn, idx, sub, x[7], x[6], x[5], x[4]);
     } else {
@@ -212,6 +227,40 @@ struct Lesebefehl {
       snprintf(t, sizeof(t), "%02X %04X/%02X = %ld (0x%0*lX, %d Byte)", kn, idx, sub, v, n * 2, (unsigned long) u, n);
     }
     text = t;
+    aktiv = false;
+    return true;
+  }
+
+  // nach antwort(): true = naechste Teilstueck-Anfrage senden (0x60/0x70, nur Lesen)
+  bool weiter(uint32_t &can_id, std::vector<uint8_t> &daten) {
+    if (!aktiv || !segmentiert || !folge) return false;
+    folge = false;
+    can_id = 0x600 + kn;
+    daten = {(uint8_t) (0x60 | toggle), 0, 0, 0, 0, 0, 0, 0};
+    return true;
+  }
+
+ private:
+  bool teilstueck(const std::vector<uint8_t> &x, std::string &text) {
+    if ((x[0] & 0x10) != toggle) return false;          // falscher Toggle: nicht unseres
+    int n = 7 - ((x[0] >> 1) & 0x07);
+    for (int i = 0; i < n && puffer.size() < 64; i++) puffer.push_back(x[1 + i]);
+    toggle ^= 0x10;
+    if (!(x[0] & 0x01) && puffer.size() < 64) { folge = true; return false; }
+    char t[24];
+    snprintf(t, sizeof(t), "%02X %04X/%02X = ", kn, idx, sub);
+    text = t;
+    for (size_t i = 0; i < puffer.size(); i++) {
+      snprintf(t, sizeof(t), i ? " %02X" : "%02X", puffer[i]);
+      text += t;
+    }
+    snprintf(t, sizeof(t), " (%u Byte)", (unsigned) puffer.size());
+    text += t;
+    if (groesse && groesse != puffer.size()) {
+      snprintf(t, sizeof(t), ", angekuendigt %u", (unsigned) groesse);
+      text += t;
+    }
+    segmentiert = false;
     aktiv = false;
     return true;
   }
