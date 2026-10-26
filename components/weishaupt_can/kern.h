@@ -177,9 +177,10 @@ struct Anlass {
 
 // ---------------------------------------------------------------- Lesebefehl von Hand
 
-// "KNOTEN INDEX SUB" hex, z.B. "01 2933 02". NUR LESEN: einfaches Lesen (0x40); laengere Objekte
+// "KNOTEN INDEX SUB [B]" hex, z.B. "01 2933 02". NUR LESEN: einfaches Lesen (0x40); laengere Objekte
 // (Ankuendigung 0x41/0x40) in Teilstuecken (0x60/0x70, Toggle) nach einer Pause; lehnt die Gegenstelle
-// das ab, einmal per Block-Upload (0xA4 ... 0xA3, Quittung 0xA2, Ende 0xA1). Alles Leseanfragen,
+// das ab, einmal per Block-Upload (0xA4 ... 0xA3, Quittung 0xA2, Ende 0xA1); mit "B" gleich per Block
+// (nur Knoten 1). Alles Leseanfragen,
 // hoechstens 64 Byte. `roh` haelt jede gesendete (>) und empfangene (<) Nachricht des Befehls fest.
 struct Lesebefehl {
   enum Phase { EINFACH, STUECK, BLOCK_START, BLOCK_DATEN, BLOCK_ENDE };
@@ -198,15 +199,23 @@ struct Lesebefehl {
   bool starten(const std::string &eingabe, bool bus_tot, std::string &meldung, uint32_t &can_id,
                std::vector<uint8_t> &daten) {
     unsigned k = 0, i = 0, s = 0;
-    if (sscanf(eingabe.c_str(), "%x %x %x", &k, &i, &s) != 3 || k < 1 || k > 127 || i > 0xFFFF || s > 0xFF) {
+    char z[4] = {0};
+    int n = sscanf(eingabe.c_str(), "%x %x %x %3s", &k, &i, &s, z);
+    if (n < 3 || k < 1 || k > 127 || i > 0xFFFF || s > 0xFF) {
       meldung = "ungueltig - Format: 01 2933 02"; return false;
     }
+    // Zusatz "B": gleich Block-Upload - nur am WEM (Knoten 1); am Kessel teilt sich das Board den
+    // SDO-Kanal mit dem WEM, ein langer Dialog dort koennte dessen eigene Abfragen stoeren
+    bool block = n == 4 && (std::string(z) == "B" || std::string(z) == "b");
+    if (block && k != 1) { meldung = "Block nur am WEM (Knoten 01)"; return false; }
     if (bus_tot) { meldung = "Bus tot - nicht gesendet"; return false; }
     kn = k; idx = i; sub = s; aktiv = true;
-    phase = EINFACH; folge = false; block_versucht = false; puffer.clear(); vorweg.clear(); roh.clear();
+    phase = block ? BLOCK_START : EINFACH; folge = false; block_versucht = block;
+    puffer.clear(); vorweg.clear(); roh.clear();
     meldung = "gesendet, warte ...";
     can_id = 0x600 + k;
-    daten = {0x40, (uint8_t) (i & 0xFF), (uint8_t) (i >> 8), (uint8_t) s, 0, 0, 0, 0};
+    if (block) daten = {0xA4, (uint8_t) (i & 0xFF), (uint8_t) (i >> 8), (uint8_t) s, BLOCKGROESSE, 0, 0, 0};
+    else daten = {0x40, (uint8_t) (i & 0xFF), (uint8_t) (i >> 8), (uint8_t) s, 0, 0, 0, 0};
     notiere('>', daten);
     return true;
   }

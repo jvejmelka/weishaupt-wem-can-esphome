@@ -318,6 +318,15 @@ TEST(kern_lesebefehl_block) {
   PRUEFE(!n.antwort(0x581, F{0x80, 0x3F, 0x27, 0x00, 0x01, 0x00, 0x04, 0x05}, t, 60) && n.weiter(cid, d, 110) && d[0] == 0xA4);
   PRUEFE(n.antwort(0x581, F{0x80, 0x3F, 0x27, 0x00, 0x01, 0x00, 0x04, 0x05}, t, 120));
   PRUEFE(t == "01 273F/00 [Teilstuecke: Abbruch 05040001]: Block: Abbruch 05040001" && !n.aktiv && !n.weiter(cid, d, 999));
+  // Zusatz "B": gleich Block, nur am WEM
+  PRUEFE(!n.starten("02 2A00 00 B", false, m, cid, d) && m == "Block nur am WEM (Knoten 01)");
+  PRUEFE(n.starten("01 273F 00 B", false, m, cid, d) && cid == 0x601 && d == (F{0xA4, 0x3F, 0x27, 0x00, 8, 0, 0, 0}));
+  PRUEFE(!n.antwort(0x581, F{0xC6, 0x3F, 0x27, 0x00, 0x08, 0, 0, 0}, t, 0) && n.weiter(cid, d, 0) && d[0] == 0xA3);
+  PRUEFE(!n.antwort(0x581, F{0x81, 1, 2, 3, 4, 5, 6, 7}, t, 5) && n.weiter(cid, d, 5) && d == (F{0xA2, 1, 8, 0, 0, 0, 0, 0}));
+  PRUEFE(n.antwort(0x581, F{0xC1, 0, 0, 0, 0, 0, 0, 0}, t, 9) && t == "01 273F/00 = 01 02 03 04 05 06 07 (7 Byte, angekuendigt 8, Block)");
+  PRUEFE(n.weiter(cid, d, 9) && d[0] == 0xA1 && !n.aktiv);
+  PRUEFE(n.starten("01 273F 00 B", false, m, cid, d));
+  PRUEFE(n.antwort(0x581, F{0x80, 0x3F, 0x27, 0x00, 0x01, 0x00, 0x04, 0x05}, t, 0) && t == "01 273F/00: Block: Abbruch 05040001");
   // fremde Antworten (anderer Knoten, anderes Objekt) aendern nichts
   PRUEFE(n.starten("01 273F 00", false, m, cid, d));
   PRUEFE(!n.antwort(0x582, F{0x41, 0x3F, 0x27, 0x00, 0x08, 0, 0, 0}, t, 0) && !n.antwort(0x581, F{0x41, 0x40, 0x27, 0x00, 8, 0, 0, 0}, t, 0));

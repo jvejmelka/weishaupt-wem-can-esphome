@@ -1,6 +1,10 @@
 # Changelog – ESP-CAN-Brücke Weishaupt (WeAct CAN485, ESPHome)
 
 
+## v34 – 2026-10-26
+- **Lesebefehl mit Zusatz `B` liest gleich per SDO-Block-Upload** (`01 273F 00 B`) – **nur am WEM (Knoten 1)**. Am Kessel (Knoten 2) teilt sich das Board den SDO-Kanal `0x602`/`0x582` mit dem WEM, der dort selbst ständig per Block abfragt; ein langer Dialog von uns könnte dessen Abfragen stören. Dort bleibt es beim einfachen Lesen.
+- **An der WTC-GW 15-B bestätigt:** Der WEM beherrscht Block-Upload auch als Antwortender. `01 273F 00 B` → `>A4… <C6…08 >A3 <01… <82… >A2 02 08 <D9… >A1` = 8 Byte, gleiches Ergebnis wie in Teilstücken.
+
 ## v33 – 2026-10-26
 - **Lange Objekte lesen funktioniert jetzt – der Fehler lag bei uns.** v32 hat das erste Teilstück im selben Augenblick angefordert, in dem die Ankündigung kam; der WEM antwortete darauf mit `05040001` (Kommando unbekannt). v33 wartet **50 ms** vor der ersten Teilstück-Anfrage. An der WTC-GW 15-B gelesen: Fehlerblock des WEM, Knoten 1 `0x273F`/0 = `00 00 00 00 00 00 00 00` (8 Byte; zur Zeit keine Störung/Warnung anstehend, Aufbau laut Gateway-Anleitung: Fehler/Warnung-Bits, Fehlernummer, Modul).
 - **Rückfall Block-Upload:** Lehnt eine Gegenstelle die Teilstücke trotzdem ab, versucht das Board einmal den SDO-Block-Upload (`0xA4` → `0xA3`, Quittung `0xA2`, Ende `0xA1`) – das Verfahren, mit dem der WEM selbst den Kessel abfragt. Alles weiterhin nur Leseanfragen, höchstens 64 Byte. An der Anlage noch nicht gebraucht.
