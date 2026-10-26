@@ -58,7 +58,7 @@
 <text x="75" y="494" font-size="12" fill="#555">= display / control panel of the unit</text>
 <text x="75" y="516">• <tspan font-weight="bold">heating curve</tspan> → flow setpoint</text>
 <text x="75" y="536">• heating circuit / hot water, schedules</text>
-<text x="75" y="556">• fault memory (so far JSON only)</text>
+<text x="75" y="556">• fault memory (8 bytes, CAN segmented)</text>
 <text x="75" y="576">• data logger for the portal</text>
 <text x="75" y="596">• JSON interface (ESP, gateway)</text>
 <text x="75" y="616">• SD card, network socket</text>

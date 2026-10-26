@@ -58,7 +58,7 @@
 <text x="75" y="494" font-size="12" fill="#555">= Display / Bedieneinheit der Therme</text>
 <text x="75" y="516">• <tspan font-weight="bold">Heizkurve</tspan> → rechnet Vorlauf-Soll</text>
 <text x="75" y="536">• Heizkreis / Warmwasser, Zeitprogramme</text>
-<text x="75" y="556">• Fehlerspeicher (bisher nur per JSON)</text>
+<text x="75" y="556">• Fehlerspeicher (8 Byte, CAN in Teilstücken)</text>
 <text x="75" y="576">• Datenlogger fürs Portal</text>
 <text x="75" y="596">• JSON-Schnittstelle (ESP, Gateway)</text>
 <text x="75" y="616">• SD-Karte, Netzwerkbuchse</text>

@@ -1,6 +1,11 @@
 # Changelog – ESP-CAN-Brücke Weishaupt (WeAct CAN485, ESPHome)
 
 
+## v33 – 2026-10-26
+- **Lange Objekte lesen funktioniert jetzt – der Fehler lag bei uns.** v32 hat das erste Teilstück im selben Augenblick angefordert, in dem die Ankündigung kam; der WEM antwortete darauf mit `05040001` (Kommando unbekannt). v33 wartet **50 ms** vor der ersten Teilstück-Anfrage. An der WTC-GW 15-B gelesen: Fehlerblock des WEM, Knoten 1 `0x273F`/0 = `00 00 00 00 00 00 00 00` (8 Byte; zur Zeit keine Störung/Warnung anstehend, Aufbau laut Gateway-Anleitung: Fehler/Warnung-Bits, Fehlernummer, Modul).
+- **Rückfall Block-Upload:** Lehnt eine Gegenstelle die Teilstücke trotzdem ab, versucht das Board einmal den SDO-Block-Upload (`0xA4` → `0xA3`, Quittung `0xA2`, Ende `0xA1`) – das Verfahren, mit dem der WEM selbst den Kessel abfragt. Alles weiterhin nur Leseanfragen, höchstens 64 Byte. An der Anlage noch nicht gebraucht.
+- **Neuer Text-Sensor „Lesebefehl Rohdaten“:** jede Nachricht des letzten Lesebefehls (`>` gesendet, `<` empfangen), auch im Log. Tests: `kern_lesebefehl_segmentiert`, `kern_lesebefehl_block`.
+
 ## Doku – 2026-10-26 (abends)
 - **Zeichnung „Wer redet mit wem“** (Deutsch und Englisch) in `bilder/`, eingebunden in README und README.en: Weishaupt-Cloud (Geräte-Server `xmpp.wemportal.de:5222`, XMPP über TLS mit Gerätezertifikat, nachgeprüft), Portal, Heimnetz, eine LAN-Buchse am WEM, JSON als ferngesteuerter CAN-Zugang, Therme mit WEM-SG (Knoten 1) und Kessel WEM-FA-G (Knoten 2), CAN-Bus, ESP-Brücke; Modbus-Gateway und Raumfühler optional. Erzeugt mit `werkzeuge/zeichnung_aufbau.py`. Begriffe nach der Weishaupt-Anleitung WTC-GW 15…32-B (83307201).
 

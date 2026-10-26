@@ -174,9 +174,15 @@ canbus:
           - lambda: |-
               id(wcan)->frame(millis());
               std::string t;
-              if (id(wcan)->lesen.antwort(can_id, x, t)) id(lese_antwort).publish_state(t);
-              uint32_t fid = 0; std::vector<uint8_t> fd;   // segmentiert: naechstes Teilstueck anfordern
-              if (id(wcan)->lesen.weiter(fid, fd)) id(wcan)->senden(fid, fd);
+              bool fertig = id(wcan)->lesen.antwort(can_id, x, t, millis());
+              // Teilstuecke/Block: naechste Leseanfrage (nach der Pause), Block-Ende quittieren
+              uint32_t fid = 0; std::vector<uint8_t> fd;
+              if (id(wcan)->lesen.weiter(fid, fd, millis())) id(wcan)->senden(fid, fd);
+              if (fertig) {
+                id(lese_antwort).publish_state(t);
+                id(lese_roh).publish_state(id(wcan)->lesen.roh);
+                ESP_LOGI("lesen", "%s | roh: %s", t.c_str(), id(wcan)->lesen.roh.c_str());
+              }
 
       # PDO 0x201: Aussentemperatur + Systembetriebsart (Kessel sendet von selbst)
       - can_id: 0x201
@@ -325,6 +331,10 @@ text_sensor:
     id: lese_antwort
     web_server: { sorting_group_id: g_lesen, sorting_weight: 3 }
   - platform: template
+    name: "Lesebefehl Rohdaten"        # jede Nachricht des letzten Lesebefehls: > gesendet, < empfangen
+    id: lese_roh
+    web_server: { sorting_group_id: g_lesen, sorting_weight: 4 }
+  - platform: template
     name: "Eigene CAN-Anfragen"
     update_interval: 30s
     web_server: { sorting_group_id: g_diag, sorting_weight: 4 }
@@ -457,7 +467,7 @@ number:
     web_server: { sorting_group_id: g_einst, sorting_weight: 10 }
 
 text:
-  # Lesebefehl "KNOTEN INDEX SUB" hex, z.B. "01 2933 02". NUR LESEN (Kommandobyte 0x40).
+  # Lesebefehl "KNOTEN INDEX SUB" hex, z.B. "01 2933 02". NUR LESEN (0x40; lange Objekte in Teilstuecken, sonst Block 0xA4).
   - platform: template
     name: "Lesebefehl (KN IDX SUB hex)"
     id: lese_eingabe

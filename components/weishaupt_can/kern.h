@@ -177,16 +177,22 @@ struct Anlass {
 
 // ---------------------------------------------------------------- Lesebefehl von Hand
 
-// "KNOTEN INDEX SUB" hex, z.B. "01 2933 02". NUR LESEN (Kommandobyte fest 0x40).
+// "KNOTEN INDEX SUB" hex, z.B. "01 2933 02". NUR LESEN: einfaches Lesen (0x40); laengere Objekte
+// (Ankuendigung 0x41/0x40) in Teilstuecken (0x60/0x70, Toggle) nach einer Pause; lehnt die Gegenstelle
+// das ab, einmal per Block-Upload (0xA4 ... 0xA3, Quittung 0xA2, Ende 0xA1). Alles Leseanfragen,
+// hoechstens 64 Byte. `roh` haelt jede gesendete (>) und empfangene (<) Nachricht des Befehls fest.
 struct Lesebefehl {
+  enum Phase { EINFACH, STUECK, BLOCK_START, BLOCK_DATEN, BLOCK_ENDE };
+  static constexpr uint32_t PAUSE_MS = 50;
+  static constexpr uint8_t BLOCKGROESSE = 8;
   bool aktiv = false;
   int kn = 0, idx = 0, sub = 0;
-  // Segmentierter Upload (Objekte > 4 Byte): nach der Ankuendigung 0x41/0x40 holt das Board die
-  // Teilstuecke mit 0x60/0x70 (Toggle) ab - weiterhin nur Leseanfragen. Hoechstens 64 Byte.
-  bool segmentiert = false, folge = false;
-  uint8_t toggle = 0;
-  uint32_t groesse = 0;
-  std::vector<uint8_t> puffer;
+  Phase phase = EINFACH;
+  bool folge = false, block_versucht = false;
+  uint8_t toggle = 0, seq = 0;
+  uint32_t groesse = 0, faellig = 0;
+  std::vector<uint8_t> puffer, naechst;
+  std::string vorweg, roh;
 
   // true = senden (can_id, daten gesetzt); meldung immer gesetzt
   bool starten(const std::string &eingabe, bool bus_tot, std::string &meldung, uint32_t &can_id,
@@ -197,71 +203,145 @@ struct Lesebefehl {
     }
     if (bus_tot) { meldung = "Bus tot - nicht gesendet"; return false; }
     kn = k; idx = i; sub = s; aktiv = true;
-    segmentiert = false; folge = false; puffer.clear();
+    phase = EINFACH; folge = false; block_versucht = false; puffer.clear(); vorweg.clear(); roh.clear();
     meldung = "gesendet, warte ...";
     can_id = 0x600 + k;
     daten = {0x40, (uint8_t) (i & 0xFF), (uint8_t) (i >> 8), (uint8_t) s, 0, 0, 0, 0};
+    notiere('>', daten);
     return true;
   }
 
   // jeder Frame: Antwort auf den offenen Lesebefehl? true = text gesetzt, Befehl erledigt
-  bool antwort(uint32_t can_id, const std::vector<uint8_t> &x, std::string &text) {
+  bool antwort(uint32_t can_id, const std::vector<uint8_t> &x, std::string &text, uint32_t jetzt = 0) {
     if (!aktiv || can_id != (uint32_t) (0x580 + kn) || x.size() < 8) return false;
-    if (segmentiert && (x[0] & 0xE0) == 0x00) return teilstueck(x, text);
-    if (((x[2] << 8) | x[1]) != idx || x[3] != sub) return false;
+    bool unser = ((x[2] << 8) | x[1]) == idx && x[3] == sub;
+    if (phase == STUECK && (x[0] & 0xE0) == 0x00) { notiere('<', x); return teilstueck(x, text, jetzt); }
+    if (phase == BLOCK_DATEN && !(x[0] == 0x80 && unser)) { notiere('<', x); return blockstueck(x, jetzt); }
+    if (phase == BLOCK_ENDE && (x[0] & 0xE3) == 0xC1) { notiere('<', x); return blockende(x, text, jetzt); }
+    if (!unser) return false;
+    notiere('<', x);
     char t[80];
-    if (!segmentiert && (x[0] == 0x41 || x[0] == 0x40)) {
+    if (x[0] == 0x80) {
+      uint32_t code = x[4] | (x[5] << 8) | (x[6] << 16) | ((uint32_t) x[7] << 24);
+      if (phase == EINFACH) snprintf(t, sizeof(t), "Abbruch %08X (Objekt fehlt?)", (unsigned) code);
+      else snprintf(t, sizeof(t), "%s: Abbruch %08X", phase == STUECK ? "Teilstuecke" : "Block", (unsigned) code);
+      // Teilstuecke abgelehnt -> einmal Block-Upload versuchen (Kommandobyte 0xA4 wie der WEM selbst)
+      if (phase == STUECK && !block_versucht) {
+        vorweg = t; block_versucht = true; phase = BLOCK_START;
+        plane({0xA4, (uint8_t) (idx & 0xFF), (uint8_t) (idx >> 8), (uint8_t) sub, BLOCKGROESSE, 0, 0, 0}, jetzt);
+        return false;
+      }
+      fertig(text, t);
+      return true;
+    }
+    if (phase == EINFACH && (x[0] == 0x41 || x[0] == 0x40)) {
       // Ankuendigung: Objekt ist laenger als 4 Byte, Groesse in Byte 4-7 (bei 0x41)
-      segmentiert = true; folge = true; toggle = 0; puffer.clear();
+      phase = STUECK; toggle = 0; puffer.clear();
       groesse = (x[0] == 0x41) ? (uint32_t) (x[4] | (x[5] << 8) | (x[6] << 16) | ((uint32_t) x[7] << 24)) : 0;
+      plane({0x60, 0, 0, 0, 0, 0, 0, 0}, jetzt);
       return false;
     }
-    segmentiert = false;
-    if (x[0] == 0x80) {
-      snprintf(t, sizeof(t), "%02X %04X/%02X: Abbruch %02X%02X%02X%02X (Objekt fehlt?)", kn, idx, sub, x[7], x[6], x[5], x[4]);
-    } else {
-      int n = (x[0] == 0x4F) ? 1 : (x[0] == 0x4B) ? 2 : (x[0] == 0x47) ? 3 : 4;
-      uint32_t u = 0;
-      for (int i = n - 1; i >= 0; i--) u = (u << 8) | x[4 + i];
-      long v = (n == 2) ? (long) (int16_t) u : (n == 1) ? (long) u : (long) (int32_t) u;
-      snprintf(t, sizeof(t), "%02X %04X/%02X = %ld (0x%0*lX, %d Byte)", kn, idx, sub, v, n * 2, (unsigned long) u, n);
+    if (phase == BLOCK_START && (x[0] & 0xE1) == 0xC0) {
+      // Block-Upload angenommen (Groesse in Byte 4-7, wenn Bit 1 gesetzt) -> Start 0xA3
+      groesse = (x[0] & 0x02) ? (uint32_t) (x[4] | (x[5] << 8) | (x[6] << 16) | ((uint32_t) x[7] << 24)) : 0;
+      phase = BLOCK_DATEN; seq = 0; puffer.clear();
+      plane({0xA3, 0, 0, 0, 0, 0, 0, 0}, jetzt, 0);
+      return false;
     }
+    if (phase != EINFACH) {
+      snprintf(t, sizeof(t), "unerwartete Antwort %02X", x[0]);
+      fertig(text, t);
+      return true;
+    }
+    int n = (x[0] == 0x4F) ? 1 : (x[0] == 0x4B) ? 2 : (x[0] == 0x47) ? 3 : 4;
+    uint32_t u = 0;
+    for (int i = n - 1; i >= 0; i--) u = (u << 8) | x[4 + i];
+    long v = (n == 2) ? (long) (int16_t) u : (n == 1) ? (long) u : (long) (int32_t) u;
+    snprintf(t, sizeof(t), "%02X %04X/%02X = %ld (0x%0*lX, %d Byte)", kn, idx, sub, v, n * 2, (unsigned long) u, n);
     text = t;
     aktiv = false;
     return true;
   }
 
-  // nach antwort(): true = naechste Teilstueck-Anfrage senden (0x60/0x70, nur Lesen)
-  bool weiter(uint32_t &can_id, std::vector<uint8_t> &daten) {
-    if (!aktiv || !segmentiert || !folge) return false;
+  // nach antwort(): true = naechste Anfrage senden (Teilstueck, Block-Start/-Quittung/-Ende), nur Lesen
+  bool weiter(uint32_t &can_id, std::vector<uint8_t> &daten, uint32_t jetzt) {
+    if (!aktiv || !folge || (int32_t) (jetzt - faellig) < 0) return false;
     folge = false;
     can_id = 0x600 + kn;
-    daten = {(uint8_t) (0x60 | toggle), 0, 0, 0, 0, 0, 0, 0};
+    daten = naechst;
+    notiere('>', daten);
+    if (daten[0] == 0xA1) aktiv = false;                // Block-Ende quittiert: Befehl erledigt
     return true;
   }
 
  private:
-  bool teilstueck(const std::vector<uint8_t> &x, std::string &text) {
+  void plane(std::vector<uint8_t> d, uint32_t jetzt, uint32_t pause = PAUSE_MS) {
+    naechst = d; folge = true; faellig = jetzt + pause;
+  }
+  void notiere(char richtung, const std::vector<uint8_t> &d) {
+    if (roh.size() > 600) return;
+    char t[4];
+    if (!roh.empty()) roh += ' ';
+    roh += richtung;
+    for (size_t i = 0; i < d.size(); i++) { snprintf(t, sizeof(t), "%02X", d[i]); roh += t; }
+  }
+  // wie: "Abbruch ..." / Fehlertext (dann ohne Daten) oder das Verfahren ("Teilstuecke", "Block")
+  void fertig(std::string &text, const char *wie, bool daten = false) {
+    char t[24];
+    snprintf(t, sizeof(t), "%02X %04X/%02X", kn, idx, sub);
+    text = t;
+    if (!vorweg.empty()) { text += " ["; text += vorweg; text += "]"; }
+    if (!daten) {
+      text += ": "; text += wie;
+    } else {
+      text += " = ";
+      for (size_t i = 0; i < puffer.size(); i++) {
+        snprintf(t, sizeof(t), i ? " %02X" : "%02X", puffer[i]);
+        text += t;
+      }
+      snprintf(t, sizeof(t), " (%u Byte", (unsigned) puffer.size());
+      text += t;
+      if (groesse && groesse != puffer.size()) {
+        snprintf(t, sizeof(t), ", angekuendigt %u", (unsigned) groesse);
+        text += t;
+      }
+      text += ", "; text += wie; text += ")";
+    }
+    phase = EINFACH; folge = false; aktiv = false;
+  }
+  bool teilstueck(const std::vector<uint8_t> &x, std::string &text, uint32_t jetzt) {
     if ((x[0] & 0x10) != toggle) return false;          // falscher Toggle: nicht unseres
     int n = 7 - ((x[0] >> 1) & 0x07);
     for (int i = 0; i < n && puffer.size() < 64; i++) puffer.push_back(x[1 + i]);
     toggle ^= 0x10;
-    if (!(x[0] & 0x01) && puffer.size() < 64) { folge = true; return false; }
-    char t[24];
-    snprintf(t, sizeof(t), "%02X %04X/%02X = ", kn, idx, sub);
-    text = t;
-    for (size_t i = 0; i < puffer.size(); i++) {
-      snprintf(t, sizeof(t), i ? " %02X" : "%02X", puffer[i]);
-      text += t;
+    if (!(x[0] & 0x01) && puffer.size() < 64) {
+      plane({(uint8_t) (0x60 | toggle), 0, 0, 0, 0, 0, 0, 0}, jetzt, 0);
+      return false;
     }
-    snprintf(t, sizeof(t), " (%u Byte)", (unsigned) puffer.size());
-    text += t;
-    if (groesse && groesse != puffer.size()) {
-      snprintf(t, sizeof(t), ", angekuendigt %u", (unsigned) groesse);
-      text += t;
+    fertig(text, "Teilstuecke", true);
+    return true;
+  }
+  bool blockstueck(const std::vector<uint8_t> &x, uint32_t jetzt) {
+    uint8_t s = x[0] & 0x7F;
+    bool letztes = x[0] & 0x80;
+    if (s == seq + 1) {
+      seq = s;
+      for (int i = 1; i < 8 && puffer.size() < 64; i++) puffer.push_back(x[i]);
     }
-    segmentiert = false;
-    aktiv = false;
+    if (letztes || s >= BLOCKGROESSE) {
+      // Quittung: zuletzt richtig empfangene Nummer, naechste Blockgroesse
+      plane({0xA2, seq, BLOCKGROESSE, 0, 0, 0, 0, 0}, jetzt, 0);
+      if (letztes && s == seq) phase = BLOCK_ENDE;
+      else seq = 0;
+    }
+    return false;
+  }
+  bool blockende(const std::vector<uint8_t> &x, std::string &text, uint32_t jetzt) {
+    int leer = (x[0] >> 2) & 0x07;                      // ungenutzte Bytes im letzten Stueck
+    for (int i = 0; i < leer && !puffer.empty(); i++) puffer.pop_back();
+    fertig(text, "Block", true);
+    aktiv = true;                                       // Ende-Quittung 0xA1 noch senden
+    plane({0xA1, 0, 0, 0, 0, 0, 0, 0}, jetzt, 0);
     return true;
   }
 };

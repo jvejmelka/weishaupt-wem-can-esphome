@@ -271,28 +271,57 @@ TEST(kern_lesebefehl_wie_v28) {
 TEST(kern_lesebefehl_segmentiert) {
   wc::Lesebefehl n; std::string t, m; uint32_t cid = 0; F d;
   PRUEFE(n.starten("01 273F 00", false, m, cid, d));
-  // Ankuendigung 8 Byte -> kein Text, erste Teilstueck-Anfrage 0x60
-  PRUEFE(!n.antwort(0x581, F{0x41, 0x3F, 0x27, 0x00, 0x08, 0, 0, 0}, t));
-  PRUEFE(n.weiter(cid, d) && cid == 0x601 && d == (F{0x60, 0, 0, 0, 0, 0, 0, 0}));
-  PRUEFE(!n.weiter(cid, d));
+  PRUEFE(n.roh == ">403F270000000000");
+  // Ankuendigung 8 Byte -> kein Text; erste Teilstueck-Anfrage 0x60 erst nach der Pause
+  PRUEFE(!n.antwort(0x581, F{0x41, 0x3F, 0x27, 0x00, 0x08, 0, 0, 0}, t, 1000));
+  PRUEFE(!n.weiter(cid, d, 1049));
+  PRUEFE(n.weiter(cid, d, 1050) && cid == 0x601 && d == (F{0x60, 0, 0, 0, 0, 0, 0, 0}));
+  PRUEFE(!n.weiter(cid, d, 2000));
   // falscher Toggle (fremdes Teilstueck) wird ignoriert
-  PRUEFE(!n.antwort(0x581, F{0x10, 9, 9, 9, 9, 9, 9, 9}, t) && !n.weiter(cid, d));
-  // 1. Teilstueck: 7 Byte, nicht das letzte -> Anfrage 0x70
-  PRUEFE(!n.antwort(0x581, F{0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77}, t));
-  PRUEFE(n.weiter(cid, d) && d[0] == 0x70);
+  PRUEFE(!n.antwort(0x581, F{0x10, 9, 9, 9, 9, 9, 9, 9}, t, 1100) && !n.weiter(cid, d, 1100));
+  // 1. Teilstueck: 7 Byte, nicht das letzte -> Anfrage 0x70 sofort
+  PRUEFE(!n.antwort(0x581, F{0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77}, t, 1100));
+  PRUEFE(n.weiter(cid, d, 1100) && d[0] == 0x70);
   // 2. Teilstueck: 1 Byte (n = 6 ungenutzt), letztes
-  PRUEFE(n.antwort(0x581, F{0x1D, 0x88, 0, 0, 0, 0, 0, 0}, t));
-  PRUEFE(t == "01 273F/00 = 11 22 33 44 55 66 77 88 (8 Byte)");
-  PRUEFE(!n.aktiv && !n.weiter(cid, d));
-  // Abbruch mitten im Upload
-  PRUEFE(n.starten("01 273F 00", false, m, cid, d));
-  PRUEFE(!n.antwort(0x581, F{0x41, 0x3F, 0x27, 0x00, 0x08, 0, 0, 0}, t) && n.weiter(cid, d));
-  PRUEFE(n.antwort(0x581, F{0x80, 0x3F, 0x27, 0x00, 0x00, 0x00, 0x04, 0x05}, t));
-  PRUEFE(t == "01 273F/00: Abbruch 05040000 (Objekt fehlt?)" && !n.aktiv);
+  PRUEFE(n.antwort(0x581, F{0x1D, 0x88, 0, 0, 0, 0, 0, 0}, t, 1150));
+  PRUEFE(t == "01 273F/00 = 11 22 33 44 55 66 77 88 (8 Byte, Teilstuecke)");
+  PRUEFE(!n.aktiv && !n.weiter(cid, d, 1150));
+  PRUEFE(n.roh == ">403F270000000000 <413F270008000000 >6000000000000000 <1009090909090909 <0011223344556677 >7000000000000000 <1D88000000000000");
   // Ankuendigung ohne Groesse (0x40), ein einziges letztes Teilstueck mit 3 Byte
   PRUEFE(n.starten("02 2531 00", false, m, cid, d));
-  PRUEFE(!n.antwort(0x582, F{0x40, 0x31, 0x25, 0x00, 0, 0, 0, 0}, t) && n.weiter(cid, d) && cid == 0x602);
-  PRUEFE(n.antwort(0x582, F{0x09, 0xAA, 0xBB, 0xCC, 0, 0, 0, 0}, t) && t == "02 2531/00 = AA BB CC (3 Byte)");
+  PRUEFE(!n.antwort(0x582, F{0x40, 0x31, 0x25, 0x00, 0, 0, 0, 0}, t, 0) && n.weiter(cid, d, 50) && cid == 0x602);
+  PRUEFE(n.antwort(0x582, F{0x09, 0xAA, 0xBB, 0xCC, 0, 0, 0, 0}, t, 60) && t == "02 2531/00 = AA BB CC (3 Byte, Teilstuecke)");
+}
+
+TEST(kern_lesebefehl_block) {
+  wc::Lesebefehl n; std::string t, m; uint32_t cid = 0; F d;
+  // Teilstuecke abgelehnt (05040001) -> nach der Pause Block-Upload 0xA4 wie der WEM
+  PRUEFE(n.starten("01 273F 00", false, m, cid, d));
+  PRUEFE(!n.antwort(0x581, F{0x41, 0x3F, 0x27, 0x00, 0x08, 0, 0, 0}, t, 0) && n.weiter(cid, d, 50) && d[0] == 0x60);
+  PRUEFE(!n.antwort(0x581, F{0x80, 0x3F, 0x27, 0x00, 0x01, 0x00, 0x04, 0x05}, t, 100));
+  PRUEFE(n.aktiv && !n.weiter(cid, d, 149));
+  PRUEFE(n.weiter(cid, d, 150) && cid == 0x601 && d == (F{0xA4, 0x3F, 0x27, 0x00, 8, 0, 0, 0}));
+  // Zusage mit Groesse 8 -> Start 0xA3
+  PRUEFE(!n.antwort(0x581, F{0xC6, 0x3F, 0x27, 0x00, 0x08, 0, 0, 0}, t, 160));
+  PRUEFE(n.weiter(cid, d, 160) && d == (F{0xA3, 0, 0, 0, 0, 0, 0, 0}));
+  // zwei Stuecke, das zweite ist das letzte -> Quittung 0xA2 mit Nummer 2
+  PRUEFE(!n.antwort(0x581, F{0x01, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77}, t, 170) && !n.weiter(cid, d, 170));
+  PRUEFE(!n.antwort(0x581, F{0x82, 0x88, 0, 0, 0, 0, 0, 0}, t, 171));
+  PRUEFE(n.weiter(cid, d, 171) && d == (F{0xA2, 2, 8, 0, 0, 0, 0, 0}));
+  // Ende: 6 ungenutzte Bytes im letzten Stueck -> Text, dann Ende-Quittung 0xA1
+  PRUEFE(n.antwort(0x581, F{0xD9, 0x12, 0x34, 0, 0, 0, 0, 0}, t, 180));
+  PRUEFE(t == "01 273F/00 [Teilstuecke: Abbruch 05040001] = 11 22 33 44 55 66 77 88 (8 Byte, Block)");
+  PRUEFE(n.aktiv && n.weiter(cid, d, 180) && d == (F{0xA1, 0, 0, 0, 0, 0, 0, 0}) && !n.aktiv);
+  // auch Block abgelehnt -> beide Abbrueche im Text, kein dritter Versuch
+  PRUEFE(n.starten("01 273F 00", false, m, cid, d));
+  PRUEFE(!n.antwort(0x581, F{0x41, 0x3F, 0x27, 0x00, 0x08, 0, 0, 0}, t, 0) && n.weiter(cid, d, 50));
+  PRUEFE(!n.antwort(0x581, F{0x80, 0x3F, 0x27, 0x00, 0x01, 0x00, 0x04, 0x05}, t, 60) && n.weiter(cid, d, 110) && d[0] == 0xA4);
+  PRUEFE(n.antwort(0x581, F{0x80, 0x3F, 0x27, 0x00, 0x01, 0x00, 0x04, 0x05}, t, 120));
+  PRUEFE(t == "01 273F/00 [Teilstuecke: Abbruch 05040001]: Block: Abbruch 05040001" && !n.aktiv && !n.weiter(cid, d, 999));
+  // fremde Antworten (anderer Knoten, anderes Objekt) aendern nichts
+  PRUEFE(n.starten("01 273F 00", false, m, cid, d));
+  PRUEFE(!n.antwort(0x582, F{0x41, 0x3F, 0x27, 0x00, 0x08, 0, 0, 0}, t, 0) && !n.antwort(0x581, F{0x41, 0x40, 0x27, 0x00, 8, 0, 0, 0}, t, 0));
+  PRUEFE(!n.weiter(cid, d, 999) && n.aktiv);
 }
 
 TEST(kern_scan_wie_v28) {
