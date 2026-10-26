@@ -51,6 +51,15 @@ Welche Module auf welchem Knoten liegen, steht in der Systemtabelle auf der SD-K
 Weitere Knoten gibt es an dieser Anlage nicht. Anlagen mit zweitem Heizkreis, Solar oder
 Erweiterungsmodulen haben mehr Einträge – vorher die eigene `systable.csv` ansehen.
 
+Weitere Dateien der SD-Karte liefert der WEM ebenfalls unter `/sd/<datei>` aus (Anmeldung wie für
+JSON; **einzeln abrufen, nie im Takt**):
+
+| Datei | Inhalt |
+|---|---|
+| `systable.csv` | Systemtabelle: Knoten, Module (MI/MX), Firmware-Dateien je Modul |
+| `DLOG_ACT.CSV` | letzte Aufzeichnung des Datenloggers am Display: Kopfzeilen `DP-Nr`, `MI`, `MX`, `OX`, `OS`, `INT` (Takt in s, hex), `UNIT`, `FF` (Teiler), dann `Datum;Werte` – an der gemessenen Anlage eine alte Aufzeichnung, nicht die des Portals |
+| `JJMMTTxx.CSV` | Tagesdateien desselben Formats (laut BorgNumberOne) |
+
 ### CANopen in drei Sätzen
 
 - **PDO** (Process Data Object): ein Gerät sendet Werte von selbst, zyklisch oder bei Änderung.
@@ -67,7 +76,8 @@ Erweiterungsmodulen haben mehr Einträge – vorher die eigene `systable.csv` an
 
 | Kommandobyte | Bedeutung |
 |---|---|
-| `40` | Lese-Anfrage (Upload). **Das einzige, das diese Firmware sendet.** |
+| `40` | Lese-Anfrage (Upload). Dazu sendet die Firmware nur die Lese-Kommandos für lange Objekte (`60`/`70`, `A4`/`A3`/`A2`/`A1`, siehe unten). |
+| `41` | Ankündigung: Objekt ist länger als 4 Byte, Länge in Byte 4–7 |
 | `4F` / `4B` / `47` / `43` | Antwort mit 1 / 2 / 3 / 4 Datenbytes |
 | `2F` / `2B` / `23` | Schreib-Anfrage mit 1 / 2 / 4 Datenbytes (sendet nur der WEM) |
 | `60` | Bestätigung eines Schreibvorgangs |
@@ -79,6 +89,76 @@ Beispiel: Lese-Anfrage an Knoten 1, Objekt `0x2933` Subindex 2:
 CAN-ID 0x601   40 33 29 02 00 00 00 00
 Antwort 0x581  4F 33 29 02 02 00 00 00     -> 1 Byte, Wert 2
 ```
+
+### Lange Objekte (mehr als 4 Byte): Teilstücke und Block
+
+Eine einfache Antwort trägt höchstens 4 Byte. Längere Objekte (z. B. der Fehlerblock des WEM, 8 Byte,
+oder Texte) kündigt die Gegenstelle mit `41` und der Länge an; dann gibt es zwei Lese-Verfahren:
+
+```
+Teilstücke (segmentiert)                     Block
+>601 40 3F 27 00 …     Frage                 >601 A4 3F 27 00 08 …   Frage als Block, 8 Stücke je Block
+<581 41 3F 27 00 08 …  „8 Byte“              <581 C6 3F 27 00 08 …   „ok, 8 Byte“
+>601 60 …              Stück 1 bitte         >601 A3 …               „los“
+<581 00 xx xx xx xx xx xx xx                 <581 01 xx … / 82 xx …  Stücke 1, 2 (0x80 = letztes)
+>601 70 …              Stück 2 bitte         >601 A2 02 08 …         „bis 2 erhalten“
+<581 1D xx …           letztes Stück         <581 D9 …               „Ende“ (+ Prüfsumme)
+                                             >601 A1 …               „Ende quittiert“
+```
+
+- **Der WEM braucht eine kurze Pause** zwischen Ankündigung und erster Teilstück-Anfrage. Kommt `60`
+  im selben Augenblick, antwortet er mit Abbruch `05040001` (Kommando unbekannt). Mit 50 ms Pause
+  liefert er (ab v33).
+- **Block** beherrscht der WEM auch als Antwortender (ab v34: Lesebefehl mit Zusatz `B`). Er selbst
+  fragt den Kessel fast nur per Block ab (`602: A4 …`).
+- Block und Teilstücke **nur am WEM (Knoten 1)** – siehe nächster Abschnitt.
+
+### SDO-Kanäle: wer fragt wen
+
+| Kanal (Frage → Antwort) | Gegenstelle | wer fragt |
+|---|---|---|
+| `0x601` → `0x581` | WEM | nur wir (Lesebefehle, Kontrolle nach dem Schalten) |
+| `0x602` → `0x582` | Kessel | **der WEM, etwa 3× pro Sekunde, meist per Block** – und gegebenenfalls wir |
+| `0x6C2` → `0x682` | WEM | der Kessel: schreibt seine Messwerte in den WEM (z. B. `0x2A29` Warmwassertemperatur, `0x2694`–`0x2699`) |
+
+CAN-Nachrichten haben keinen Absender: Eine Frage von uns auf `0x602` sieht für den Kessel genauso aus
+wie eine des WEM. Mitten in einem Block-Dialog des WEM kann sie dessen Abfrage stören. Darum:
+am Kessel nur **einzelne, einfache** Lesebefehle, nie Teilstücke, Block oder Serien. An der gemessenen
+Anlage ließen Scans über `0x602` das WEM-Portal stocken, bis der Scan aufhörte. Am WEM (`0x601`) fragt
+sonst niemand – dort sind auch lange Dialoge unkritisch.
+
+Umgekehrt schreibt **nur der WEM** in den Kessel: alle ~5 s sieben Werte (`0x2709`, `0x270A`,
+`0x252B`–`0x252F`: Anforderung, Vorlauf- und Warmwasser-Soll). Das Board schreibt nie auf den Bus.
+
+### Anlauf, Systemtabelle und Kennung
+
+Mitschnitt eines Kaltstarts (Therme stromlos, wieder an), WTC-GW 15-B:
+
+```
+t = 0 s     702: 7F, 701: 7F         Kessel und WEM melden sich („pre-operational“)
+t = 5–52 s  603…63C: 40 18 10 01 …   der WEM fragt Knoten 3 bis 60 je ~1 s nach 0x1018/1 (Kennung)
+            582: 43 18 10 01 9C 03 …  nur der Kessel antwortet (924)
+            7E5 …                    LSS: Suche nach unkonfigurierten Geräten
+                                     -> Display: „Systemtabelle wird erstellt“
+t = 74 s    000: 01 00               NMT: alle Knoten starten (danach alle 10 s)
+            602: 2F/2B …             der WEM schreibt alle ~5 s Sollwerte in den Kessel
+```
+
+Wer auf den Rundruf antwortet, kommt in die Systemtabelle. Das Board antwortet nie – es ist kein
+CANopen-Teilnehmer, braucht keine Knotennummer und fehlt dem WEM nicht. Ein Raumfühler oder
+Raumgerät (WEM-RF/RG) ist dagegen ein eigener Knoten und sendet einen eigenen Heartbeat
+`0x700 + n`.
+
+Standard-Objekte der Kennung (lesbar mit dem Lesebefehl; Texte am Kessel nicht gelesen, weil sie
+Teilstücke auf `0x602` bräuchten):
+
+| Objekt | WEM (Knoten 1) | Kessel (Knoten 2) |
+|---|---|---|
+| `0x1008` Gerätename | „Systemgeraet“ | – |
+| `0x1009` Hardware | „69503511“ | – |
+| `0x100A` Software | „428.226.000“ (Systemtabelle: `428CC226.FWU`) | – |
+| `0x1018`/1 Hersteller | 924 (`0x39C`, Weishaupt) | 924 |
+| `0x1018`/2 Produkt | 5500 | 11 |
 
 ## 2. Mithören und Lesen auf Anforderung
 
@@ -151,6 +231,7 @@ den WEM nur zum Schalten ansprechen.**
 | Ausfall | Folge |
 |---|---|
 | nur die JSON-Schnittstelle hängt (der bisher beobachtete Fall) | am Bus läuft alles weiter; das Board liest unverändert, nur Schalten geht nicht |
+| nur Cloud-Verbindung und Portal-Logger hängen (Oktober 2026) | Regelung, Heizkurve und Bus laufen normal; es fehlen nur die mitgehörten Logger-Abfragen des WEM (Abgas, Volumenstrom) |
 | der WEM ist ganz weg | es fehlen alle Werte, die nur als Antwort auf **WEM-Anfragen** mitgehört werden, und alles, was der WEM sendet |
 
 Nach CANopen-Konvention stammen PDOs auf `0x180 + n` vom Knoten *n*; `0x182` ist damit vom Kessel,
@@ -160,6 +241,11 @@ Nach CANopen-Konvention stammen PDOs auf `0x180 + n` vom Knoten *n*; `0x182` ist
 | bleiben voraussichtlich (PDOs, s. [Abschnitt 3](#3-was-mitgehört-wird)) | fallen weg |
 |---|---|
 | Außentemperatur, Vorlaufsoll/„Heizanforderung“, Warmwasser, Uhrzeit, Kesselstatus | alles, was nur als Antwort auf **Fragen des WEM** mitgehört wird (Druck, Leistung, Wärmemengen …) und die WEM-Schreibtelegramme |
+
+Laut Weishaupt-Anleitung WTC-GW 15…32-B (83307201) meldet der Kessel bei fehlender Verbindung zum
+Systemgerät **F 91** „Kommunikationsfehler Systemgerät/Feuerungsautomat“ (Fehler, Anlage verriegelt,
+wenn die Betriebssicherheit nicht gewährleistet ist); einen Notbetrieb beschreibt die Anleitung nicht.
+Die Heizkurve liegt im WEM – ohne ihn bekommt der Kessel keinen Vorlauf-Sollwert.
 
 Die Kesseltemperatur steht zusätzlich in PDO `0x241`, Bytes 2–3 – sie lässt sich also auch ohne
 WEM-Anfragen mithören. Wer welches der PDOs sendet, ist nicht in jedem Fall geklärt. Mit eingeschalteten eigenen Anfragen liest das Board die Kesselwerte aus
@@ -389,6 +475,25 @@ festen Versatz. Gemessen an der WTC-GW 15-B:
 Die Versätze gelten je Modul, nicht allgemein: für HZK0 und WW0 gilt +0x100 ausdrücklich **nicht**.
 Andere Anlagen (zweiter Heizkreis, Solar) können andere Zuordnungen haben.
 
+Am 26.10.2026 an weiteren Objekten bestätigt (JSON-Nummer aus der Tabelle von BorgNumberOne bzw. der
+Gateway-Anleitung umgerechnet, am Bus einzeln gelesen):
+
+| JSON | CAN | Bedeutung | gelesen |
+|---|---|---|---|
+| `01 00 259C 01` | Knoten 1 `0x269C`/1 | Wärmeanforderung Heizung | 35,3 °C = PDO `0x241` |
+| `01 00 259D 01` | Knoten 1 `0x269D`/1 | Wärmeanforderung Warmwasser | 0 (keine Ladung) |
+| `01 00 26B1 02` | Knoten 1 `0x27B1`/2 | Außentemperatur | 8,1 °C (PDO 8,0) |
+| `01 00 263F 00` | Knoten 1 `0x273F`/0 | **Fehlerblock**, 8 Byte (Fehler/Warnung-Bits, Fehlernummer, Modul) | `00 00 00 00 00 00 00 00` – nichts anstehend |
+| `02 00 2559 02` | Knoten 1 `0x2959`/2 | Vorlaufsoll Heizkreis aktuell | 35,3 °C |
+| `03 00 2569 02` | Knoten 1 `0x2A69`/2 | „Status Warmwasser“ (Gateway: 0 Warnung / 1 Fehler anstehend) | 1 – passt nicht zum leeren Fehlerblock, **Bedeutung unklar** |
+
+Vermutung zur Herkunft der Versätze: Die JSON-Objektnummer ist **modulrelativ** (`0x2533` ist im
+Heizkreis die Betriebsart, im Kessel der Rücklauf VPT); im CAN-Objektverzeichnis eines Knotens liegt
+jedes Modul um einen festen Betrag verschoben. Die Plätze +0x200/+0x300 am WEM gehören vermutlich zu
+Modulen, die es an der gemessenen Anlage nicht gibt. **Mithilfe gesucht:** Wer einen zweiten
+Heizkreis, Solar oder Raumgeräte hat, kann mit einzelnen Lesebefehlen am WEM (`0x601`) prüfen,
+wo deren Objekte liegen.
+
 **Direkt per SDO schreibt die Firmware nie** – weder auf den Kessel noch auf den WEM. Schreiben
 läuft ausschließlich über JSON; der Bus dient nur zur Kontrolle.
 
@@ -422,6 +527,10 @@ Namen hier sind die aus der Firmware.
 | **Lesebefehl (KN IDX SUB hex)** | Eingabe `KNOTEN INDEX SUB` in hex, z. B. `01 2933 02` |
 | **Lesen** | sendet eine Lese-Anfrage (`0x40`) an Knoten `0x600 + KN` – nur, wenn der Bus lebt |
 | **Lesebefehl Antwort** | `01 2933/02 = 2 (0x02, 1 Byte)` oder `… Abbruch 06020000 (Objekt fehlt?)`; bei totem Bus „Bus tot - nicht gesendet“ |
+| **Lesebefehl Rohdaten** (ab v33) | jede Nachricht des letzten Lesebefehls, `>` gesendet, `<` empfangen, z. B. `>403F270000000000 <413F270008000000 …` |
+
+Lange Objekte liest der Lesebefehl automatisch in Teilstücken (ab v33), mit Zusatz `B` (z. B.
+`01 273F 00 B`) per Block – `B` nur am WEM (Knoten 01).
 
 Dasselbe geht per MQTT: `<gerät>/cmd/lesen` mit `01 2933 02`.
 
@@ -602,6 +711,8 @@ einzige vorherige `CM 05`-Antwort, nach einer Leerantwort und einer sofortigen W
 | 6 | zwei kurze Aussetzer, selbst erholt nach 2 min Ruhe | normale Bedienung in Portal und App zur selben Zeit |
 | 7 | Leerantwort nach einem Schaltbefehl – geschaltet hatte er trotzdem | Befehle zu dicht hintereinander |
 | 8 | hart | vier Schaltbefehle binnen fünf Minuten, dazu eine Leseanfrage |
+| 9 | Portal eingefroren, Heizung regelt normal weiter | Cloud-Verbindung riss ab (Ursache unbekannt); drei Tage später fragte der WEM auch die Logger-Werte (Abgas, Volumenstrom alle ~32 s) nicht mehr ab. Erst Stromlos-Machen half – nach zwei Wochen |
+| 10 | Portal stockt, erholt sich sofort nach Ende | SDO-Lese-Serien (Scan) auf `0x602`, auch mit 2,5 s und 6 s Abstand |
 
 ### Regeln, die daraus folgen
 

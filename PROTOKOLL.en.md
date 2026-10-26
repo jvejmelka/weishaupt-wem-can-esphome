@@ -51,6 +51,15 @@ Which modules live on which node is listed in the system table on the WEM's SD c
 There are no further nodes on this installation. Installations with a second heating circuit, solar
 or extension modules have more entries – check your own `systable.csv` first.
 
+The WEM also serves other files from the SD card under `/sd/<file>` (same login as for JSON;
+**fetch one at a time, never periodically**):
+
+| File | Content |
+|---|---|
+| `systable.csv` | system table: nodes, modules (MI/MX), firmware files per module |
+| `DLOG_ACT.CSV` | last recording of the display's data logger: header rows `DP-Nr`, `MI`, `MX`, `OX`, `OS`, `INT` (interval in s, hex), `UNIT`, `FF` (divisor), then `date;values` – on the measured installation an old recording, not the portal's |
+| `YYMMDDxx.CSV` | daily files in the same format (according to BorgNumberOne) |
+
 ### CANopen in three sentences
 
 - **PDO** (Process Data Object): a device sends values on its own, cyclically or on change.
@@ -67,7 +76,8 @@ or extension modules have more entries – check your own `systable.csv` first.
 
 | Command byte | Meaning |
 |---|---|
-| `40` | Read request (upload). **The only one this firmware sends.** |
+| `40` | Read request (upload). Apart from it the firmware only sends the read commands for long objects (`60`/`70`, `A4`/`A3`/`A2`/`A1`, see below). |
+| `41` | Announcement: object is longer than 4 bytes, length in bytes 4–7 |
 | `4F` / `4B` / `47` / `43` | Response with 1 / 2 / 3 / 4 data bytes |
 | `2F` / `2B` / `23` | Write request with 1 / 2 / 4 data bytes (sent only by the WEM) |
 | `60` | Acknowledgement of a write |
@@ -81,6 +91,75 @@ Antwort 0x581  4F 33 29 02 02 00 00 00     -> 1 Byte, Wert 2
 ```
 
 (`Antwort` = response; `1 Byte, Wert 2` = 1 byte, value 2.)
+
+### Long objects (more than 4 bytes): segments and block
+
+A simple response carries at most 4 bytes. The other side announces longer objects (e.g. the WEM fault
+block, 8 bytes, or texts) with `41` and the length; there are then two read procedures:
+
+```
+Segmented                                    Block
+>601 40 3F 27 00 …     request               >601 A4 3F 27 00 08 …   request as block, 8 segments per block
+<581 41 3F 27 00 08 …  "8 bytes"             <581 C6 3F 27 00 08 …   "ok, 8 bytes"
+>601 60 …              segment 1 please      >601 A3 …               "go"
+<581 00 xx xx xx xx xx xx xx                 <581 01 xx … / 82 xx …  segments 1, 2 (0x80 = last)
+>601 70 …              segment 2 please      >601 A2 02 08 …         "received up to 2"
+<581 1D xx …           last segment          <581 D9 …               "end" (+ CRC)
+                                             >601 A1 …               "end acknowledged"
+```
+
+- **The WEM needs a short pause** between the announcement and the first segment request. If `60`
+  arrives in the same instant, it answers with abort `05040001` (command unknown). With a 50 ms pause
+  it delivers (from v33).
+- The WEM also handles **block upload** as the server (from v34: read command with suffix `B`). It
+  queries the boiler itself almost exclusively by block (`602: A4 …`).
+- Block and segmented reads **only on the WEM (node 1)** – see next section.
+
+### SDO channels: who asks whom
+
+| Channel (request → response) | Server | who asks |
+|---|---|---|
+| `0x601` → `0x581` | WEM | only us (read commands, verification after switching) |
+| `0x602` → `0x582` | boiler | **the WEM, about 3× per second, mostly by block** – and possibly us |
+| `0x6C2` → `0x682` | WEM | the boiler: writes its readings into the WEM (e.g. `0x2A29` DHW temperature, `0x2694`–`0x2699`) |
+
+CAN frames carry no sender: a request from us on `0x602` looks exactly like one from the WEM to the
+boiler. In the middle of a WEM block dialogue it can disturb the WEM's query. Therefore: on the boiler
+only **single, simple** read commands, never segmented, block or series. On the measured installation,
+scans over `0x602` made the WEM portal stall until the scan stopped. Nobody else asks on the WEM
+(`0x601`) – long dialogues are harmless there.
+
+Conversely, **only the WEM** writes to the boiler: seven values every ~5 s (`0x2709`, `0x270A`,
+`0x252B`–`0x252F`: demand, flow and DHW setpoint). The board never writes on the bus.
+
+### Start-up, system table and identity
+
+Capture of a cold start (unit switched off and on again), WTC-GW 15-B:
+
+```
+t = 0 s     702: 7F, 701: 7F         boiler and WEM report ("pre-operational")
+t = 5–52 s  603…63C: 40 18 10 01 …   the WEM asks nodes 3 to 60, ~1 s each, for 0x1018/1 (identity)
+            582: 43 18 10 01 9C 03 …  only the boiler answers (924)
+            7E5 …                    LSS: search for unconfigured devices
+                                     -> display: "Systemtabelle wird erstellt" (building system table)
+t = 74 s    000: 01 00               NMT: start all nodes (repeated every 10 s)
+            602: 2F/2B …             the WEM writes setpoints to the boiler every ~5 s
+```
+
+Whoever answers the roll call ends up in the system table. The board never answers – it is not a
+CANopen node, needs no node ID and is not missed by the WEM. A room sensor or room unit (WEM-RF/RG),
+on the other hand, is a node of its own and sends its own heartbeat `0x700 + n`.
+
+Standard identity objects (readable with the read command; texts on the boiler not read because they
+would need segments on `0x602`):
+
+| Object | WEM (node 1) | boiler (node 2) |
+|---|---|---|
+| `0x1008` device name | "Systemgeraet" | – |
+| `0x1009` hardware | "69503511" | – |
+| `0x100A` software | "428.226.000" (system table: `428CC226.FWU`) | – |
+| `0x1018`/1 vendor | 924 (`0x39C`, Weishaupt) | 924 |
+| `0x1018`/2 product | 5500 | 11 |
 
 ## 2. Passive listening and on-demand reading
 
@@ -153,6 +232,7 @@ and address the WEM only for switching.**
 | Failure | Consequence |
 |---|---|
 | only the JSON interface hangs (the case observed so far) | everything on the bus continues; the board reads as before, only switching is unavailable |
+| only the cloud connection and portal logger hang (October 2026) | regulation, heating curve and bus run normally; only the WEM's logger queries (flue gas, flow rate) are missing |
 | the WEM is completely gone | all values are missing that are only picked up as responses to **WEM requests**, plus everything the WEM sends |
 
 By CANopen convention, PDOs on `0x180 + n` come from node *n*; `0x182` therefore comes from the
@@ -162,6 +242,11 @@ boiler, `0x1C1` from the WEM. Which values actually keep coming during a complet
 | probably remain (PDOs, see [section 3](#3-what-is-picked-up-by-passive-listening)) | disappear |
 |---|---|
 | outside temperature, flow setpoint/“heat demand”, DHW, time of day, boiler status | everything that is only picked up as a response to **requests from the WEM** (pressure, output, heat quantities …) and the WEM write telegrams |
+
+According to the Weishaupt manual WTC-GW 15…32-B (83307201), the boiler reports **F 91**
+“communication fault system unit/burner control” when the connection to the system unit is lost (fault,
+the unit locks out if operational safety is not ensured); the manual describes no emergency mode.
+The heating curve lives in the WEM – without it the boiler gets no flow setpoint.
 
 The boiler temperature is additionally contained in PDO `0x241`, bytes 2–3 – so it can also be
 picked up without WEM requests. Which device sends which of the PDOs is not settled in every case. With own requests enabled, the board reads the boiler values from
@@ -409,6 +494,25 @@ fixed offset. Measured on the WTC-GW 15-B:
 The offsets apply per module, not generally: for HZK0 and WW0, +0x100 explicitly does **not** apply.
 Other installations (second heating circuit, solar) may have different mappings.
 
+Confirmed on further objects on 2026-10-26 (JSON number from BorgNumberOne's table or the gateway
+manual, converted, read singly on the bus):
+
+| JSON | CAN | Meaning | read |
+|---|---|---|---|
+| `01 00 259C 01` | node 1 `0x269C`/1 | heat demand heating | 35.3 °C = PDO `0x241` |
+| `01 00 259D 01` | node 1 `0x269D`/1 | heat demand DHW | 0 (no charging) |
+| `01 00 26B1 02` | node 1 `0x27B1`/2 | outdoor temperature | 8.1 °C (PDO 8.0) |
+| `01 00 263F 00` | node 1 `0x273F`/0 | **fault block**, 8 bytes (fault/warning bits, fault number, module) | `00 00 00 00 00 00 00 00` – nothing pending |
+| `02 00 2559 02` | node 1 `0x2959`/2 | current flow setpoint heating circuit | 35.3 °C |
+| `03 00 2569 02` | node 1 `0x2A69`/2 | "DHW status" (gateway: 0 warning / 1 fault pending) | 1 – does not match the empty fault block, **meaning unclear** |
+
+Guess at the origin of the offsets: the JSON object number is **module-relative** (`0x2533` is the
+operating mode in the heating circuit, the VPT return temperature in the boiler); in a node's CAN
+object dictionary each module is shifted by a fixed amount. Slots +0x200/+0x300 on the WEM probably
+belong to modules that the measured installation does not have. **Help wanted:** anyone with a second
+heating circuit, solar or room units can check with single read commands on the WEM (`0x601`) where
+their objects are.
+
 **The firmware never writes directly via SDO** – neither to the boiler nor to the WEM. Writing
 is done exclusively via JSON; the bus serves only for verification.
 
@@ -443,6 +547,10 @@ names here are those from the firmware (German, with English translations in par
 | **Lesebefehl (KN IDX SUB hex)** (read command) | input `NODE INDEX SUB` in hex, e.g. `01 2933 02` |
 | **Lesen** (read) | sends a read request (`0x40`) to node `0x600 + KN` – only if the bus is alive |
 | **Lesebefehl Antwort** (read command response) | `01 2933/02 = 2 (0x02, 1 Byte)` or `… Abbruch 06020000 (Objekt fehlt?)` (abort, object missing?); with a dead bus “Bus tot - nicht gesendet” (bus dead – not sent) |
+| **Lesebefehl Rohdaten** (read command raw data, from v33) | every frame of the last read command, `>` sent, `<` received, e.g. `>403F270000000000 <413F270008000000 …` |
+
+The read command reads long objects automatically in segments (from v33); with suffix `B` (e.g.
+`01 273F 00 B`) by block – `B` only on the WEM (node 01).
 
 The same works via MQTT: `<gerät>/cmd/lesen` with `01 2933 02`.
 
@@ -625,6 +733,8 @@ single preceding `CM 05` response, after an empty response and an immediate retr
 | 6 | two short dropouts, recovered by themselves after 2 min of quiet | normal operation in portal and app at the same time |
 | 7 | empty response after a switching command – the switch had nevertheless taken place | commands too close together |
 | 8 | hard | four switching commands within five minutes, plus one read request |
+| 9 | portal frozen, heating keeps regulating normally | cloud connection dropped (cause unknown); three days later the WEM also stopped querying the logger values (flue gas, flow rate every ~32 s). Only switching off the power helped – after two weeks |
+| 10 | portal stalls, recovers right after the end | SDO read series (scan) on `0x602`, even at 2.5 s and 6 s spacing |
 
 ### Resulting rules
 
