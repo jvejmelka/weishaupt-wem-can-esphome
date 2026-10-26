@@ -49,6 +49,18 @@ H und L aus **demselben verdrillten Paar** nehmen. − und + bleiben frei.
 Busgeschwindigkeit 50 kbit/s. Am WEM muss die **JSON-Schnittstelle** eingeschaltet sein
 (Parameter 10.8.1, Fachmann-Ebene).
 
+## Wer redet mit wem
+
+[![Aufbau: Weishaupt-Cloud, Heimnetz, Therme mit WEM und Kessel, CAN-Bus, ESP-Brücke](bilder/aufbau.de.png)](bilder/aufbau.de.pdf)
+
+- **WEM-SG** (Knoten 1) ist das Display der Therme und der Master: Er rechnet aus der Heizkurve den Vorlauf-Sollwert
+  und schreibt ihn in den **Kessel** (Feuerungsautomat WEM-FA-G, Knoten 2).
+- Der WEM hat **eine** LAN-Buchse: Darüber laufen die verschlüsselte Cloud-Verbindung (XMPP/TLS zu `xmpp.wemportal.de`)
+  und die unverschlüsselte **JSON-Schnittstelle** – ein ferngesteuerter CAN-Zugang, den der WEM übersetzt und filtert.
+  Das Weishaupt-Modbus-Gateway und diese ESP-Brücke benutzen dieselbe JSON-Schnittstelle.
+- Die ESP-Brücke hört am CAN-Bus alles mit, liest einzelne Werte per SDO und schaltet nur über JSON.
+- Lila = aus diesem Repository, gestrichelt = optional. Erzeugt mit [`werkzeuge/zeichnung_aufbau.py`](werkzeuge/zeichnung_aufbau.py).
+
 ## Aufbau
 
 ```

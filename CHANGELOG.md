@@ -1,6 +1,9 @@
 # Changelog – ESP-CAN-Brücke Weishaupt (WeAct CAN485, ESPHome)
 
 
+## Doku – 2026-10-26 (abends)
+- **Zeichnung „Wer redet mit wem“** (Deutsch und Englisch) in `bilder/`, eingebunden in README und README.en: Weishaupt-Cloud (Geräte-Server `xmpp.wemportal.de:5222`, XMPP über TLS mit Gerätezertifikat, nachgeprüft), Portal, Heimnetz, eine LAN-Buchse am WEM, JSON als ferngesteuerter CAN-Zugang, Therme mit WEM-SG (Knoten 1) und Kessel WEM-FA-G (Knoten 2), CAN-Bus, ESP-Brücke; Modbus-Gateway und Raumfühler optional. Erzeugt mit `werkzeuge/zeichnung_aufbau.py`. Begriffe nach der Weishaupt-Anleitung WTC-GW 15…32-B (83307201).
+
 ## v32 – 2026-10-26
 - **Lesebefehl kann Objekte über 4 Byte lesen (segmentierter SDO-Upload).** Kündigt die Gegenstelle ein längeres Objekt an (0x41/0x40), holt das Board die Teilstücke mit 0x60/0x70 ab – weiterhin nur Leseanfragen, höchstens 64 Byte; Ausgabe als Hex-Bytes. Getestet in `tests/` (`kern_lesebefehl_segmentiert`).
 - **An der WTC-GW 15-B ausprobiert:** Fehlerblock des WEM (Knoten 1 `0x273F`/0, laut Gateway-Tabelle 8 Byte: Fehler/Warnung, Fehlernummer, Modul) – der WEM kündigt 8 Byte an, lehnt die Teilstück-Anfrage aber mit Abbruch `05040001` (Kommando unbekannt) ab; Unterindizes 1–4 gibt es nicht. Der Fehlerblock bleibt am Bus vorerst unlesbar.

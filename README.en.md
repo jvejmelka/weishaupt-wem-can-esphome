@@ -49,6 +49,18 @@ Take H and L from **the same twisted pair**. − and + stay unconnected.
 Bus speed 50 kbit/s. The **JSON interface** must be enabled on the WEM
 (parameter 10.8.1, installer level).
 
+## Who talks to whom
+
+[![Overview: Weishaupt cloud, home network, boiler unit with WEM and burner control, CAN bus, ESP bridge](bilder/aufbau.en.png)](bilder/aufbau.en.pdf)
+
+- **WEM-SG** (node 1) is the display of the boiler unit and the system master: it turns the heating curve into a flow
+  setpoint and writes it to the **boiler** (burner control WEM-FA-G, node 2).
+- The WEM has **one** LAN socket: it carries the encrypted cloud connection (XMPP/TLS to `xmpp.wemportal.de`) and the
+  unencrypted **JSON interface** – remote CAN access that the WEM translates and filters.
+  The Weishaupt Modbus gateway and this ESP bridge use the same JSON interface.
+- The ESP bridge listens to everything on the CAN bus, reads single values via SDO and switches only via JSON.
+- Purple = from this repository, dashed = optional. Generated with [`werkzeuge/zeichnung_aufbau.py`](werkzeuge/zeichnung_aufbau.py).
+
 ## Structure
 
 ```

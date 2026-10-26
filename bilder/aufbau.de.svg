@@ -1,0 +1,134 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1190" height="1030" viewBox="0 0 1190 1030" font-family="DejaVu Sans" font-size="13">
+<defs>
+ <marker id="pr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#c0392b"/></marker>
+ <marker id="pg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1e8449"/></marker>
+ <marker id="pb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2e86c1"/></marker>
+</defs>
+<rect width="1190" height="1030" fill="#fff"/>
+<text x="40" y="34" font-size="20" font-weight="bold">Weishaupt WTC mit WEM – wer redet mit wem</text>
+<text x="40" y="54" fill="#555">Gas-Brennwertgerät WTC-GW (B-Reihe) mit eingebautem WEM-Systemgerät · ESP-Brücke aus diesem Repository</text>
+<rect x="30" y="72" width="830" height="150" rx="10" fill="#eef3fb" stroke="#7f9cc7"/>
+<text x="45" y="92" font-weight="bold" fill="#34527f">Internet – Weishaupt-Cloud</text>
+<rect x="60" y="105" width="320" height="100" rx="6" fill="#fff" stroke="#34527f"/>
+<text x="75" y="128" font-weight="bold">Geräte-Server</text>
+<text x="75" y="148">xmpp.wemportal.de · Port 5222</text>
+<text x="75" y="166">XMPP über TLS (STARTTLS)</text>
+<text x="75" y="186" fill="#555" font-size="12">nur WEMs mit Gerätezertifikat</text>
+<rect x="510" y="105" width="320" height="100" rx="6" fill="#fff" stroke="#34527f"/>
+<text x="525" y="128" font-weight="bold">WEM-Portal (Website)</text>
+<text x="525" y="148">wemportal.com</text>
+<text x="525" y="166" fill="#555" font-size="12">Anzeige, Fernbedienung,</text>
+<text x="525" y="182" fill="#555" font-size="12">Datenaufzeichnung, Störmeldungen</text>
+<line x1="380" y1="155" x2="510" y2="155" stroke="#34527f" stroke-dasharray="6,4"/>
+<text x="392" y="146" font-size="11" fill="#34527f">intern bei</text>
+<text x="392" y="172" font-size="11" fill="#34527f">Weishaupt</text>
+<rect x="910" y="105" width="240" height="100" rx="6" fill="#fff" stroke="#555"/>
+<text x="925" y="128" font-weight="bold">Browser / Weishaupt-App</text>
+<text x="925" y="148">von überall</text>
+<line x1="910" y1="155" x2="832" y2="155" stroke="#c0392b" stroke-width="2.5" marker-end="url(#pr)"/>
+<text x="838" y="146" fill="#c0392b" font-size="12">HTTPS</text>
+<rect x="30" y="250" width="1120" height="34" rx="6" fill="#f4f4f4" stroke="#888"/>
+<text x="595" y="272" font-weight="bold" text-anchor="middle">Router – Übergang Heimnetz ↔ Internet</text>
+
+<line x1="200" y1="398" x2="200" y2="207" stroke="#c0392b" stroke-width="3" marker-end="url(#pr)"/>
+<circle cx="200" cy="267" r="6" fill="#c0392b"/>
+<text x="212" y="235" fill="#c0392b" font-size="12">verschlüsselt (TLS 1.2)</text>
+<text x="212" y="322" fill="#c0392b" font-size="12">der WEM baut die Verbindung auf,</text>
+<text x="212" y="338" fill="#c0392b" font-size="12">Lebenszeichen etwa 1×/min</text>
+<text x="40" y="306" font-weight="bold" fill="#1e8449">Heimnetz – unverschlüsselt</text>
+
+<rect x="445" y="300" width="200" height="75" rx="6" fill="#fff" stroke="#777" stroke-dasharray="6,4"/>
+<text x="458" y="322" font-weight="bold">WEM-Modbus-Gateway</text>
+<text x="458" y="341" font-size="12" fill="#555">Modbus TCP für Leittechnik,</text>
+<text x="458" y="359" font-size="12" fill="#555">liest den WEM zyklisch</text>
+<rect x="665" y="300" width="190" height="75" rx="6" fill="#efe3f7" stroke="#7d3c98" stroke-width="2"/>
+<text x="678" y="322" font-weight="bold">Handy-App (app/)</text>
+<text x="678" y="341" font-size="12" fill="#555">Anzeige, Schaltknöpfe</text>
+<text x="678" y="359" font-size="12" fill="#555">Heizkreis / Warmwasser</text>
+<rect x="900" y="300" width="250" height="75" rx="6" fill="#fff" stroke="#1e8449"/>
+<text x="913" y="322" font-weight="bold">MQTT-Broker</text>
+<text x="913" y="341" font-size="12" fill="#555">optional: InfluxDB, Grafana,</text>
+<text x="913" y="359" font-size="12" fill="#555">Home Assistant</text>
+<line x1="857" y1="337" x2="898" y2="337" stroke="#1e8449" stroke-width="2" marker-start="url(#pg)" marker-end="url(#pg)"/>
+
+<rect x="30" y="420" width="790" height="400" rx="12" fill="#fdf6ec" stroke="#b9770e" stroke-width="2"/>
+<text x="805" y="442" font-weight="bold" fill="#b9770e" text-anchor="end">THERME (Weishaupt WTC)</text>
+<rect x="60" y="452" width="360" height="200" rx="6" fill="#fff" stroke="#333" stroke-width="1.5"/>
+<text x="75" y="476" font-weight="bold">WEM-SG Systemgerät (Knoten 1)</text>
+<text x="75" y="494" font-size="12" fill="#555">= Display / Bedieneinheit der Therme</text>
+<text x="75" y="516">• <tspan font-weight="bold">Heizkurve</tspan> → rechnet Vorlauf-Soll</text>
+<text x="75" y="536">• Heizkreis / Warmwasser, Zeitprogramme</text>
+<text x="75" y="556">• Fehlerspeicher (bisher nur per JSON)</text>
+<text x="75" y="576">• Datenlogger fürs Portal</text>
+<text x="75" y="596">• JSON-Schnittstelle (ESP, Gateway)</text>
+<text x="75" y="616">• SD-Karte, Netzwerkbuchse</text>
+<text x="75" y="638" font-size="12" fill="#555">Master des Systems</text>
+<rect x="480" y="452" width="320" height="200" rx="6" fill="#fff" stroke="#333" stroke-width="1.5"/>
+<text x="495" y="476" font-weight="bold">KESSEL – Feuerungsautomat</text>
+<text x="495" y="494" font-size="12" fill="#555">WEM-FA-G (Knoten 2)</text>
+<text x="495" y="516">• setzt den Vorlauf-Soll um</text>
+<text x="495" y="535">• Flamme, Gebläse, Gasventil</text>
+<text x="495" y="554">• Kesseltemperatur, Abgas, Volumenstrom</text>
+<text x="495" y="573">• Betriebsstunden, Brennerstarts</text>
+<text x="495" y="592">• eigene Grenzen (Abgas, Taktsperre,</text>
+<text x="495" y="611">  Pumpe), Flammenüberwachung</text>
+<text x="495" y="630">• fehlt der WEM: Fehler F 91</text>
+
+<line x1="420" y1="500" x2="478" y2="500" stroke="#2e86c1" stroke-width="2" marker-end="url(#pb)"/>
+<line x1="478" y1="535" x2="420" y2="535" stroke="#2e86c1" stroke-width="2" marker-end="url(#pb)"/>
+
+<!-- eine LAN-Buchse: Cloud, ESP-JSON und Gateway teilen sich das Kabel -->
+<polyline points="940,685 940,398 204,398" fill="none" stroke="#1e8449" stroke-width="2.5"/>
+<line x1="500" y1="375" x2="206" y2="396" stroke="#777" stroke-width="2" stroke-dasharray="6,4"/>
+<text x="330" y="372" fill="#777" font-size="11">LAN · JSON</text>
+<line x1="200" y1="398" x2="200" y2="450" stroke="#333" stroke-width="5"/>
+<circle cx="200" cy="398" r="7" fill="#333"/>
+<text x="190" y="394" font-size="11" font-weight="bold" fill="#333" text-anchor="end">eine LAN-Buchse,</text>
+<text x="190" y="408" font-size="11" fill="#333" text-anchor="end">ein Kabel</text>
+<text x="520" y="392" fill="#1e8449" font-size="12">HTTP / JSON über WLAN + Router – nur Schaltbefehle</text>
+
+<line x1="50" y1="745" x2="880" y2="745" stroke="#2e86c1" stroke-width="6"/>
+<line x1="240" y1="652" x2="240" y2="745" stroke="#2e86c1" stroke-width="3"/>
+<line x1="640" y1="652" x2="640" y2="745" stroke="#2e86c1" stroke-width="3"/>
+<text x="255" y="672" font-size="12" fill="#2e86c1">WEM schreibt in den Kessel:</text>
+<text x="255" y="688" font-size="12" fill="#2e86c1">Vorlauf-Soll, WW-Soll, Anforderung</text>
+<text x="255" y="708" font-size="12" fill="#2e86c1">WEM fragt den Kessel ~3×/s ab</text>
+<text x="255" y="724" font-size="12" fill="#2e86c1">(Abgas fürs Portal alle ~32 s)</text>
+
+<text x="60" y="775" font-weight="bold" fill="#2e86c1">CAN-Bus 50 kbit/s (CANopen-SDO/PDO) – unverschlüsselt</text>
+<text x="60" y="793" font-size="12" fill="#2e86c1">alle Teilnehmer hören alles · eine SDO-Antwort trägt max. 4 Byte</text>
+<text x="812" y="735" font-size="12" fill="#2e86c1">2 Drähte</text>
+
+<line x1="760" y1="745" x2="760" y2="845" stroke="#2e86c1" stroke-width="3" stroke-dasharray="7,4"/>
+<rect x="560" y="845" width="290" height="70" rx="6" fill="#fff" stroke="#777" stroke-dasharray="6,4"/>
+<text x="573" y="867" font-weight="bold">Raumfühler / Raumgerät</text>
+<text x="573" y="886" font-size="12" fill="#555">WEM-RF, WEM-RG · im Wohnraum</text>
+<text x="573" y="904" font-size="12" fill="#555">am selben CAN-Bus</text>
+
+<rect x="880" y="685" width="270" height="135" rx="6" fill="#efe3f7" stroke="#7d3c98" stroke-width="2"/>
+<text x="895" y="709" font-weight="bold">ESP-Brücke (WeAct CAN485)</text>
+<text x="895" y="729">• hört alles mit</text>
+<text x="895" y="749">• liest einzeln per SDO</text>
+<text x="895" y="769">• schaltet über WEM-JSON,</text>
+<text x="895" y="787">  prüft das Ergebnis am Bus</text>
+<text x="895" y="807" font-size="12" fill="#555">am Bus nur Leseanfragen</text>
+<line x1="1025" y1="685" x2="1025" y2="378" stroke="#1e8449" stroke-width="2.5" marker-start="url(#pg)" marker-end="url(#pg)"/>
+<text x="1035" y="520" fill="#1e8449" font-size="12">WLAN · MQTT</text>
+<text x="1035" y="536" fill="#1e8449" font-size="11">(IP wie LAN)</text>
+
+<rect x="30" y="832" width="510" height="104" rx="8" fill="#eafaf1" stroke="#1e8449"/>
+<text x="45" y="853" font-weight="bold" fill="#1e8449">JSON = ferngesteuerter CAN-Zugang über LAN (CanApiJson)</text>
+<text x="45" y="873" font-size="12">Die Anfrage nennt ein CAN-Objekt, z. B. Modul 07 · 2533/02 = Knoten 2.</text>
+<text x="45" y="888" font-size="12">Der WEM übersetzt, liest oder schreibt am Bus und antwortet als JSON.</text>
+<text x="45" y="903" font-size="12">Er ist Übersetzer und Türsteher: nur freigegebene Objekte,</text>
+<text x="45" y="918" font-size="12">am Kessel ist nichts schreibbar. Eigene Objekte beantwortet er direkt.</text>
+
+<rect x="40" y="950" width="40" height="18" rx="3" fill="none" stroke="#777" stroke-dasharray="6,4"/><text x="88" y="964">optional</text>
+<rect x="200" y="950" width="40" height="18" rx="3" fill="#efe3f7" stroke="#7d3c98" stroke-width="2"/><text x="248" y="964" font-weight="bold" fill="#7d3c98">aus diesem Repository</text>
+<line x1="560" y1="959" x2="600" y2="959" stroke="#2e86c1" stroke-width="6"/><text x="608" y="963">CAN-Bus</text>
+<circle cx="740" cy="959" r="6" fill="#c0392b"/><text x="753" y="963">durch den Router</text>
+<line x1="40" y1="988" x2="80" y2="988" stroke="#c0392b" stroke-width="3"/><text x="88" y="992">verschlüsselt</text>
+<line x1="200" y1="988" x2="240" y2="988" stroke="#1e8449" stroke-width="3"/><text x="248" y="992">Heimnetz, unverschlüsselt</text>
+<circle cx="565" cy="988" r="7" fill="#333"/><text x="580" y="992">eine LAN-Buchse am WEM</text>
+<text x="40" y="1018" font-size="11" fill="#555">Belege: CAN-Mitschnitt, Netzwerkmitschnitt, Verbindungstest zum Geräte-Server, Weishaupt-Anleitungen WTC-GW 15…32-B (83307201) und WEM-Modbus-Gateway (83325901).</text>
+</svg>
