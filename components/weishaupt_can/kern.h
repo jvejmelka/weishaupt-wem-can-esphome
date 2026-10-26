@@ -15,7 +15,9 @@
 //
 // Was hier steht, sendet nichts: die Klassen liefern nur, OB und WAS gesendet wird.
 #pragma once
+#include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -772,5 +774,56 @@ struct CanSchreiben {
     roh += r; roh += hex_bytes(d);
   }
 };
+
+// ---------------------------------------------------------------- Dateien der SD-Karte des WEM (ab v36)
+
+// Nur einfache Dateinamen (Buchstaben, Ziffern, _ . -), kein Pfad, nicht mit Punkt beginnend
+inline bool sd_name_ok(const std::string &n) {
+  if (n.empty() || n.size() > 40 || n[0] == '.') return false;
+  for (char c : n)
+    if (!(isalnum((unsigned char) c) || c == '_' || c == '.' || c == '-')) return false;
+  return true;
+}
+
+// Systemtabelle (systable.csv) kurz: Knoten, Firmware und Module, z. B.
+// "Knoten 01 (FW 428CC226): MI 01 SYSTEM0, MI 02 HZK0, ... | Knoten 02 (FW 334EE004): MI 07 WE0, ..."
+// Zeilen: Typ;Knoten;MI;MX;Version;...;Datei;Name;... - Typ 2 = Modul, Typ 4 = Firmware-Datei
+inline std::string systabelle_text(const std::string &csv) {
+  std::map<std::string, std::string> fw, mod;
+  std::vector<std::string> reihe;
+  size_t p = 0;
+  while (p < csv.size()) {
+    size_t e = csv.find('\n', p);
+    std::string z = csv.substr(p, e == std::string::npos ? std::string::npos : e - p);
+    p = e == std::string::npos ? csv.size() : e + 1;
+    if (!z.empty() && z.back() == '\r') z.pop_back();
+    std::vector<std::string> f;
+    size_t q = 0;
+    while (true) {
+      size_t r = z.find(';', q);
+      f.push_back(z.substr(q, r == std::string::npos ? std::string::npos : r - q));
+      if (r == std::string::npos) break;
+      q = r + 1;
+    }
+    if (f.size() < 9 || f[1].empty()) continue;
+    const std::string &kn = f[1];
+    if (std::find(reihe.begin(), reihe.end(), kn) == reihe.end()) reihe.push_back(kn);
+    if (f[0] == "4") {
+      fw[kn] = f[7].substr(0, f[7].find('.'));
+    } else if (f[0] == "2" && !f[2].empty()) {
+      std::string m = "MI " + f[2] + (f[3].empty() || f[3] == "00" ? "" : "/" + f[3]);
+      if (!f[8].empty()) m += " " + f[8];
+      mod[kn] += (mod[kn].empty() ? "" : ", ") + m;
+    }
+  }
+  std::string t;
+  for (auto &kn : reihe) {
+    if (!t.empty()) t += " | ";
+    t += "Knoten " + kn;
+    if (fw.count(kn)) t += " (FW " + fw[kn] + ")";
+    t += ": " + (mod.count(kn) ? mod[kn] : std::string("-"));
+  }
+  return t.empty() ? std::string("keine Module gefunden") : t;
+}
 
 }  // namespace wc

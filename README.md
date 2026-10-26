@@ -147,6 +147,7 @@ bleibt das bisherige WLAN. Letzter Rückweg ist der Notfall-Hotspot mit Captive 
 | `<gerät>/cmd/heizkreis` | `1`–`8`, Name (`Zeitprogramm 1`) oder `ZP1`; ab v27 auch JSON `{"id":17,"wert":"ZP2"}` | Heizkreis-Betriebsart (Warteschlange); jede Phase auf `befehl/status` |
 | `<gerät>/cmd/warmwasser` | `Ein` / `Aus`; ab v27 auch JSON `{"id":18,"wert":"Aus"}` | Warmwasser (Warteschlange); jede Phase auf `befehl/status` |
 | `<gerät>/cmd/lesen` | `01 2933 02` (Knoten Index Sub, hex), mit `B` am Ende per Block | ein Objekt lesen; lange Objekte automatisch in Teilstücken |
+| `<gerät>/cmd/sd_datei` | `systable.csv` | Datei von der SD-Karte des WEM holen (ab v36; Schalter „SD-Dateien abrufen“, ab Werk an; Sperrminute); Inhalt an `<gerät>/sd/<datei>`, ab 4 KB in Stücken `/1`, `/2` …; `systable.csv` wird ausgewertet (Text-Sensor „Systemtabelle“) |
 | `<gerät>/cmd/can_schreiben` | `01 2933 02 01` (Knoten Index Sub Wert [Länge 1/2/4], hex) oder `01 2xxx 00 = 11 22 33 …` | **ab Werk gesperrt** (Schalter „Freies CAN-Schreiben“); nur Knoten 01, nur Objekte 2000–5FFF |
 | `<gerät>/cmd/scan` | `01 2A00 2AFF 3` | Bereich lesen, Antworten in `<gerät>/canraw` |
 | `<gerät>/cmd/stop` | beliebig | Scan abbrechen |

@@ -59,6 +59,11 @@ JSON; **einzeln abrufen, nie im Takt**):
 | `systable.csv` | Systemtabelle: Knoten, Module (MI/MX), Firmware-Dateien je Modul |
 | `DLOG_ACT.CSV` | letzte Aufzeichnung des Datenloggers am Display: Kopfzeilen `DP-Nr`, `MI`, `MX`, `OX`, `OS`, `INT` (Takt in s, hex), `UNIT`, `FF` (Teiler), dann `Datum;Werte` – an der gemessenen Anlage eine alte Aufzeichnung, nicht die des Portals |
 | `JJMMTTxx.CSV` | Tagesdateien desselben Formats (laut BorgNumberOne) |
+| `FAC_TEST.TXT` | Werkstest der SD-Karte (laut BorgNumberOne) |
+
+Ein Inhaltsverzeichnis liefert der WEM nicht (`/sd/` → 404, Webserver „SEVENSTAX“); die Namen muss man
+kennen. Ab v36 holt das Board eine Datei auf Knopfdruck oder per `cmd/sd_datei` (Sperrminute wie beim
+Schalten) und wertet `systable.csv` aus, z. B. „Knoten 01 (FW 428CC226): MI 01 SYSTEM0, MI 02 HZK0, …“.
 
 ### CANopen in drei Sätzen
 

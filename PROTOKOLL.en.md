@@ -59,6 +59,11 @@ The WEM also serves other files from the SD card under `/sd/<file>` (same login 
 | `systable.csv` | system table: nodes, modules (MI/MX), firmware files per module |
 | `DLOG_ACT.CSV` | last recording of the display's data logger: header rows `DP-Nr`, `MI`, `MX`, `OX`, `OS`, `INT` (interval in s, hex), `UNIT`, `FF` (divisor), then `date;values` – on the measured installation an old recording, not the portal's |
 | `YYMMDDxx.CSV` | daily files in the same format (according to BorgNumberOne) |
+| `FAC_TEST.TXT` | factory test of the SD card (according to BorgNumberOne) |
+
+The WEM provides no directory listing (`/sd/` → 404, web server “SEVENSTAX”); the names must be known.
+From v36 the board fetches a file on a button press or via `cmd/sd_datei` (lock minute as for
+switching) and evaluates `systable.csv`, e.g. “Knoten 01 (FW 428CC226): MI 01 SYSTEM0, MI 02 HZK0, …”.
 
 ### CANopen in three sentences
 

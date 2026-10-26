@@ -158,6 +158,7 @@ the previous Wi-Fi is kept. The last fallback is the emergency hotspot with capt
 | `<gerät>/cmd/heizkreis` | `1`–`8`, name (`Zeitprogramm 1`) or `ZP1`; from v27 also JSON `{"id":17,"wert":"ZP2"}` | heating circuit operating mode (queued); every phase on `befehl/status` |
 | `<gerät>/cmd/warmwasser` | `Ein` / `Aus`; from v27 also JSON `{"id":18,"wert":"Aus"}` | DHW (queued); every phase on `befehl/status` |
 | `<gerät>/cmd/lesen` | `01 2933 02` (node index sub, hex), with `B` at the end by block | read one object; long objects automatically segmented |
+| `<gerät>/cmd/sd_datei` | `systable.csv` | fetch a file from the WEM's SD card (from v36; switch “SD-Dateien abrufen”, on by default; lock minute); content to `<gerät>/sd/<file>`, from 4 KB in pieces `/1`, `/2` …; `systable.csv` is evaluated (text sensor “Systemtabelle”) |
 | `<gerät>/cmd/can_schreiben` | `01 2933 02 01` (node index sub value [length 1/2/4], hex) or `01 2xxx 00 = 11 22 33 …` | **locked by default** (switch “Freies CAN-Schreiben”); node 01 only, objects 2000–5FFF only |
 | `<gerät>/cmd/scan` | `01 2A00 2AFF 3` | read a range, responses in `<gerät>/canraw` |
 | `<gerät>/cmd/stop` | anything | abort scan |

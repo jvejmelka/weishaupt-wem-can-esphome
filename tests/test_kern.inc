@@ -385,6 +385,19 @@ TEST(kern_can_schreiben) {
   PRUEFE(wc::hex_bytes(F{0x2F, 0x33}) == "2F33");
 }
 
+TEST(kern_sd_dateien) {
+  PRUEFE(wc::sd_name_ok("systable.csv") && wc::sd_name_ok("DLOG_ACT.CSV") && wc::sd_name_ok("26102601.CSV"));
+  PRUEFE(!wc::sd_name_ok("") && !wc::sd_name_ok("../etc") && !wc::sd_name_ok("a/b") && !wc::sd_name_ok(".x") && !wc::sd_name_ok("a b"));
+  std::string csv =
+      "4;01;;;226;;;428CC226.FWU;;\r\n6;01;;;224;226;003;428CC224.BDL;;\r\n3;;;;224;;003;H02__224.BIN;;\r\n"
+      "2;01;09;00;224;;003;D4280224.BIN;;0\r\n2;01;01;00;215;054;003;M01_0215.BIN;SYSTEM0;0\r\n"
+      "2;01;02;00;215;052;003;M02_0215.BIN;HZK0;1\r\n4;02;;;004;;;334EE004.FWU;;\r\n"
+      "2;02;07;00;220;000;001;M07_0220.BIN;WE0;0\r\n2;02;09;01;220;;001;D3340220.BIN;;0\r\n";
+  PRUEFE(wc::systabelle_text(csv) ==
+         "Knoten 01 (FW 428CC226): MI 09, MI 01 SYSTEM0, MI 02 HZK0 | Knoten 02 (FW 334EE004): MI 07 WE0, MI 09/01");
+  PRUEFE(wc::systabelle_text("quatsch") == "keine Module gefunden");
+}
+
 TEST(kern_scan_wie_v28) {
   for (const char *e : {"01 2A00 2A03 2", "01 2A00 2A00 0", "02 0 1 10", "01 2A03 2A00 1", "01 0 0 11", "80 0 1 0", "x"}) {
     alt::Scan sa; wc::Scan sn;

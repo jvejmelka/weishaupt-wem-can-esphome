@@ -1,6 +1,11 @@
 # Changelog – ESP-CAN-Brücke Weishaupt (WeAct CAN485, ESPHome)
 
 
+## v36 – 2026-10-26
+- **Dateien der SD-Karte des WEM holen** (Gruppe „SD-Karte des WEM“, Schalter „SD-Dateien abrufen“, ab Werk an): Feld + Knopf und `cmd/sd_datei`. Einmal pro Aufruf, Sperrminute wie beim Schalten, nur einfache Dateinamen. Inhalt per MQTT an `<gerät>/sd/<datei>` (ab 4 KB in Stücken), der Anfang in der Weboberfläche, höchstens 16 KB.
+- **Systemtabelle ausgewertet:** Text-Sensor „Systemtabelle (Knoten, Module)“ aus `systable.csv` – Knoten, Firmware, Module (MI/MX, Name). Test: `kern_sd_dateien`.
+- An der WTC-GW 15-B: `systable.csv` 665 Byte, „Knoten 01 (FW 428CC226): … MI 01 SYSTEM0, MI 02 HZK0, MI 03 WW0, MI 06 GATEWAY0, MI 05 TERMINAL0 | Knoten 02 (FW 334EE004): MI 07 WE0, MI 09/01, MI 0a/01 GroundModule“. Ein Inhaltsverzeichnis (`/sd/`) gibt es nicht.
+
 ## v35 – 2026-10-26
 - **Schreiben per CAN an den WEM, ab Werk AUS** (Gruppe „Schreiben per CAN“ in der Weboberfläche):
   - „Schalten per CAN statt JSON (Heizkreis, Warmwasser)“: App, `cmd/heizkreis`, `cmd/warmwasser` schreiben per SDO-Download `0x2933`/2 bzw. `0x2A20`/2 statt über JSON; Warteschlange, Sperrminute und Kontrolle am Bus unverändert.

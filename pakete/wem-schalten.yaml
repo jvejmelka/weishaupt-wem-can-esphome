@@ -37,6 +37,14 @@ web_server:
     - id: g_can_schreiben
       name: "Schreiben per CAN (experimentell, ab Werk aus)"
       sorting_weight: 46
+    - id: g_sd
+      name: "SD-Karte des WEM (Dateien lesen)"
+      sorting_weight: 47
+
+globals:
+  - id: sd_ok
+    type: bool
+    initial_value: 'false'
 
 http_request:
   timeout: 10s
@@ -53,6 +61,9 @@ esphome:
           });
           mqtt::global_mqtt_client->subscribe("${geraet}/cmd/can_schreiben", [](const std::string &t, const std::string &p) {
             id(can_frei_senden)->execute(p);
+          });
+          mqtt::global_mqtt_client->subscribe("${geraet}/cmd/sd_datei", [](const std::string &t, const std::string &p) {
+            id(sd_holen)->execute(p);
           });
           #endif
 
@@ -78,7 +89,7 @@ script:
             id(schalt_status).publish_state(a.quelle + ": " + zn + " abgelehnt - " + f);
           } else {
             uint32_t seit = millis() - id(wcan)->schalten.letzter_befehl;
-            int warten = (id(wem_senden).is_running() || id(can_senden).is_running() || id(can_frei_senden).is_running()) ? 60 :
+            int warten = (id(wem_senden).is_running() || id(can_senden).is_running() || id(can_frei_senden).is_running() || id(sd_holen).is_running()) ? 60 :
                          (id(wcan)->schalten.letzter_befehl != 0 && seit < 60000) ? (int) ((60000 - seit) / 1000) + 1 : 0;
             if (ziel == 2 && s.hat_wunsch[1] && warten == 0) warten = 60;   // Heizkreis geht vor
             s.annehmen(ziel, a, warten);
@@ -134,10 +145,10 @@ script:
           }
           auto &s = bf::schaltung();
           s.uhr = id(wcan)->unix_zeit();
-          std::string w = wc::warteschlange_text(s, (id(wem_senden).is_running() || id(can_senden).is_running() || id(can_frei_senden).is_running()) || sc.sperrminute(millis()), sc.frei_ab);
+          std::string w = wc::warteschlange_text(s, (id(wem_senden).is_running() || id(can_senden).is_running() || id(can_frei_senden).is_running() || id(sd_holen).is_running()) || sc.sperrminute(millis()), sc.frei_ab);
           if (id(warteschlange).state != w) id(warteschlange).publish_state(w);
           sc.senden = false;
-          if ((id(wem_senden).is_running() || id(can_senden).is_running() || id(can_frei_senden).is_running())) return;
+          if ((id(wem_senden).is_running() || id(can_senden).is_running() || id(can_frei_senden).is_running() || id(sd_holen).is_running())) return;
           if (sc.sperrminute(millis())) return;
           if (s.laeuft) {                          // Sicherung: WEM-Aufruf fertig, Befehl aber noch offen
             if (sc.ziel == 0) s.keine_rueckmeldung();
@@ -254,6 +265,71 @@ script:
                 id(can_roh).publish_state(w.roh);
                 id(protokoll_eintrag)->execute("CAN-Schreibbefehl: " + t);
                 ESP_LOGI("schreiben", "%s | roh: %s", t.c_str(), w.roh.c_str());
+
+  # Datei von der SD-Karte des WEM holen (ab v36): einmal pro Aufruf, Sperrminute wie beim Schalten
+  # (die Weboberflaeche des WEM ist empfindlich - nie im Takt). Inhalt per MQTT an
+  # ${geraet}/sd/<datei> (ab 4 KB in Stuecken <datei>/1, /2 ...), der Anfang in der Weboberflaeche;
+  # systable.csv wird zusaetzlich ausgewertet (Knoten, Firmware, Module).
+  - id: sd_holen
+    mode: single
+    parameters:
+      name: string
+    then:
+      - lambda: |-
+          id(sd_ok) = false;
+          auto &sc = id(wcan)->schalten;
+          if (!id(sd_erlaubt).state) { id(sd_antwort).publish_state("gesperrt - Schalter \"SD-Dateien abrufen\" ist aus"); return; }
+          if (!wc::sd_name_ok(name)) { id(sd_antwort).publish_state("ungueltiger Dateiname (nur Buchstaben, Ziffern, _ . -)"); return; }
+          if (id(wem_senden).is_running() || id(can_senden).is_running() || id(can_frei_senden).is_running() || sc.sperrminute(millis())) {
+            id(sd_antwort).publish_state("bitte warten - hoechstens ein WEM-Zugriff pro Minute"); return;
+          }
+          sc.letzter_befehl = millis() | 1;
+          uint32_t u = id(wcan)->unix_zeit();
+          if (u != 0) bf::status().setze(bf::status().frei_ab, u + 60);
+          id(sd_antwort).publish_state("hole " + name + " ...");
+          id(sd_ok) = true;
+      - if:
+          condition:
+            lambda: 'return id(sd_ok);'
+          then:
+            - http_request.get:
+                url: !lambda 'return "http://" + id(wem_ip).state + "/sd/" + name;'
+                request_headers:
+                  Authorization: !lambda |-
+                    static std::string h;
+                    std::string up = id(wem_user).state + ":" + id(wem_pass).state;
+                    h = "Basic " + esphome::base64_encode((const uint8_t *) up.data(), up.size());
+                    return h.c_str();
+                capture_response: true
+                max_response_buffer_size: 16384
+                on_response:
+                  then:
+                    - lambda: |-
+                        int code = response->status_code;
+                        std::string t = name + ": HTTP " + to_string(code) + ", " + to_string(body.size()) + " Byte";
+                        if (body.size() >= 16384) t += " (bei 16 KB abgeschnitten)";
+                        #ifdef USE_MQTT
+                        if (code == 200) {
+                          std::string basis = "${geraet}/sd/" + name;
+                          if (body.size() <= 4096) {
+                            mqtt::global_mqtt_client->publish(basis, body, 0, false);
+                          } else {
+                            int n = 0;
+                            for (size_t i = 0; i < body.size(); i += 4096)
+                              mqtt::global_mqtt_client->publish(basis + "/" + to_string(++n), body.substr(i, 4096), 0, false);
+                            t += ", MQTT in " + to_string(n) + " Stuecken";
+                          }
+                        }
+                        #endif
+                        id(sd_antwort).publish_state(t);
+                        id(sd_inhalt).publish_state(code == 200 ? body.substr(0, 1000) : std::string(""));
+                        std::string kl = name;
+                        for (auto &c : kl) c = tolower(c);
+                        if (code == 200 && kl == "systable.csv") id(systabelle).publish_state(wc::systabelle_text(body));
+                        ESP_LOGI("sd", "%s", t.c_str());
+                on_error:
+                  then:
+                    - lambda: 'id(sd_antwort).publish_state(name + ": WEM nicht erreichbar");'
 
   # Kontrolle am Bus nach einem Schaltbefehl (JSON oder CAN): der Bus entscheidet, nicht die
   # Antwort (auch nach einer leeren JSON-Antwort wurde schon geschaltet).
@@ -405,7 +481,7 @@ button:
       - lambda: |-
           auto &sc = id(wcan)->schalten;
           sc.senden = false;
-          if ((id(wem_senden).is_running() || id(can_senden).is_running() || id(can_frei_senden).is_running()) || sc.sperrminute(millis())) {
+          if ((id(wem_senden).is_running() || id(can_senden).is_running() || id(can_frei_senden).is_running() || id(sd_holen).is_running()) || sc.sperrminute(millis())) {
             id(schreib_antwort).publish_state("bitte warten - hoechstens ein Befehl pro Minute"); return;
           }
           // Format: MI MX OX OS WERT (hex), z.B. "03 00 2520 02 02" = Warmwasser Aus.
@@ -431,6 +507,13 @@ button:
       - script.execute:
           id: can_frei_senden
           eingabe: !lambda 'return id(can_eingabe).state;'
+  - platform: template
+    name: "SD-Datei holen"
+    web_server: { sorting_group_id: g_sd, sorting_weight: 3 }
+    on_press:
+      - script.execute:
+          id: sd_holen
+          name: !lambda 'return id(sd_eingabe).state;'
   - platform: template
     name: "Warteschlange leeren"
     web_server: { sorting_group_id: g_schalten, sorting_weight: 5 }
@@ -468,6 +551,14 @@ text:
     initial_value: !secret wem_pass
     mode: password
     max_length: 32
+  - platform: template
+    name: "SD-Datei (Name auf der SD-Karte des WEM)"
+    id: sd_eingabe
+    optimistic: true
+    mode: text
+    max_length: 40
+    initial_value: "systable.csv"
+    web_server: { sorting_group_id: g_sd, sorting_weight: 2 }
   - platform: template
     name: "CAN-Schreibbefehl (KN IDX SUB WERT [LAENGE] hex)"
     id: can_eingabe
@@ -508,6 +599,18 @@ text_sensor:
     name: "CAN-Schreibbefehl Rohdaten"
     id: can_roh
     web_server: { sorting_group_id: g_can_schreiben, sorting_weight: 6 }
+  - platform: template
+    name: "SD-Datei Antwort"
+    id: sd_antwort
+    web_server: { sorting_group_id: g_sd, sorting_weight: 4 }
+  - platform: template
+    name: "SD-Datei Inhalt (Anfang)"
+    id: sd_inhalt
+    web_server: { sorting_group_id: g_sd, sorting_weight: 5 }
+  - platform: template
+    name: "Systemtabelle (Knoten, Module)"
+    id: systabelle
+    web_server: { sorting_group_id: g_sd, sorting_weight: 6 }
 
 switch:
   - platform: template
@@ -522,4 +625,10 @@ switch:
     optimistic: true
     restore_mode: RESTORE_DEFAULT_OFF
     web_server: { sorting_group_id: g_can_schreiben, sorting_weight: 2 }
+  - platform: template
+    name: "SD-Dateien abrufen"
+    id: sd_erlaubt
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    web_server: { sorting_group_id: g_sd, sorting_weight: 1 }
 
