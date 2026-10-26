@@ -3,6 +3,7 @@
 
 ## v37 – 2026-10-26
 - **`status/json` → `schalten.weg`**: `"can"` oder `"json"`, je nach Schalter „Schalten per CAN“.
+- **App:** Die letzten Werte der Zusatzanzeigen überleben einen Neustart der App (Datei `/data/zusatz-werte.json`, höchstens alle 30 s geschrieben, beim Beenden sofort) – nach einem Update stehen sie gleich wieder da statt „--“, sofern sie jünger als 10 min sind.
 - **App:** Der Fortschritt eines Schaltbefehls zeigt „an WEM gesendet (CAN)“ bzw. „(JSON)“ statt immer „(JSON)“; Ablehnung heißt „abgelehnt (WEM)“ statt „CM=05“ (gilt für beide Wege).
 
 ## v36 – 2026-10-26

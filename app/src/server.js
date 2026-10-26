@@ -85,6 +85,28 @@ const zusatzWerte = new Map();        // topic -> { v: string, t: ms }
 let zusatzAbos = new Set();          // abonnierte fremde Topics
 let zusatzAlle = new Set();          // alle Topics der Liste (auch eigene des Boards)
 
+// Die letzten Zusatzwerte ueberleben einen Neustart der App (z. B. ein Update): sie liegen in /data
+// und werden beim Start eingelesen. Was aelter als ZUSATZ_MAX_ALTER_MS ist, blendet zusatzWert()
+// ohnehin aus. Keine Datenbank noetig - geht ueberall, wo /data beschreibbar ist.
+const ZUSATZ_DATEI = process.env.ZUSATZ_FILE || '/data/zusatz-werte.json';
+try {
+  const o = JSON.parse(fs.readFileSync(ZUSATZ_DATEI, 'utf8'));
+  for (const [t, w] of Object.entries(o || {}))
+    if (w && typeof w.v === 'string' && Number.isFinite(w.t)) zusatzWerte.set(t, { v: w.v, t: w.t });
+  console.log(`${zusatzWerte.size} Zusatzwert(e) aus ${ZUSATZ_DATEI} geladen`);
+} catch { /* keine Datei = frischer Start */ }
+function zusatzSichernJetzt() {
+  try {
+    fs.mkdirSync(path.dirname(ZUSATZ_DATEI), { recursive: true });
+    fs.writeFileSync(ZUSATZ_DATEI, JSON.stringify(Object.fromEntries(zusatzWerte)));
+  } catch (e) { console.log(`Zusatzwerte nicht schreibbar: ${e.message}`); }
+}
+let zusatzSichernGeplant = null;      // hoechstens alle 30 s schreiben
+function zusatzSichern() {
+  if (!zusatzSichernGeplant) zusatzSichernGeplant = setTimeout(() => { zusatzSichernGeplant = null; zusatzSichernJetzt(); }, 30000);
+}
+for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { zusatzSichernJetzt(); process.exit(0); });
+
 function zusatzUebernehmen(txt) {
   let liste = [];
   try {
@@ -150,6 +172,7 @@ client.on('message', (topic, payload) => {
   // fremde Topics der Zusatzliste NICHT in "werte" (dort wuerde z.B. "status" ueberschrieben)
   if (zusatzAlle.has(topic)) {
     zusatzWerte.set(topic, { v: payload.toString(), t: Date.now() });
+    zusatzSichern();
     if (!topic.startsWith(`${GERAET}/`)) return;
   }
   const teile = topic.split('/');
