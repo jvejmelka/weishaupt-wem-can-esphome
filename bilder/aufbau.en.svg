@@ -90,10 +90,10 @@
 <line x1="50" y1="745" x2="880" y2="745" stroke="#2e86c1" stroke-width="6"/>
 <line x1="240" y1="652" x2="240" y2="745" stroke="#2e86c1" stroke-width="3"/>
 <line x1="640" y1="652" x2="640" y2="745" stroke="#2e86c1" stroke-width="3"/>
-<text x="255" y="672" font-size="12" fill="#2e86c1">WEM writes to the boiler:</text>
+<text x="255" y="672" font-size="12" fill="#2e86c1">WEM writes to the boiler every ~5 s:</text>
 <text x="255" y="688" font-size="12" fill="#2e86c1">flow setpoint, DHW setpoint, demand</text>
-<text x="255" y="708" font-size="12" fill="#2e86c1">WEM polls the boiler ~3×/s</text>
-<text x="255" y="724" font-size="12" fill="#2e86c1">(flue gas for the portal every ~32 s)</text>
+<text x="255" y="708" font-size="12" fill="#2e86c1">WEM polls the boiler ~3×/s;</text>
+<text x="255" y="724" font-size="12" fill="#2e86c1">boiler writes readings into the WEM</text>
 
 <text x="60" y="775" font-weight="bold" fill="#2e86c1">CAN bus 50 kbit/s (CANopen SDO/PDO) – unencrypted</text>
 <text x="60" y="793" font-size="12" fill="#2e86c1">every node hears everything · one SDO reply carries max. 4 bytes</text>
