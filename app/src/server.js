@@ -16,6 +16,8 @@
 // wurde dadurch mehrfach bis zum Stromlos-Machen gesperrt.
 
 import express from 'express';
+import crypto from 'node:crypto';
+import { execFile } from 'node:child_process';
 import path from 'path';
 import fs from 'fs';
 import mqtt from 'mqtt';
@@ -210,25 +212,78 @@ function tokensSichern() {
   } catch (e) { console.log(`Token-Datei nicht schreibbar: ${e.message}`); }
 }
 function generateToken() {
-  return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+  return crypto.randomBytes(32).toString('hex'); // 21.10.: vorher Math.random
 }
 function authMiddleware(req, res, next) {
   if (req.path === '/api/login') return next();
   const token = req.headers['x-app-token'] || '';
-  if (!sessionTokens.has(token)) return res.status(401).json({ error: 'Nicht autorisiert' });
+  if (!sessionTokens.has(token)) {
+    if (req.method === 'POST') console.log(`${req.method} ${req.path} ohne gueltigen Token von ${clientIp(req)}`);
+    return res.status(401).json({ error: 'Nicht autorisiert' });
+  }
+  if (req.method === 'POST') console.log(`${req.method} ${req.path} von ${clientIp(req)}`); // Schaltbefehle sichtbar machen
   next();
+}
+
+// ── Login-Schutz (21.10.2026) ─────────────────────────────────
+// Fehlversuche je Adresse: 5 in 15 min -> 15 min Sperre fuer diese Adresse. Jeder Fehlversuch ins Journal,
+// ab 20 am Tag eine Mail an den Betreiber (sendmail -> Host-Relay). Erfolgreiche Logins und vorhandene Tokens
+// sind davon unberuehrt.
+// Einstellbar ueber Umgebungsvariablen (Vorgaben in Klammern)
+const zahlEnv = (n, v) => { const x = Number(process.env[n]); return Number.isFinite(x) && x > 0 ? x : v; };
+const FEHL_MAX = zahlEnv('LOGIN_FEHL_MAX', 5);                           // Fehlversuche je IP (5) ...
+const FEHL_FENSTER_MS = zahlEnv('LOGIN_FENSTER_MIN', 15) * 60 * 1000;    // ... innerhalb von (15) min
+const SPERRE_MS = zahlEnv('LOGIN_SPERRE_MIN', 15) * 60 * 1000;           // Sperre (15) min
+const MAIL_AB = zahlEnv('LOGIN_MAIL_AB', 20);                            // Mail ab (20) Fehlversuchen am Tag
+const MAIL_AN = process.env.ALARM_MAIL || '';            // leer = keine Mail, nur Journal
+const fehlversuche = new Map(); // ip -> { zeiten: [], bis: 0 }
+let tagesFehler = 0, tagesDatum = '', mailGeschickt = false;
+function clientIp(req) {
+  const xf = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  return (xf || req.socket.remoteAddress || '?').replace(/^::ffff:/, '');
+}
+function gesperrt(ip) { const e = fehlversuche.get(ip); return !!(e && e.bis > Date.now()); }
+function fehlversuch(ip, user) {
+  const jetzt = Date.now();
+  if (fehlversuche.size > 1000) for (const [k, v] of fehlversuche) if (v.bis < jetzt && !v.zeiten.some(t => jetzt - t < FEHL_FENSTER_MS)) fehlversuche.delete(k);
+  const e = fehlversuche.get(ip) || { zeiten: [], bis: 0 };
+  e.zeiten = e.zeiten.filter(t => jetzt - t < FEHL_FENSTER_MS); e.zeiten.push(jetzt);
+  const sperre = e.zeiten.length >= FEHL_MAX;
+  if (sperre) { e.bis = jetzt + SPERRE_MS; e.zeiten = []; }
+  fehlversuche.set(ip, e);
+  const heute = new Date().toISOString().slice(0, 10);
+  if (heute !== tagesDatum) { tagesDatum = heute; tagesFehler = 0; mailGeschickt = false; }
+  tagesFehler++;
+  console.log(`Login fehlgeschlagen von ${ip} (Benutzer "${String(user || '').slice(0, 3)}…"${sperre ? ', GESPERRT 15 min' : ''}, heute ${tagesFehler})`);
+  if (MAIL_AN && tagesFehler >= MAIL_AB && !mailGeschickt) {
+    mailGeschickt = true;
+    const text = `Subject: [heizung] ${tagesFehler} fehlgeschlagene Logins heute\nTo: ${MAIL_AN}\n\nZuletzt von ${ip}.\nDetails: journalctl -u heizung-app | grep "Login fehlgeschlagen"\n`;
+    try {
+      const p = execFile('/usr/sbin/sendmail', ['-t'], err => { if (err) console.log(`Alarm-Mail fehlgeschlagen: ${err.message}`); });
+      p.stdin.end(text);
+    } catch (err) { console.log(`Alarm-Mail fehlgeschlagen: ${err.message}`); }
+  }
+}
+// Vergleich in konstanter Zeit (ueber Hashes, damit die Laenge nichts verraet)
+function gleich(a, b) {
+  const h = x => crypto.createHash('sha256').update(String(x ?? '')).digest();
+  return crypto.timingSafeEqual(h(a), h(b));
 }
 
 app.use(express.static(path.join(__dirname, '..', 'public')));
 app.use(authMiddleware);
 
 app.post('/api/login', (req, res) => {
+  const ip = clientIp(req);
+  if (gesperrt(ip)) return res.status(429).json({ error: 'Zu viele Fehlversuche - bitte 15 Minuten warten' });
   const { user, pass } = req.body || {};
-  if (user === APP_USERNAME && pass === APP_PASSWORD) {
+  if (gleich(user, APP_USERNAME) && gleich(pass, APP_PASSWORD)) {
     const token = generateToken();
     sessionTokens.add(token); tokensSichern();
+    console.log(`Login erfolgreich von ${ip}`);
     return res.json({ token });
   }
+  fehlversuch(ip, user);
   res.status(401).json({ error: 'Falsche Zugangsdaten' });
 });
 

@@ -3,6 +3,7 @@
 
 ## v37 – 2026-10-26
 - **`status/json` → `schalten.weg`**: `"can"` oder `"json"`, je nach Schalter „Schalten per CAN“.
+- **App: Login-Schutz** (seit 21.10. im Betrieb, jetzt im Repo): Anmelde-Tokens aus `crypto.randomBytes`, Vergleich in konstanter Zeit, nach 5 Fehlversuchen je IP in 15 min 15 min Sperre (HTTP 429), Fehlversuche und Schaltbefehle mit IP im Protokoll, optional Mail an `ALARM_MAIL` ab 20 Fehlversuchen am Tag. Alles über Umgebungsvariablen einstellbar (`LOGIN_FEHL_MAX`, `LOGIN_FENSTER_MIN`, `LOGIN_SPERRE_MIN`, `LOGIN_MAIL_AB`, `ALARM_MAIL`; ohne `ALARM_MAIL` keine Mail).
 - **App:** Die letzten Werte der Zusatzanzeigen überleben einen Neustart der App (Datei `/data/zusatz-werte.json`, höchstens alle 30 s geschrieben, beim Beenden sofort) – nach einem Update stehen sie gleich wieder da statt „--“, sofern sie jünger als 10 min sind.
 - **App:** Der Fortschritt eines Schaltbefehls zeigt „an WEM gesendet (CAN)“ bzw. „(JSON)“ statt immer „(JSON)“; Ablehnung heißt „abgelehnt (WEM)“ statt „CM=05“ (gilt für beide Wege).
 
