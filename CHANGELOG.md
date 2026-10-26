@@ -1,6 +1,10 @@
 # Changelog – ESP-CAN-Brücke Weishaupt (WeAct CAN485, ESPHome)
 
 
+## v37 – 2026-10-26
+- **`status/json` → `schalten.weg`**: `"can"` oder `"json"`, je nach Schalter „Schalten per CAN“.
+- **App:** Der Fortschritt eines Schaltbefehls zeigt „an WEM gesendet (CAN)“ bzw. „(JSON)“ statt immer „(JSON)“; Ablehnung heißt „abgelehnt (WEM)“ statt „CM=05“ (gilt für beide Wege).
+
 ## v36 – 2026-10-26
 - **Dateien der SD-Karte des WEM holen** (Gruppe „SD-Karte des WEM“, Schalter „SD-Dateien abrufen“, ab Werk an): Feld + Knopf und `cmd/sd_datei`. Einmal pro Aufruf, Sperrminute wie beim Schalten, nur einfache Dateinamen. Inhalt per MQTT an `<gerät>/sd/<datei>` (ab 4 KB in Stücken), der Anfang in der Weboberfläche, höchstens 16 KB.
 - **Systemtabelle ausgewertet:** Text-Sensor „Systemtabelle (Knoten, Module)“ aus `systable.csv` – Knoten, Firmware, Module (MI/MX, Name). Test: `kern_sd_dateien`.

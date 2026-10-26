@@ -120,7 +120,7 @@ const LAEUFT = new Set(['gesendet', 'pruefe_bus']);
 const OFFEN = new Set(['angenommen', 'vorgemerkt']);
 const ENDE_FEHLER = new Set(['gescheitert', 'abgelehnt']);
 function kurzGrund(b) {
-  const g = { cm05: 'abgelehnt (CM=05)', nicht_uebernommen: 'nicht übernommen', keine_rueckmeldung: 'keine Rückmeldung',
+  const g = { cm05: 'abgelehnt (WEM)', nicht_uebernommen: 'nicht übernommen', keine_rueckmeldung: 'keine Rückmeldung',
               geleert: 'verworfen', ungueltig: 'ungültig', ersetzt: 'ersetzt' }[b.grund];
   return g || b.grund || b.phase;
 }
@@ -193,8 +193,8 @@ function zeigeWuensche(data) {
                hkIst, vorgabeStand('hk', hkIst, data));
   zeigeKnoepfe([[document.getElementById('wwEin'), 'Ein'], [document.getElementById('wwAus'), 'Aus']],
                wwIst, vorgabeStand('ww', wwIst, data));
-  zeigeFortschritt(document.getElementById('hkFort'), fortschrittStand('hk', data));
-  zeigeFortschritt(document.getElementById('wwFort'), fortschrittStand('ww', data));
+  zeigeFortschritt(document.getElementById('hkFort'), fortschrittStand('hk', data), data);
+  zeigeFortschritt(document.getElementById('wwFort'), fortschrittStand('ww', data), data);
 }
 // eigene Befehle vergessen, sobald das Board sie abgeschlossen gemeldet hat (oder nach 60 s ohne Meldung)
 function eigeneAufraeumen(data) {
@@ -208,14 +208,20 @@ function eigeneAufraeumen(data) {
 
 // ── Fortschritt eines Schaltbefehls ───────────────────────────
 // Zeile unter den Knoepfen des betroffenen Blocks, allein aus der Phase des Befehls:
-//   vorgemerkt (ab HH:MM) → an WEM gesendet (JSON) → Bus liest nach → bestätigt ✓ / ✗ Grund
+//   vorgemerkt (ab HH:MM) → an WEM gesendet (JSON bzw. CAN, aus schalten.weg) → Bus liest nach → bestätigt ✓ / ✗ Grund
 // Nach dem Abschluss 1 min stehen lassen (Zeit des Boards, sonst erste Sichtung), ohne Befehl keine Zeile.
 // Heizkreis und Warmwasser haben je eine eigene Zeile - ein zweiter Befehl verdraengt den ersten nicht.
 const STEHEN_MS = 60000;
 // Notbremse: das Board schliesst einen gesendeten Befehl nach spaetestens ~70 s ab (Sperrminute + 10 s);
 // ohne Abschluss 2 min nach der letzten Phase ist er verwaist. Vorgemerkte erst, wenn ihre Wartezeit vorbei ist.
 const VERWAIST_MS = 120000;
-const SCHRITTE = ['vorgemerkt', 'an WEM gesendet (JSON)', 'Bus liest nach', 'bestätigt'];
+const SCHRITTE = ['vorgemerkt', 'an WEM gesendet', 'Bus liest nach', 'bestätigt'];
+// Weg zum WEM: Board meldet schalten.weg ('can' ab v37, sonst 'json')
+function schrittText(i, data) {
+  if (i !== 1) return SCHRITTE[i];
+  const weg = data && data.schalten && data.schalten.weg === 'can' ? 'CAN' : 'JSON';
+  return `${SCHRITTE[1]} (${weg})`;
+}
 const gesehen = {};           // id+phase -> erste Sichtung (fuer Befehle ohne Board-Uhrzeit)
 function fortschrittStand(ziel, data) {
   const b = befehlFuer(ziel, data);
@@ -241,13 +247,13 @@ function fortschrittStand(ziel, data) {
   return { schritt: 3, ok: false, kurz: kurzGrund(b) + steht,
            fehlerBei: b.grund === 'cm05' ? 1 : (b.grund === 'geleert' || b.grund === 'ungueltig') ? 0 : 3 };
 }
-function zeigeFortschritt(el, f) {
+function zeigeFortschritt(el, f, data) {
   el.innerHTML = '';
   if (!f) { el.classList.add('hidden'); return; }
   el.classList.remove('hidden');
   const letzter = f.schritt === 3 && !f.ok ? f.fehlerBei : 3;
   for (let i = 0; i <= letzter; i++) {
-    let text = SCHRITTE[i], cls = 'offen';
+    let text = schrittText(i, data), cls = 'offen';
     if (i === 0 && f.ab) text += ` ab ${f.ab}`;
     if (f.schritt < 3) cls = i < f.schritt ? 'fertig' : i === f.schritt ? 'aktiv' : 'offen';
     else if (f.ok) { cls = i < 3 ? 'fertig' : 'ok'; if (i === 3) text += ' ✓'; }

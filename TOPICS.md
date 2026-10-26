@@ -41,6 +41,7 @@ Zeiten sind Unix-Sekunden der Board-Uhr (SNTP), `null` solange die Uhr nicht ges
     "laufend": null,
     "warteschlange": [],
     "frei_ab": null,
+    "weg": "json",
     "letzte": { "heizkreis": null, "warmwasser": null }
   },
   "bus": { "lebt": true, "anlaufpause": false, "letzter_frame_s": 0 }
@@ -62,6 +63,7 @@ Zeiten sind Unix-Sekunden der Board-Uhr (SNTP), `null` solange die Uhr nicht ges
 | `schalten.laufend` | Befehl, der gerade am WEM bzw. in der Bus-Kontrolle ist (Aufbau wie unten) | – |
 | `schalten.warteschlange` | vorgemerkte Befehle (höchstens einer je Ziel, Heizkreis zuerst) | – |
 | `schalten.frei_ab` | ab wann der nächste Befehl gesendet werden darf (Sperrminute), sonst `null` | – |
+| `schalten.weg` | ab v37: `"can"`, wenn Schaltbefehle per CAN an den WEM gehen (Schalter „Schalten per CAN“), sonst `"json"` | – |
 | `schalten.letzte.heizkreis` / `.warmwasser` | zuletzt abgeschlossener Befehl je Ziel (bestätigt, gescheitert oder abgelehnt; ein ersetzter zählt nicht) | – |
 | `bus.lebt` | letzter Frame < 30 s | – |
 | `bus.anlaufpause` | Bus lebt, eigene Leseanfragen warten aber noch (nach Start 1 min, nach Busausfall 10 min) | – |

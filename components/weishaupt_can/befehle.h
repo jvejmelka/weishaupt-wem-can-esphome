@@ -322,6 +322,7 @@ struct Status {
   int kesselstatus = -1;      // PDO 0x182
   bool bus_lebt = false, anlaufpause = false;
   uint32_t frei_ab = 0;       // Unix-Zeit, ab der der naechste Schaltbefehl gesendet werden darf
+  bool weg_can = false;       // ab v37: Schaltbefehle gehen per CAN statt JSON an den WEM
   // Anlass der naechsten Lesung (wer sie ausgeloest hat) - wird bei der Antwort uebernommen
   std::string grund_hk, grund_ww;
   bool geaendert = true;
@@ -406,6 +407,7 @@ inline std::string status_json(const Status &s, const Schaltung &sch, const std:
   JsonArray wl = sc["warteschlange"].to<JsonArray>();
   for (int z = 1; z <= 2; z++) if (sch.hat_wunsch[z]) befehl_objekt(wl.add<JsonObject>(), sch.wunsch[z]);
   setze_zeit(sc, "frei_ab", (s.frei_ab != 0 && jetzt != 0 && s.frei_ab > jetzt) ? s.frei_ab : 0);
+  sc["weg"] = s.weg_can ? "can" : "json";
   JsonObject le = sc["letzte"].to<JsonObject>();
   for (int z = 1; z <= 2; z++) {
     if (sch.hat_letzte[z]) befehl_objekt(le[ziel_name(z)].to<JsonObject>(), sch.letzte[z]);

@@ -143,6 +143,7 @@ script:
             if (t.is_valid()) { t = ESPTime::from_epoch_local(t.timestamp + 60); sc.frei_ab = t.strftime("%H:%M:%S"); }
             else sc.frei_ab = "";
           }
+          bf::status().setze(bf::status().weg_can, (bool) id(can_schalten).state);   // fuer status/json und App
           auto &s = bf::schaltung();
           s.uhr = id(wcan)->unix_zeit();
           std::string w = wc::warteschlange_text(s, (id(wem_senden).is_running() || id(can_senden).is_running() || id(can_frei_senden).is_running() || id(sd_holen).is_running()) || sc.sperrminute(millis()), sc.frei_ab);
