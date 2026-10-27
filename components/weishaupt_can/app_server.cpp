@@ -27,6 +27,7 @@
 #endif
 #include <esp_system.h>
 #include <esp_heap_caps.h>
+#include <esp_flash.h>
 #include <lwip/sockets.h>
 
 #ifdef USE_WC_EXPERTEN
@@ -41,6 +42,8 @@ namespace weishaupt_can {
 
 static const char *const TAG = "app";
 
+static std::string neues_token();
+
 // Werte des Boards, die /api/status und /api/energie brauchen (object_id wie im MQTT-Topic)
 static const char *const ZAHLEN[] = {
     "aussentemperatur", "kesseltemperatur", "abgastemperatur", "ruecklauf", "vorlauf_vpt", "vorlauf_heizkreis",
@@ -52,7 +55,9 @@ static const char *const TEXTE[] = {"warmwasser_aktiv", "warmwasser_betriebsart"
 // Schluessel im Flash (fest, wie die Globals der anderen Pakete)
 static const uint32_t TOKEN_SCHLUESSEL = 0x41505054;   // "APPT" Sitzungs-Token der App
 static const uint32_t ADMIN_SCHLUESSEL = 0x41505041;   // "APPA" Sitzungs-Token der Einstellungsseite
-static const uint32_t ZUGANG_SCHLUESSEL = 0x4150505A;  // "APPZ" Zugangsdaten
+static const uint32_t ZUGANG_SCHLUESSEL = 0x4150505A;  // "APPZ" Zugangsdaten v39-v41 (Klartext, nur lesen)
+static const uint32_t ZUGANG2_SCHLUESSEL = 0x41505A32; // "APZ2" Zugangsdaten ab v42 (Hashes, drei Stufen)
+static const uint32_t TOKEN_TAGE = 90;                 // App-Token nach so vielen Tagen erneuern
 
 // Einstellungen der Einstellungsseite: Gruppe, Name des Schalters bzw. der Zahl auf dem Board.
 // Was es auf dem Board nicht gibt (Paket nicht eingebunden), fehlt einfach.
@@ -88,18 +93,20 @@ std::string AppServer::token_laden_(ESPPreferenceObject &pref, uint32_t schluess
 }
 
 void AppServer::zugang_speichern_() {
-  ap::Zugang z;
+  zg::Zugang2 z;
   { std::lock_guard<std::mutex> g(this->sperre_); z = this->zugang_; }
   this->zugang_pref_.save(&z);
   global_preferences->sync();
 }
+
+void AppServer::salz_(uint8_t s[16]) const { random_bytes(s, 16); }
 
 void AppServer::web_passwort_setzen_() {
 #ifdef USE_WEBSERVER_AUTH
   std::string pw;
   {
     std::lock_guard<std::mutex> g(this->sperre_);
-    pw = this->zugang_.admin_pw;
+    pw = this->zugang_.experte;   // ESPHome-Oberflaeche und /update = Expertenstufe
   }
   if (pw.empty()) {
     // noch nicht eingerichtet: Weboberflaeche mit Zufallspasswort sperren (kein bekanntes Standardpasswort)
@@ -124,21 +131,33 @@ void AppServer::setup() {
   this->token_ = this->token_laden_(this->token_pref_, TOKEN_SCHLUESSEL, false);
   this->admin_token_ = this->token_laden_(this->admin_pref_, ADMIN_SCHLUESSEL, false);
 
-  // Zugangsdaten: gespeicherte gelten; sonst die Vorgaben aus der YAML; fehlen auch die -> Ersteinrichtung
-  this->zugang_pref_ = global_preferences->make_preference<ap::Zugang>(ZUGANG_SCHLUESSEL);
-  ap::Zugang z;
-  if (!this->zugang_pref_.load(&z) || !ap::vollstaendig(z)) {
-    z = ap::Zugang{};
-    ap::kopieren(z.benutzer, sizeof(z.benutzer), this->benutzer_.substr(0, 32));
-    ap::kopieren(z.app_pw, sizeof(z.app_pw), this->passwort_.substr(0, 64));
-    ap::kopieren(z.admin_pw, sizeof(z.admin_pw), this->admin_.substr(0, 64));
-    if (ap::vollstaendig(z)) {
+  // Zugangsdaten: gespeicherte (APZ2) gelten; sonst die aus v39-v41 (APPZ, Klartext) uebernehmen;
+  // sonst die Vorgaben aus der YAML; fehlt dann noch etwas -> Ersteinrichtung
+  this->zugang_pref_ = global_preferences->make_preference<zg::Zugang2>(ZUGANG2_SCHLUESSEL);
+  zg::Zugang2 z;
+  if (!this->zugang_pref_.load(&z) || !zg::vollstaendig(z)) {
+    z = zg::Zugang2{};
+    std::string b = this->benutzer_, a = this->passwort_, m = this->admin_, x = this->experte_, t;
+    ap::Zugang alt;
+    auto alt_pref = global_preferences->make_preference<ap::Zugang>(ZUGANG_SCHLUESSEL);
+    if (alt_pref.load(&alt) && ap::vollstaendig(alt)) {
+      b = alt.benutzer; a = alt.app_pw; m = alt.admin_pw; t = alt.theme;
+      if (x.empty()) x = alt.admin_pw;     // Expertenstufe = bisherige Weboberflaeche
+      ESP_LOGI(TAG, "Zugangsdaten aus v41 uebernommen (jetzt als Hash)");
+    }
+    uint8_t salz[16];
+    ap::kopieren(z.benutzer, sizeof(z.benutzer), b.substr(0, 32));
+    if (!a.empty()) { this->salz_(salz); zg::setzen(z.app, a, salz); }
+    if (!m.empty()) { this->salz_(salz); zg::setzen(z.admin, m, salz); }
+    ap::kopieren(z.experte, sizeof(z.experte), x.substr(0, 64));
+    ap::kopieren(z.theme, sizeof(z.theme), t);
+    if (zg::vollstaendig(z)) {
       this->zugang_pref_.save(&z);
-      ESP_LOGI(TAG, "Zugangsdaten aus der Konfiguration uebernommen");
+      global_preferences->sync();
     }
   }
   this->zugang_ = z;
-  this->einrichtung_noetig_ = !ap::vollstaendig(z);
+  this->einrichtung_noetig_ = !zg::vollstaendig(z);
   if (this->einrichtung_noetig_) ESP_LOGW(TAG, "keine Zugangsdaten - Ersteinrichtung unter /app");
   this->web_passwort_setzen_();
   this->einstellungen_sammeln_();
@@ -185,6 +204,27 @@ void AppServer::loop() {
   uint32_t jetzt = millis();
   if (jetzt - this->zuletzt_ < 1000 && this->zuletzt_ != 0) return;
   this->zuletzt_ = jetzt | 1;
+  // App-Token nach TOKEN_TAGE erneuern (alle Geraete melden sich neu an); ohne Uhrzeit nichts tun
+  uint32_t unix = this->wc_->unix_zeit();
+  if (unix != 0 && !this->einrichtung_noetig_) {
+    bool speichern = false, neu = false;
+    {
+      std::lock_guard<std::mutex> g(this->sperre_);
+      if (this->zugang_.token_seit == 0) { this->zugang_.token_seit = unix; speichern = true; }
+      else if (unix - this->zugang_.token_seit > TOKEN_TAGE * 86400UL) {
+        this->token_ = neues_token();
+        this->zugang_.token_seit = unix;
+        speichern = neu = true;
+      }
+    }
+    if (neu) {
+      std::array<char, 65> t{};
+      { std::lock_guard<std::mutex> g(this->sperre_); ap::kopieren(t.data(), t.size(), this->token_); }
+      this->token_pref_.save(&t);
+      ESP_LOGI(TAG, "App-Token nach %u Tagen erneuert - Geraete melden sich neu an", (unsigned) TOKEN_TAGE);
+    }
+    if (speichern) this->zugang_speichern_();
+  }
   this->zusatz_abonnieren_();
   this->zusammenstellen_();
 }
@@ -274,7 +314,12 @@ std::string AppServer::einstellungen_json_() {
   {
     std::lock_guard<std::mutex> g(this->sperre_);
     o["benutzer"] = this->zugang_.benutzer;
-    o["darstellung"] = ap::theme(this->zugang_);
+    o["darstellung"] = ap::theme(this->zugang_.theme);
+    o["experte_gesetzt"] = this->zugang_.experte[0] != 0;
+    uint32_t jetzt = millis();
+    if (this->extern_immer_) o["experte_extern_min"] = -1;
+    else if (this->extern_bis_ != 0 && (int32_t) (this->extern_bis_ - jetzt) > 0) o["experte_extern_min"] = (this->extern_bis_ - jetzt) / 60000 + 1;
+    else o["experte_extern_min"] = 0;
   }
   o["firmware"] = this->firmware_;
   o["app_version"] = ap::APP_VERSION;
@@ -351,6 +396,11 @@ std::string AppServer::info_json_() {
   o["speicher_frei"] = esp_get_free_heap_size();
   o["speicher_min"] = esp_get_minimum_free_heap_size();
   o["groesster_block"] = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+  uint32_t fl = 0, fl_echt = 0;
+  esp_flash_get_size(nullptr, &fl);
+  esp_flash_get_physical_size(nullptr, &fl_echt);
+  o["flash"] = fl;             // so ist die Firmware gebaut
+  o["flash_echt"] = fl_echt;   // so viel hat der Chip wirklich
 #ifdef USE_WIFI
   if (wifi::global_wifi_component != nullptr && wifi::global_wifi_component->is_connected()) {
     char ssid[wifi::SSID_BUFFER_SIZE];
@@ -382,7 +432,7 @@ std::string AppServer::sicherung_json_() {
   JsonObject e = o["einstellungen"].to<JsonObject>();
   {
     std::lock_guard<std::mutex> g(this->sperre_);
-    e["darstellung"] = ap::theme(this->zugang_);
+    e["darstellung"] = ap::theme(this->zugang_.theme);
   }
   for (auto &x : this->einstellungen_) {
 #ifdef USE_NUMBER
@@ -408,7 +458,9 @@ static bool beginnt(const char *s, const char *p) { return std::strncmp(s, p, st
 bool AppServer::canHandle(AsyncWebServerRequest *request) const {
   char buf[AsyncWebServerRequest::URL_BUF_SIZE];
   StringRef u = request->url_to(buf);
-  return u == "/" || u == "/experten" || beginnt(u.c_str(), "/api/") || ap::datei(u.c_str(), u.size()) != nullptr;
+  if (u == "/" || u == "/experten" || beginnt(u.c_str(), "/api/") || ap::datei(u.c_str(), u.size()) != nullptr) return true;
+  // ueber den Reverse Proxy: alles Uebrige (ESPHome-Oberflaeche, Werte, /update) selbst mit 403 abweisen
+  return this->ueber_proxy_(request) && !this->extern_frei_();
 }
 
 void AppServer::handleBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
@@ -444,38 +496,41 @@ bool AppServer::admin_angemeldet_(AsyncWebServerRequest *r) const {
   return t.has_value() && !this->einrichtung_noetig_ && ap::gleich(t.value(), this->admin_token_);
 }
 
-uint32_t AppServer::adresse_(AsyncWebServerRequest *r) const {
-  // Adresse der Gegenstelle; X-Forwarded-For (erste Adresse) zaehlt NUR, wenn die Anfrage vom
-  // eingetragenen Reverse Proxy kommt - sonst koennte jeder Client die Login-Sperre per Header umgehen
+// IP der direkten Gegenstelle als Text ("::ffff:a.b.c.d" wie IPv4); leer = unbekannt
+std::string AppServer::gegenstelle_(AsyncWebServerRequest *r) const {
   struct sockaddr_storage sa {};
   socklen_t n = sizeof(sa);
-  uint32_t peer = 0;
   char text[48] = {0};
   int fd = httpd_req_to_sockfd(*r);
-  if (fd >= 0 && getpeername(fd, (struct sockaddr *) &sa, &n) == 0) {
-    if (sa.ss_family == AF_INET) {
-      auto *a4 = (struct sockaddr_in *) &sa;
-      peer = a4->sin_addr.s_addr;
-      inet_ntop(AF_INET, &a4->sin_addr, text, sizeof(text));
-    }
+  if (fd < 0 || getpeername(fd, (struct sockaddr *) &sa, &n) != 0) return "";
+  if (sa.ss_family == AF_INET) inet_ntop(AF_INET, &((struct sockaddr_in *) &sa)->sin_addr, text, sizeof(text));
 #if LWIP_IPV6
-    else if (sa.ss_family == AF_INET6) {
-      auto *a6 = (struct sockaddr_in6 *) &sa;
-      for (int i = 0; i < 16; i++) peer = peer * 31 + a6->sin6_addr.s6_addr[i];
-      inet_ntop(AF_INET6, &a6->sin6_addr, text, sizeof(text));
-      // IPv4 als IPv6 (::ffff:a.b.c.d) wie IPv4 behandeln
-      if (std::strncmp(text, "::ffff:", 7) == 0 && std::strchr(text + 7, '.')) std::memmove(text, text + 7, std::strlen(text + 7) + 1);
-    }
+  else if (sa.ss_family == AF_INET6) {
+    inet_ntop(AF_INET6, &((struct sockaddr_in6 *) &sa)->sin6_addr, text, sizeof(text));
+    if (std::strncmp(text, "::ffff:", 7) == 0 && std::strchr(text + 7, '.')) std::memmove(text, text + 7, std::strlen(text + 7) + 1);
+  }
 #endif
-  }
-  if (!this->proxy_.empty() && this->proxy_ == text) {
+  return text;
+}
+
+bool AppServer::ueber_proxy_(AsyncWebServerRequest *r) const {
+  return !this->proxy_.empty() && this->gegenstelle_(r) == this->proxy_;
+}
+
+bool AppServer::extern_frei_() const {
+  std::lock_guard<std::mutex> g(this->sperre_);
+  return this->extern_immer_ || (this->extern_bis_ != 0 && (int32_t) (this->extern_bis_ - millis()) > 0);
+}
+
+// Kennung der Gegenstelle fuer die Login-Sperre. X-Forwarded-For (erste Adresse) zaehlt NUR, wenn die
+// Anfrage vom eingetragenen Reverse Proxy kommt - sonst koennte jeder Client die Sperre per Header umgehen
+uint32_t AppServer::adresse_(AsyncWebServerRequest *r) const {
+  std::string ip = this->gegenstelle_(r);
+  if (!this->proxy_.empty() && ip == this->proxy_) {
     auto xf = r->get_header("X-Forwarded-For");
-    if (xf.has_value() && !xf.value().empty()) {
-      std::string a = xf.value().substr(0, xf.value().find(','));
-      return (uint32_t) zs::fnv(bf::trimmen(a));
-    }
+    if (xf.has_value() && !xf.value().empty()) ip = bf::trimmen(xf.value().substr(0, xf.value().find(',')));
   }
-  return peer;
+  return (uint32_t) zs::fnv(ip);
 }
 
 void AppServer::datei_(AsyncWebServerRequest *r, const ap::Datei *d) {
@@ -506,14 +561,22 @@ void AppServer::login_(AsyncWebServerRequest *r) {
     if (d["user"].is<const char *>()) user = d["user"].as<std::string>();
     if (d["pass"].is<const char *>()) pass = d["pass"].as<std::string>();
   }
-  bool ok, gesperrt;
+  bool ok, gesperrt, bereit;
   uint32_t heute;
-  std::string token;
+  std::string token, name;
+  zg::Geheim geheim;
   {
     std::lock_guard<std::mutex> g(this->sperre_);
     if (this->anmeldung_.gesperrt(adr, jetzt)) { this->antworten_(r, 429, ZU_VIELE); return; }
-    ok = !this->einrichtung_noetig_ && ap::gleich(user, this->zugang_.benutzer) && ap::gleich(pass, this->zugang_.app_pw);
+    bereit = !this->einrichtung_noetig_;
+    name = this->zugang_.benutzer;
+    geheim = this->zugang_.app;
     token = this->token_;
+  }
+  // Hash ausserhalb der Sperre rechnen (dauert einige 100 ms)
+  ok = bereit && ap::gleich(user, name) && zg::pruefen(geheim, pass);
+  {
+    std::lock_guard<std::mutex> g(this->sperre_);
     gesperrt = !ok && this->anmeldung_.fehlversuch(adr, jetzt);
     heute = this->anmeldung_.heute;
   }
@@ -532,13 +595,19 @@ void AppServer::admin_login_(AsyncWebServerRequest *r) {
   JsonDocument d;
   std::string pass;
   if (!deserializeJson(d, this->body_) && d["pass"].is<const char *>()) pass = d["pass"].as<std::string>();
-  bool ok, gesperrt;
+  bool ok, gesperrt, bereit;
   std::string token;
+  zg::Geheim geheim;
   {
     std::lock_guard<std::mutex> g(this->sperre_);
     if (this->anmeldung_.gesperrt(adr, jetzt)) { this->antworten_(r, 429, ZU_VIELE); return; }
-    ok = !this->einrichtung_noetig_ && ap::gleich(pass, this->zugang_.admin_pw);
+    bereit = !this->einrichtung_noetig_;
+    geheim = this->zugang_.admin;
     token = this->admin_token_;
+  }
+  ok = bereit && zg::pruefen(geheim, pass);
+  {
+    std::lock_guard<std::mutex> g(this->sperre_);
     gesperrt = !ok && this->anmeldung_.fehlversuch(adr, jetzt);
   }
   if (ok) {
@@ -560,14 +629,22 @@ static std::string neues_token() {
 
 // Ersteinrichtung: nur solange keine Zugangsdaten gespeichert sind (wie bei einem neuen Router)
 void AppServer::einrichtung_(AsyncWebServerRequest *r) {
-  ap::Zugang z;
+  zg::Zugang2 z;
+  ap::Einrichtung ein;
   std::string f, token = neues_token(), admin = neues_token();
   {
     std::lock_guard<std::mutex> g(this->sperre_);
     if (!this->einrichtung_noetig_) { this->antworten_(r, 409, "{\"error\":\"Zugang ist schon eingerichtet\"}"); return; }
     z = this->zugang_;
   }
-  if (!ap::einrichtung_lesen(this->body_, z, f)) {
+  if (ap::einrichtung_lesen(this->body_, ein, f)) {
+    uint8_t salz[16];
+    ap::kopieren(z.benutzer, sizeof(z.benutzer), ein.benutzer);
+    this->salz_(salz); zg::setzen(z.app, ein.app, salz);
+    this->salz_(salz); zg::setzen(z.admin, ein.admin, salz);
+    ap::kopieren(z.experte, sizeof(z.experte), ein.experte);
+    z.token_seit = this->wc_->unix_zeit();
+  } else {
     JsonDocument e;
     e["error"] = f;
     std::string out;
@@ -670,54 +747,87 @@ void AppServer::sicherung_einspielen_(AsyncWebServerRequest *r) {
   this->antworten_(r, 200, out);
 }
 
-// Passwort aendern: {"art": "app" | "admin", "benutzer" (nur app, optional), "passwort"}.
-// Danach sind alle Geraete dieser Art abgemeldet (neues Token); die Einstellungsseite bekommt ihr neues.
+// Passwort aendern: {"art": "app"|"admin"|"experte", "passwort", "benutzer" (nur app, optional),
+// "experte_alt" (nur experte, wenn schon eines gesetzt ist)}. Alle drei muessen verschieden sein.
+// Neues App-Passwort -> alle App-Geraete abgemeldet; neues Admin-Passwort -> neues Admin-Token.
 void AppServer::passwort_aendern_(AsyncWebServerRequest *r) {
   JsonDocument d;
   std::string f;
-  if (deserializeJson(d, this->body_) || !d["art"].is<const char *>() || !d["passwort"].is<const char *>()) {
-    this->antworten_(r, 400, "{\"error\":\"ungueltige Anfrage\"}");
-    return;
-  }
-  std::string art = d["art"].as<std::string>(), pw = d["passwort"].as<std::string>();
-  std::string benutzer = d["benutzer"].is<const char *>() ? d["benutzer"].as<std::string>() : "";
-  bool app = art == "app";
-  if ((!app && art != "admin") || !ap::passwort_ok(pw, f) || (app && !benutzer.empty() && !ap::benutzer_ok(benutzer, f))) {
+  auto fehler = [&](const std::string &t) {
     JsonDocument e;
-    e["error"] = f.empty() ? "art: app oder admin" : f;
+    e["error"] = t;
     std::string out;
     serializeJson(e, out);
     this->antworten_(r, 400, out);
-    return;
-  }
+  };
+  if (deserializeJson(d, this->body_) || !d["art"].is<const char *>() || !d["passwort"].is<const char *>()) return fehler("ungueltige Anfrage");
+  std::string art = d["art"].as<std::string>(), pw = d["passwort"].as<std::string>();
+  std::string benutzer = d["benutzer"].is<const char *>() ? d["benutzer"].as<std::string>() : "";
+  std::string alt = d["experte_alt"].is<const char *>() ? d["experte_alt"].as<std::string>() : "";
+  if (art != "app" && art != "admin" && art != "experte") return fehler("art: app, admin oder experte");
+  if (!ap::passwort_ok(pw, f)) return fehler(f);
+  if (art == "app" && !benutzer.empty() && !ap::benutzer_ok(benutzer, f)) return fehler(f);
+  if (art == "experte" && this->ueber_proxy_(r)) return fehler("Experten-Passwort nur im Heimnetz aendern");
+  zg::Zugang2 z;
+  { std::lock_guard<std::mutex> g(this->sperre_); z = this->zugang_; }
+  if (art == "experte" && z.experte[0] && !ap::gleich(alt, z.experte)) return fehler("bisheriges Experten-Passwort falsch");
+  // verschieden von den beiden anderen Stufen (Hashes ausserhalb der Sperre pruefen)
+  bool gleich_app = art != "app" && zg::pruefen(z.app, pw);
+  bool gleich_admin = art != "admin" && zg::pruefen(z.admin, pw);
+  bool gleich_experte = art != "experte" && z.experte[0] && pw == z.experte;
+  if (gleich_app || gleich_admin || gleich_experte) return fehler("App-, Admin- und Experten-Passwort muessen verschieden sein");
+  uint8_t salz[16];
+  this->salz_(salz);
+  zg::Geheim neu;
+  if (art != "experte") zg::setzen(neu, pw, salz);
   std::string token = neues_token(), antwort = "{\"ok\":true}";
   {
     std::lock_guard<std::mutex> g(this->sperre_);
-    if ((app && pw == this->zugang_.admin_pw) || (!app && pw == this->zugang_.app_pw)) {
-      this->antworten_(r, 400, "{\"error\":\"App- und Admin-Passwort muessen verschieden sein\"}");
-      return;
-    }
-    if (app) {
-      ap::kopieren(this->zugang_.app_pw, sizeof(this->zugang_.app_pw), pw);
+    if (art == "app") {
+      this->zugang_.app = neu;
       if (!benutzer.empty()) ap::kopieren(this->zugang_.benutzer, sizeof(this->zugang_.benutzer), benutzer);
+      this->zugang_.token_seit = this->wc_->unix_zeit();
       this->token_ = token;
-    } else {
-      ap::kopieren(this->zugang_.admin_pw, sizeof(this->zugang_.admin_pw), pw);
+    } else if (art == "admin") {
+      this->zugang_.admin = neu;
       this->admin_token_ = token;
       antwort = "{\"ok\":true,\"token\":\"" + token + "\"}";
+    } else {
+      ap::kopieren(this->zugang_.experte, sizeof(this->zugang_.experte), pw);
     }
   }
-  ESP_LOGI(TAG, "%s-Passwort geaendert", app ? "App" : "Admin");
-  this->wc_->spaeter([this, app]() {
+  ESP_LOGI(TAG, "%s-Passwort geaendert", art.c_str());
+  this->wc_->spaeter([this, art]() {
     this->zugang_speichern_();
     std::array<char, 65> t{};
-    { std::lock_guard<std::mutex> g(this->sperre_); ap::kopieren(t.data(), t.size(), app ? this->token_ : this->admin_token_); }
-    (app ? this->token_pref_ : this->admin_pref_).save(&t);
+    if (art != "experte") {
+      { std::lock_guard<std::mutex> g(this->sperre_); ap::kopieren(t.data(), t.size(), art == "app" ? this->token_ : this->admin_token_); }
+      (art == "app" ? this->token_pref_ : this->admin_pref_).save(&t);
+    }
     global_preferences->sync();
-    if (!app) this->web_passwort_setzen_();
+    if (art == "experte") this->web_passwort_setzen_();
   });
   this->antworten_(r, 200, antwort);
 }
+
+// Expertenzugang ueber den Reverse Proxy (aus dem Internet) zeitweise erlauben - auf eigenes Risiko.
+// Nur aus dem Heimnetz, nur mit Experten-Passwort. {"experte", "stunden": 0 = aus, 1..24, -1 = unbegrenzt}
+// Gilt nur bis zum naechsten Neustart (nicht gespeichert).
+void AppServer::experte_extern_(AsyncWebServerRequest *r) {
+  JsonDocument d;
+  if (this->ueber_proxy_(r)) { this->antworten_(r, 403, "{\"error\":\"nur aus dem Heimnetz\"}"); return; }
+  if (deserializeJson(d, this->body_) || !d["stunden"].is<int>()) { this->antworten_(r, 400, "{\"error\":\"ungueltige Anfrage\"}"); return; }
+  int h = d["stunden"].as<int>();
+  std::string pw = d["experte"].is<const char *>() ? d["experte"].as<std::string>() : "";
+  std::lock_guard<std::mutex> g(this->sperre_);
+  if (!this->zugang_.experte[0] || !ap::gleich(pw, this->zugang_.experte)) { this->antworten_(r, 400, "{\"error\":\"Experten-Passwort falsch oder nicht gesetzt\"}"); return; }
+  if (h < -1 || h > 24) { this->antworten_(r, 400, "{\"error\":\"0 bis 24 Stunden oder -1 (unbegrenzt)\"}"); return; }
+  this->extern_immer_ = h == -1;
+  this->extern_bis_ = h > 0 ? ((millis() + (uint32_t) h * 3600000UL) | 1) : 0;
+  ESP_LOGW(TAG, "Expertenzugang von aussen: %s", h == 0 ? "aus" : h == -1 ? "UNBEGRENZT erlaubt" : "zeitweise erlaubt");
+  this->antworten_(r, 200, "{\"ok\":true}");
+}
+
 
 void AppServer::schalten_(AsyncWebServerRequest *r, int ziel) {
   JsonDocument d;
@@ -760,6 +870,14 @@ void AppServer::handleRequest(AsyncWebServerRequest *request) {
   StringRef u = request->url_to(buf);
   std::string url = u.str();
   bool post = request->method() == HTTP_POST;
+
+  // Expertenstufe nicht aus dem Internet (ausser zeitweise ausdruecklich erlaubt)
+  if (!ap::extern_erlaubt(url) && this->ueber_proxy_(request) && !this->extern_frei_()) {
+    ESP_LOGW(TAG, "%s %s ueber den Proxy abgewiesen (Expertenstufe nur im Heimnetz)", post ? "POST" : "GET", url.c_str());
+    this->antworten_(request, 403, "{\"error\":\"nur im Heimnetz\"}");
+    this->body_.clear();
+    return;
+  }
 
   if (url == "/") {
     this->datei_(request, ap::datei("/app", 4));          // Startseite = App
@@ -818,14 +936,21 @@ void AppServer::handleRequest(AsyncWebServerRequest *request) {
       std::string out;
       serializeJson(d, out);
       this->antworten_(request, 200, out);
+    } else if (url == "/api/admin/experte-extern" && post) {
+      this->experte_extern_(request);
     } else if (url == "/api/admin/neustart" && post) {
       ESP_LOGW(TAG, "Neustart ueber die Einstellungsseite");
       this->wc_->spaeter([]() { App.safe_reboot(); });
       this->antworten_(request, 200, "{\"ok\":true}");
     } else if (url == "/api/admin/werksreset" && post) {
       JsonDocument d;
-      if (deserializeJson(d, this->body_) || d["bestaetigung"] != "WERKSRESET" || !this->werksreset) {
+      std::string ex;
+      { std::lock_guard<std::mutex> g(this->sperre_); ex = this->zugang_.experte; }
+      bool json_ok = !deserializeJson(d, this->body_);
+      if (!json_ok || d["bestaetigung"] != "WERKSRESET" || !this->werksreset) {
         this->antworten_(request, 400, "{\"error\":\"zur Bestaetigung WERKSRESET eingeben\"}");
+      } else if (ex.empty() || !d["experte"].is<const char *>() || !ap::gleich(d["experte"].as<std::string>(), ex)) {
+        this->antworten_(request, 400, "{\"error\":\"Experten-Passwort falsch oder nicht gesetzt\"}");
       } else {
         ESP_LOGW(TAG, "Werksreset ueber die Einstellungsseite");
         this->wc_->spaeter([this]() { this->werksreset(); });
@@ -848,7 +973,7 @@ void AppServer::handleRequest(AsyncWebServerRequest *request) {
     this->antworten_(request, 200, s.empty() ? "{}" : s);
   } else if (url == "/api/meta" && !post) {
     std::string t;
-    { std::lock_guard<std::mutex> g(this->sperre_); t = ap::theme(this->zugang_); }
+    { std::lock_guard<std::mutex> g(this->sperre_); t = ap::theme(this->zugang_.theme); }
     this->antworten_(request, 200, ap::meta_antwort("/einstellungen", t));
   } else if (url == "/api/mode" && post) {
     this->schalten_(request, bf::ZIEL_HK);

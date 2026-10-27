@@ -114,6 +114,8 @@ async function laden() {
   try { d = await api('/api/admin/einstellungen'); } catch { return; }
   $('version').textContent = `${d.firmware || ''} · App ${d.app_version || ''}`;
   $('fwAktuell').textContent = d.firmware || '–';
+  $('experteZustand').textContent = d.experte_gesetzt ? (d.experte_extern_min ? (d.experte_extern_min < 0 ? 'von außen: IMMER erlaubt' : `von außen erlaubt, noch ${d.experte_extern_min} min`) : 'nur im Heimnetz') : 'gesperrt (kein Passwort)';
+  $('experteZustand').style.color = d.experte_extern_min ? 'var(--red)' : '';
   $('benutzerAnzeige').textContent = d.benutzer || '–';
   document.querySelectorAll('#darstellung button').forEach(b => b.classList.toggle('aktiv', b.dataset.wert === d.darstellung));
   const gruppen = {};
@@ -257,6 +259,7 @@ async function infoLaden() {
     ['Laufzeit', dauer(d.laufzeit_s)], ['Letzter Neustart', d.neustart_grund],
     ['WLAN', d.wlan ? `${d.wlan} (${d.wlan_rssi} dBm)` : '–'], ['IP', d.ip || '–'],
     ['Speicher frei', `${Math.round(d.speicher_frei / 1024)} KB (min. ${Math.round(d.speicher_min / 1024)} KB, Block ${Math.round(d.groesster_block / 1024)} KB)`],
+    ['Flash', d.flash_echt ? `${d.flash_echt / 1048576} MB im Chip (Firmware für ${d.flash / 1048576} MB gebaut)` : '–'],
     ['CAN-Bus', d.bus_lebt ? `lebt (letzte Nachricht vor ${d.letzter_frame_s} s)` : 'still']
   ];
   const ziel = $('info');
@@ -313,7 +316,7 @@ $('resetBtn').addEventListener('click', async () => {
   if (!confirm('Wirklich alle gespeicherten Einstellungen und Zugangsdaten des Boards löschen?')) return;
   const m = $('resetMeldung');
   try {
-    await api('/api/admin/werksreset', { method: 'POST', body: JSON.stringify({ bestaetigung: 'WERKSRESET' }) });
+    await api('/api/admin/werksreset', { method: 'POST', body: JSON.stringify({ bestaetigung: 'WERKSRESET', experte: $('resetPass').value }) });
     schreib(TOKEN_KEY, null);
     m.textContent = 'zurückgesetzt – Board startet neu, danach /app aufrufen'; m.className = 'meldung ok';
   } catch (e) { m.textContent = e.message; m.className = 'meldung fehler'; }
@@ -321,3 +324,25 @@ $('resetBtn').addEventListener('click', async () => {
 
 if (lies(TOKEN_KEY)) { infoLaden(); logLaden(); }
 setInterval(() => { if (lies(TOKEN_KEY) && !document.hidden) { infoLaden(); logLaden(); } }, 10000);
+
+// ── Expertenstufe
+$('exPassBtn').addEventListener('click', async () => {
+  const m = $('exPassMeldung');
+  if ($('exPass').value !== $('exPass2').value) { m.textContent = 'Passwörter stimmen nicht überein'; m.className = 'meldung fehler'; return; }
+  try {
+    await api('/api/admin/passwort', { method: 'POST', body: JSON.stringify({ art: 'experte', passwort: $('exPass').value, experte_alt: $('exAlt').value }) });
+    ['exAlt', 'exPass', 'exPass2'].forEach(id => { $(id).value = ''; });
+    m.textContent = 'gesetzt – gilt sofort für /experten und das Update'; m.className = 'meldung ok';
+    setTimeout(laden, 1500);
+  } catch (e) { m.textContent = e.message; m.className = 'meldung fehler'; }
+});
+document.querySelectorAll('#exExtern button').forEach(b => b.addEventListener('click', async () => {
+  const h = Number(b.dataset.h), m = $('exExternMeldung');
+  if (h !== 0 && !confirm(h < 0 ? 'Expertenzugang UNBEGRENZT von außen erlauben? Das ist riskant.' : `Expertenzugang ${h} Stunde(n) von außen erlauben?`)) return;
+  try {
+    await api('/api/admin/experte-extern', { method: 'POST', body: JSON.stringify({ stunden: h, experte: $('exExternPass').value }) });
+    $('exExternPass').value = '';
+    m.textContent = h === 0 ? 'nur noch im Heimnetz' : 'erlaubt'; m.className = 'meldung ' + (h === 0 ? 'ok' : 'fehler');
+    setTimeout(laden, 1000);
+  } catch (e) { m.textContent = e.message; m.className = 'meldung fehler'; }
+}));

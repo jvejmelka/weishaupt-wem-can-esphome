@@ -25,6 +25,7 @@
 #include "esphome/components/web_server/web_server.h"
 #endif
 #include "app_logik.h"
+#include "zugang.h"
 #include "app_dateien.h"
 
 namespace esphome {
@@ -36,10 +37,10 @@ class AppServer : public AsyncWebHandler {
  public:
   // benutzer/passwort/admin: Vorgaben aus der YAML (secrets.yaml) fuer den ersten Start; leer = Ersteinrichtung
   // proxy: IP des Reverse Proxys - nur dessen X-Forwarded-For zaehlt fuer die Login-Sperre (leer = nie)
-  AppServer(WeishauptCan *wc, std::string benutzer, std::string passwort, std::string admin, std::string firmware,
-            std::string proxy)
+  AppServer(WeishauptCan *wc, std::string benutzer, std::string passwort, std::string admin, std::string experte,
+            std::string firmware, std::string proxy)
       : wc_(wc), benutzer_(std::move(benutzer)), passwort_(std::move(passwort)), admin_(std::move(admin)),
-        firmware_(std::move(firmware)), proxy_(std::move(proxy)) {}
+        experte_(std::move(experte)), firmware_(std::move(firmware)), proxy_(std::move(proxy)) {}
 
   void einhaengen();   // Handler beim Webserver anmelden - VOR dessen eigener Oberflaeche (Setup, frueh)
   void setup();
@@ -89,6 +90,11 @@ class AppServer : public AsyncWebHandler {
   void antworten_(AsyncWebServerRequest *r, int code, const std::string &json);
   bool angemeldet_(AsyncWebServerRequest *r) const;
   uint32_t adresse_(AsyncWebServerRequest *r) const;
+  std::string gegenstelle_(AsyncWebServerRequest *r) const;   // IP der direkten Gegenstelle als Text
+  bool ueber_proxy_(AsyncWebServerRequest *r) const;
+  bool extern_frei_() const;
+  void experte_extern_(AsyncWebServerRequest *r);
+  void salz_(uint8_t s[16]) const;
   void datei_(AsyncWebServerRequest *r, const ap::Datei *d);
   void login_(AsyncWebServerRequest *r);
   void schalten_(AsyncWebServerRequest *r, int ziel);
@@ -108,7 +114,7 @@ class AppServer : public AsyncWebHandler {
   bool einstellung_setzen_(const std::string &id, JsonVariant wert, std::string &fehler);
 
   WeishauptCan *wc_;
-  std::string benutzer_, passwort_, admin_, firmware_, proxy_;
+  std::string benutzer_, passwort_, admin_, experte_, firmware_, proxy_;
   std::string token_, admin_token_;
   ESPPreferenceObject token_pref_, admin_pref_, zugang_pref_;
   std::vector<Einstellung> einstellungen_;
@@ -123,8 +129,10 @@ class AppServer : public AsyncWebHandler {
   mutable std::mutex sperre_;
   std::string status_, energie_, einstellungen_stand_, info_, sicherung_;
   ap::Anmeldung anmeldung_;
-  ap::Zugang zugang_;
+  zg::Zugang2 zugang_;
   bool einrichtung_noetig_{false};
+  uint32_t extern_bis_{0};         // millis(): Expertenzugang ueber den Proxy erlaubt bis (0 = aus)
+  bool extern_immer_{false};       // ... unbegrenzt (bis zum Neustart oder Ausschalten)
 
   std::mutex log_sperre_;
   std::deque<std::string> log_;

@@ -187,21 +187,22 @@ TEST(app_eingebettete_dateien) {
 }
 
 TEST(app_zugang_einrichtung) {
-  ap::Zugang z;
-  PRUEFE(!ap::vollstaendig(z));
+  ap::Einrichtung e;
   std::string f;
-  PRUEFE(!ap::einrichtung_lesen("kaputt", z, f));
-  PRUEFE(!ap::einrichtung_lesen("{\"benutzer\":\"jo\",\"app_passwort\":\"kurz\",\"admin_passwort\":\"lang-genug-1\"}", z, f));
-  PRUEFE(f.find("8 bis 64") != std::string::npos && !ap::vollstaendig(z));
-  PRUEFE(!ap::einrichtung_lesen("{\"benutzer\":\"j o\",\"app_passwort\":\"geheim-123\",\"admin_passwort\":\"admin-4567\"}", z, f));
-  PRUEFE(!ap::einrichtung_lesen("{\"benutzer\":\"jo\",\"app_passwort\":\"gleich-123\",\"admin_passwort\":\"gleich-123\"}", z, f));
+  PRUEFE(!ap::einrichtung_lesen("kaputt", e, f));
+  PRUEFE(!ap::einrichtung_lesen("{\"benutzer\":\"jo\",\"app_passwort\":\"kurz\",\"admin_passwort\":\"lang-genug-1\"}", e, f));
+  PRUEFE(f.find("8 bis 64") != std::string::npos);
+  PRUEFE(!ap::einrichtung_lesen("{\"benutzer\":\"j o\",\"app_passwort\":\"geheim-123\",\"admin_passwort\":\"admin-4567\"}", e, f));
+  PRUEFE(!ap::einrichtung_lesen("{\"benutzer\":\"jo\",\"app_passwort\":\"gleich-123\",\"admin_passwort\":\"gleich-123\"}", e, f));
   PRUEFE(f.find("verschieden") != std::string::npos);
-  PRUEFE(ap::einrichtung_lesen("{\"benutzer\":\"jo\",\"app_passwort\":\"geheim-123\",\"admin_passwort\":\"admin-4567\"}", z, f));
-  PRUEFE(ap::vollstaendig(z) && std::string(z.benutzer) == "jo" && std::string(z.app_pw) == "geheim-123" &&
-         std::string(z.admin_pw) == "admin-4567");
-  PRUEFE(ap::theme(z) == "auto");
-  PRUEFE(ap::kopieren(z.theme, sizeof(z.theme), "hell") && ap::theme(z) == "hell");
-  PRUEFE(!ap::kopieren(z.theme, sizeof(z.theme), "viel-zu-lang"));
+  PRUEFE(!ap::einrichtung_lesen("{\"benutzer\":\"jo\",\"app_passwort\":\"geheim-123\",\"admin_passwort\":\"admin-4567\",\"experte_passwort\":\"admin-4567\"}", e, f));
+  PRUEFE(ap::einrichtung_lesen("{\"benutzer\":\"jo\",\"app_passwort\":\"geheim-123\",\"admin_passwort\":\"admin-4567\"}", e, f));
+  PRUEFE(e.benutzer == "jo" && e.app == "geheim-123" && e.admin == "admin-4567" && e.experte.empty());
+  PRUEFE(ap::einrichtung_lesen("{\"benutzer\":\"jo\",\"app_passwort\":\"geheim-123\",\"admin_passwort\":\"admin-4567\",\"experte_passwort\":\"experte-89\"}", e, f));
+  PRUEFE(e.experte == "experte-89");
+  char t[8];
+  PRUEFE(ap::theme("") == "auto" && ap::kopieren(t, sizeof(t), "hell") && ap::theme(t) == "hell");
+  PRUEFE(!ap::kopieren(t, sizeof(t), "viel-zu-lang"));
   PRUEFE(!ap::passwort_ok(std::string(65, 'x'), f) && ap::passwort_ok(std::string(64, 'x'), f));
   PRUEFE(!ap::passwort_ok("abc\ndefgh", f));
   JsonDocument d;
@@ -209,4 +210,49 @@ TEST(app_zugang_einrichtung) {
   PRUEFE(std::string(d["theme"].as<const char *>()) == "dunkel");
   deserializeJson(d, ap::meta_antwort("/"));
   PRUEFE(d["theme"].isNull());
+}
+
+static std::string hex(const uint8_t *p, size_t n) {
+  std::string s;
+  char b[3];
+  for (size_t i = 0; i < n; i++) { snprintf(b, sizeof(b), "%02x", p[i]); s += b; }
+  return s;
+}
+
+TEST(zugang_sha256_hmac_pbkdf2) {
+  uint8_t h[32];
+  zg::Sha256 a; a.update((const uint8_t *) "abc", 3); a.fertig(h);
+  PRUEFE(hex(h, 32) == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+  zg::Sha256 b; b.fertig(h);
+  PRUEFE(hex(h, 32) == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+  std::string lang(1000, 'a');
+  zg::Sha256 c; c.update((const uint8_t *) lang.data(), 100); c.update((const uint8_t *) lang.data() + 100, 900); c.fertig(h);
+  PRUEFE(hex(h, 32) == "41edece42d63e8d9bf515a9ba6932e1c20cbc9f5a5d134645adb5db1b9737ea3");
+  // RFC 4231, Testfall 2
+  zg::hmac((const uint8_t *) "Jefe", 4, (const uint8_t *) "what do ya want for nothing?", 28, h);
+  PRUEFE(hex(h, 32) == "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843");
+  // PBKDF2-HMAC-SHA256 (RFC 7914 / bekannte Werte): P="password", S="salt", c=1 und c=4096
+  zg::pbkdf2("password", (const uint8_t *) "salt", 4, 1, h);
+  PRUEFE(hex(h, 32) == "120fb6cffcf8b32c43e7225256c4f837a86548c92ccc35480805987cb70be17b");
+  zg::pbkdf2("password", (const uint8_t *) "salt", 4, 4096, h);
+  PRUEFE(hex(h, 32) == "c5e478d59288c841aa530db6845c4c8d962893a001ce4e11a4963873aa98134a");
+}
+
+TEST(zugang_geheim_und_extern) {
+  zg::Geheim g;
+  PRUEFE(!g.gesetzt() && !zg::pruefen(g, ""));
+  uint8_t salz[16];
+  for (int i = 0; i < 16; i++) salz[i] = (uint8_t) (i * 7 + 1);
+  zg::setzen(g, "geheim-123", salz);
+  PRUEFE(g.gesetzt() && zg::pruefen(g, "geheim-123") && !zg::pruefen(g, "geheim-124") && !zg::pruefen(g, ""));
+  zg::Zugang2 z;
+  PRUEFE(!zg::vollstaendig(z));
+  ap::kopieren(z.benutzer, sizeof(z.benutzer), "jo");
+  z.app = g; z.admin = g;
+  PRUEFE(zg::vollstaendig(z));
+  PRUEFE(ap::extern_erlaubt("/") && ap::extern_erlaubt("/app") && ap::extern_erlaubt("/api/status"));
+  PRUEFE(ap::extern_erlaubt("/einstellungen") && ap::extern_erlaubt("/api/admin/einstellungen"));
+  PRUEFE(!ap::extern_erlaubt("/experten") && !ap::extern_erlaubt("/update") && !ap::extern_erlaubt("/events"));
+  PRUEFE(!ap::extern_erlaubt("/sensor/Laufzeit") && !ap::extern_erlaubt("/api/admin/werksreset"));
+  PRUEFE(!ap::extern_erlaubt("/app/../update") && !ap::extern_erlaubt("/apix"));
 }

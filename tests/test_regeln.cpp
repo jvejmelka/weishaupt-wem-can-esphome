@@ -12,6 +12,7 @@
 #include "../components/weishaupt_can/befehle.h"
 #include "../components/weishaupt_can/kern.h"
 #include "../components/weishaupt_can/app_logik.h"
+#include "../components/weishaupt_can/zugang.h"
 #include "../components/weishaupt_can/app_dateien.h"
 #include "referenz_v29/regellogik_v29.h"
 #include <cstdarg>

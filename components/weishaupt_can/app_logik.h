@@ -296,9 +296,8 @@ class Anmeldung {
   std::vector<Eintrag> e_;
 };
 
-// ---------------------------------------------------------------- Zugangsdaten (ab v39)
-// Im Flash gespeichert. Fehlen sie (fertige Firmware, erster Start), verlangt das Board zuerst eine
-// Einrichtung: App-Benutzer und -Passwort sowie das Admin-Passwort fuer Einstellungen und Weboberflaeche.
+// ---------------------------------------------------------------- Zugangsdaten
+// v39-v41 im Klartext gespeichert (Schluessel APPZ) - ab v42 nur noch zum Uebernehmen in zugang.h (APZ2)
 struct Zugang {
   char benutzer[33] = {0};
   char app_pw[65] = {0};
@@ -332,23 +331,38 @@ inline bool passwort_ok(const std::string &p, std::string &f) {
 }
 
 inline bool theme_ok(const std::string &t) { return t == "auto" || t == "hell" || t == "dunkel"; }
-inline std::string theme(const Zugang &z) { return theme_ok(z.theme) ? std::string(z.theme) : std::string("auto"); }
+inline std::string theme(const char *t) { return theme_ok(t) ? std::string(t) : std::string("auto"); }
+inline std::string theme(const Zugang &z) { return theme(z.theme); }
 
-// Ersteinrichtung: {"benutzer","app_passwort","admin_passwort"} -> Zugang (App- und Admin-Passwort verschieden)
-inline bool einrichtung_lesen(const std::string &body, Zugang &z, std::string &f) {
+// Ersteinrichtung: {"benutzer","app_passwort","admin_passwort"[,"experte_passwort"]} - alle verschieden;
+// ohne Experten-Passwort bleibt die Expertenstufe gesperrt
+struct Einrichtung {
+  std::string benutzer, app, admin, experte;
+};
+inline bool einrichtung_lesen(const std::string &body, Einrichtung &e, std::string &f) {
   JsonDocument d;
   if (deserializeJson(d, body)) { f = "ungueltige Anfrage"; return false; }
-  std::string b = d["benutzer"].is<const char *>() ? d["benutzer"].as<std::string>() : "";
-  std::string a = d["app_passwort"].is<const char *>() ? d["app_passwort"].as<std::string>() : "";
-  std::string m = d["admin_passwort"].is<const char *>() ? d["admin_passwort"].as<std::string>() : "";
-  if (!benutzer_ok(b, f) || !passwort_ok(a, f) || !passwort_ok(m, f)) return false;
-  if (a == m) { f = "App- und Admin-Passwort muessen verschieden sein"; return false; }
-  Zugang n = z;
-  kopieren(n.benutzer, sizeof(n.benutzer), b);
-  kopieren(n.app_pw, sizeof(n.app_pw), a);
-  kopieren(n.admin_pw, sizeof(n.admin_pw), m);
-  z = n;
+  auto feld = [&](const char *k) { return d[k].is<const char *>() ? d[k].as<std::string>() : std::string(); };
+  Einrichtung n{feld("benutzer"), feld("app_passwort"), feld("admin_passwort"), feld("experte_passwort")};
+  if (!benutzer_ok(n.benutzer, f) || !passwort_ok(n.app, f) || !passwort_ok(n.admin, f)) return false;
+  if (!n.experte.empty() && !passwort_ok(n.experte, f)) return false;
+  if (n.app == n.admin || (!n.experte.empty() && (n.experte == n.app || n.experte == n.admin))) {
+    f = "App-, Admin- und Experten-Passwort muessen verschieden sein";
+    return false;
+  }
+  e = n;
   return true;
+}
+
+// Was darf ueber den Reverse Proxy (aus dem Internet) kommen? App und Einstellungsseite (beide mit
+// eigener Login-Sperre). Alles andere gehoert zur Expertenstufe (ESPHome-Oberflaeche, Werte, /update).
+inline bool extern_erlaubt(const std::string &url) {
+  static const char *const PFADE[] = {"/", "/app", "/app.js", "/style.css", "/manifest.json", "/icon.svg", "/sw.js",
+                                      "/einstellungen", "/einstellungen.js"};
+  for (auto *p : PFADE)
+    if (url == p) return true;
+  if (url.compare(0, 5, "/api/") != 0) return false;
+  return url != "/api/admin/werksreset";   // Werksreset nur im LAN
 }
 
 // Vergleich ohne fruehen Abbruch (die Laenge verraet er trotzdem - Passwoerter sind kurz genug)

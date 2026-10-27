@@ -2,6 +2,12 @@
 
 
 ## v42 (in Arbeit)
+- **Drei Zugangsstufen:** App (schalten, ansehen), Admin (Einstellungsseite), **Experte** (ESPHome-Oberfläche `/experten`, `/update`, Werksreset). App- und Admin-Passwort werden nur noch als **Hash** gespeichert (PBKDF2-HMAC-SHA256, 16 Byte Salz, 1000 Runden; eigene Umsetzung, gegen RFC-Testwerte geprüft). Das Experten-Passwort bleibt lesbar, weil die Digest-Anmeldung von ESPHome es braucht; ohne Experten-Passwort ist die Stufe gesperrt. Alle drei müssen verschieden sein (beim Übernehmen aus v41 dürfen Admin und Experte gleich bleiben, bis man sie ändert).
+- **Übernahme aus v41:** Die bisher im Klartext gespeicherten Zugangsdaten werden beim ersten Start gehasht übernommen; die Expertenstufe bekommt das bisherige Passwort der Weboberfläche.
+- **Expertenstufe nicht aus dem Internet:** Anfragen über den eingetragenen Reverse Proxy an `/experten`, `/update`, `/events`, die Wertepfade und den Werksreset beantwortet das Board selbst mit 403. Auf eigenes Risiko zeitweise freischaltbar (Einstellungsseite, nur aus dem Heimnetz, mit Experten-Passwort: 1/8/24 h oder unbegrenzt, gilt bis zum Neustart).
+- **App-Token läuft nach 90 Tagen ab** (alle Geräte melden sich dann neu an).
+- **Infoseite zeigt die Flash-Größe:** An der WTC-GW 15-B hat das WeAct-Board **8 MB**, die Firmware nutzt 4 MB – die oberen 4 MB stehen für Dateien frei, ohne die Partitionstabelle (und ohne USB-Kabel) zu ändern.
+- An der WTC-GW 15-B geprüft: Übernahme der Zugangsdaten, App-Login (0,14 s mit Hash), Admin-Login, `/experten`, Freischalten/Sperren von außen, falsches Experten-Passwort bei Werksreset und Passwortwechsel abgelehnt.
 - **App mit fester Layoutbreite 980 px** (`<meta viewport width=980>`): Am Handy sieht sie jetzt immer aus wie mit Chromes „Desktop-Website“ – schmale Spalte mittig, größere Schrift, ohne dass man etwas einstellen muss (Wunsch Betreiber). PC und Tablet ignorieren die Angabe.
 - **`/experten` zeigt die ESPHome-Oberfläche vollständig:** Sie suchte ihre Daten relativ zu ihrem Pfad (`/experten/events`). Das Bauteil erzeugt beim Bauen aus der installierten ESPHome-Version eine Kopie, die an der Wurzel sucht (`__init__.py`, `experten_index()`), und liefert sie unter `/experten` aus (+26 KB Flash).
 - **`/` ist die App**, die ESPHome-Weboberfläche liegt unter **`/experten`** (Digest, Benutzer `admin`, Admin-Passwort). Der App-Handler meldet sich dafür vor der ESPHome-Oberfläche beim Webserver an. `/events`, Entitätspfade und `/update` bleiben, wo sie sind.

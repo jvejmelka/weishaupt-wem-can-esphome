@@ -123,8 +123,28 @@
         <div id="adminPassMeldung" class="meldung"></div>
       </div>
       <p class="hinweis" style="font-size:.75rem;color:var(--text2);margin-top:.4rem">
-        Nach dem Ändern des App-Passworts sind alle Geräte abgemeldet. Das Admin-Passwort gilt auch für die Weboberfläche (Benutzer „admin“).
+        Nach dem Ändern des App-Passworts sind alle Geräte abgemeldet. App-, Admin- und Experten-Passwort müssen verschieden sein.
       </p>
+    </section>
+
+    <section class="block">
+      <div class="block-head"><span class="block-title">EXPERTENSTUFE</span><span class="block-zustand" id="experteZustand"></span></div>
+      <p class="hinweis" style="font-size:.75rem;color:var(--text2)">Expertenoberfläche (<a href="/experten" target="_blank" rel="noopener" style="color:var(--amber)">/experten</a>,
+        Benutzer „admin“), Firmware-Update und Werksreset brauchen das Experten-Passwort. Ohne Experten-Passwort ist die Stufe gesperrt.
+        Ändern nur im Heimnetz.</p>
+      <input id="exAlt" class="feld" type="password" placeholder="bisheriges Experten-Passwort (falls gesetzt)" autocomplete="off">
+      <input id="exPass" class="feld" type="password" placeholder="neues Experten-Passwort (mind. 8 Zeichen)" autocomplete="new-password">
+      <input id="exPass2" class="feld" type="password" placeholder="wiederholen" autocomplete="new-password">
+      <button id="exPassBtn" class="knopf" style="margin-top:.5rem">EXPERTEN-PASSWORT SETZEN</button>
+      <div id="exPassMeldung" class="meldung"></div>
+      <div class="zeile" style="margin-top:.6rem"><span class="name">Expertenzugang auch von außen
+        <span class="hinweis" style="color:var(--red)">auf eigenes Risiko: ohne Sperre gegen Passwort-Raten, ein Update gibt volle Kontrolle über das Board.
+          Gilt bis zum Neustart; der Reverse Proxy muss die Pfade zusätzlich freigeben.</span></span></div>
+      <div class="wahl" id="exExtern" style="flex-wrap:wrap">
+        <button data-h="0">AUS</button><button data-h="1">1 H</button><button data-h="8">8 H</button><button data-h="24">24 H</button><button data-h="-1">IMMER</button>
+      </div>
+      <input id="exExternPass" class="feld" type="password" placeholder="Experten-Passwort zur Bestätigung" autocomplete="off">
+      <div id="exExternMeldung" class="meldung"></div>
     </section>
 
     <section class="block">
@@ -154,7 +174,7 @@
       <input id="fwDatei" class="feld" type="file" accept=".bin">
       <div id="fwInfo" class="hinweis" style="font-size:.8rem;color:var(--text2);margin-top:.4rem;word-break:break-all"></div>
       <input id="fwSoll" class="feld" type="text" placeholder="erwartete SHA-256 aus dem Release (optional)" autocomplete="off" spellcheck="false">
-      <input id="fwPass" class="feld" type="password" placeholder="Admin-Passwort zur Bestätigung" autocomplete="current-password">
+      <input id="fwPass" class="feld" type="password" placeholder="Experten-Passwort zur Bestätigung" autocomplete="off">
       <button id="fwBtn" class="knopf" style="margin-top:.5rem" disabled>FIRMWARE INSTALLIEREN</button>
       <div id="fwMeldung" class="meldung"></div>
       <p class="hinweis" style="font-size:.75rem;color:var(--text2);margin-top:.4rem">
@@ -169,6 +189,7 @@
         über die Weboberfläche geändertes WLAN, dann Neustart. Danach gelten die Vorgaben der Firmware; ohne eigene Vorgaben
         verlangt die App eine neue Einrichtung. An der Heizung selbst ändert sich nichts.</p>
       <input id="resetText" class="feld" type="text" placeholder="zur Bestätigung WERKSRESET eingeben" autocomplete="off">
+      <input id="resetPass" class="feld" type="password" placeholder="Experten-Passwort" autocomplete="off">
       <button id="resetBtn" class="knopf" style="margin-top:.5rem;border-color:var(--red);color:var(--red)" disabled>ZURÜCKSETZEN</button>
       <div id="resetMeldung" class="meldung"></div>
     </section>
