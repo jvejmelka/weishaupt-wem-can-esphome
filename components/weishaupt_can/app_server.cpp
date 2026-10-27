@@ -108,6 +108,11 @@ void AppServer::web_passwort_setzen_() {
 #endif
 }
 
+void AppServer::einhaengen() {
+  // vor der ESPHome-Oberflaeche anmelden: deren Handler beansprucht "/" fuer sich
+  web_server_base::global_web_server_base->add_handler_without_auth(this);
+}
+
 void AppServer::setup() {
   // Sitzungs-Token: einmal erzeugt, im Flash gespeichert - ein Update meldet niemanden ab
   this->token_ = this->token_laden_(this->token_pref_, TOKEN_SCHLUESSEL, false);
@@ -167,8 +172,6 @@ void AppServer::setup() {
     }
   }
 #endif
-  // vor dem Handler der Weboberflaeche einhaengen ist nicht noetig: der kennt /app und /api/ nicht
-  web_server_base::global_web_server_base->add_handler_without_auth(this);
   ESP_LOGI(TAG, "Heizungs-App unter /app (%u Werte, Version %s)", (unsigned) this->quellen_.size(), ap::APP_VERSION);
 }
 
@@ -399,7 +402,7 @@ static bool beginnt(const char *s, const char *p) { return std::strncmp(s, p, st
 bool AppServer::canHandle(AsyncWebServerRequest *request) const {
   char buf[AsyncWebServerRequest::URL_BUF_SIZE];
   StringRef u = request->url_to(buf);
-  return beginnt(u.c_str(), "/api/") || ap::datei(u.c_str(), u.size()) != nullptr;
+  return u == "/" || u == "/experten" || beginnt(u.c_str(), "/api/") || ap::datei(u.c_str(), u.size()) != nullptr;
 }
 
 void AppServer::handleBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
@@ -752,7 +755,18 @@ void AppServer::handleRequest(AsyncWebServerRequest *request) {
   std::string url = u.str();
   bool post = request->method() == HTTP_POST;
 
-  if (const ap::Datei *d = ap::datei(url.c_str(), url.size())) {
+  if (url == "/") {
+    this->datei_(request, ap::datei("/app", 4));          // Startseite = App
+  } else if (url == "/experten") {
+#if defined(USE_WEBSERVER) && defined(USE_WEBSERVER_AUTH)
+    // ESPHome-Oberflaeche: dieselbe Anmeldung wie dort (Benutzer admin, Admin-Passwort, Digest)
+    if (this->experten == nullptr) this->antworten_(request, 404, "{\"error\":\"Expertenoberflaeche nicht eingebaut\"}");
+    else if (!request->authenticate("admin", this->web_pw_)) request->requestAuthentication();
+    else this->experten->handle_index_request(request);
+#else
+    this->antworten_(request, 404, "{\"error\":\"Expertenoberflaeche nicht eingebaut\"}");
+#endif
+  } else if (const ap::Datei *d = ap::datei(url.c_str(), url.size())) {
     this->datei_(request, d);
   } else if (url == "/api/einrichtung") {
     bool noetig;

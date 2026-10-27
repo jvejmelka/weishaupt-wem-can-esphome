@@ -8,6 +8,9 @@ static const char *const TAG = "weishaupt_can";
 
 void WeishauptCan::setup() {
   for (auto &s : this->speicher_) s->laden();
+#ifdef USE_WC_APP
+  if (this->app) this->app->einhaengen();   // vor der ESPHome-Oberflaeche (die will "/")
+#endif
 }
 
 void WeishauptCan::loop() {

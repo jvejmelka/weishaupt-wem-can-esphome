@@ -266,7 +266,8 @@ reason (after startup, on changed status bits, after switch commands).
 
 The same app without a server: the board serves it itself (gzip, about 16 KB of flash in total).
 
-- Open **`http://<board>/app`**. `http://<board>/` stays the board's web interface.
+- Open **`http://<board>/`** (or `/app`). From v42 the ESPHome web interface lives at **`/experten`**
+  (user `admin`, admin password).
 - Log in with `app_benutzer` and `app_passwort` from `secrets.yaml`. 5 failed attempts per address within
   15 min lock that address for 15 min. The session token is kept in flash and survives updates.
 - Switching commands go through the same queue, one-minute lock and bus check as via MQTT.

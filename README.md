@@ -253,7 +253,8 @@ Anlass (nach dem Start, bei geänderten Statusbits, nach Schaltbefehlen).
 
 Dieselbe App, ohne Server: das Board liefert sie selbst aus (gzip, zusammen etwa 16 KB im Flash).
 
-- Aufruf: **`http://<board>/app`**. Unter `http://<board>/` bleibt die Weboberfläche des Boards.
+- Aufruf: **`http://<board>/`** (oder `/app`). Die ESPHome-Weboberfläche liegt ab v42 unter **`/experten`**
+  (Benutzer `admin`, Admin-Passwort).
 - Login mit `app_benutzer` und `app_passwort` aus `secrets.yaml`. 5 Fehlversuche je Adresse in 15 min
   sperren diese Adresse für 15 min. Das Sitzungs-Token liegt im Flash und übersteht Updates.
 - Schaltbefehle laufen wie per MQTT durch Warteschlange, Sperrminute und Kontrolle am Bus.

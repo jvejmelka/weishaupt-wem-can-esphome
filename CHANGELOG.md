@@ -1,6 +1,10 @@
 # Changelog – ESP-CAN-Brücke Weishaupt (WeAct CAN485, ESPHome)
 
 
+## v42 (in Arbeit)
+- **`/` ist die App**, die ESPHome-Weboberfläche liegt unter **`/experten`** (Digest, Benutzer `admin`, Admin-Passwort). Der App-Handler meldet sich dafür vor der ESPHome-Oberfläche beim Webserver an. `/events`, Entitätspfade und `/update` bleiben, wo sie sind.
+- **Login-Sperre hinter einem Reverse Proxy:** `X-Forwarded-For` zählt nur noch, wenn die Anfrage von der eingetragenen Proxy-Adresse kommt (`app_proxy` in `secrets.yaml`, leer = nie). Vorher hätte ein gefälschter Header die Sperre umgehen können (Hinweis vom Betreiber-Proxy).
+
 ## v41 – 2026-10-27
 - **Einstellungsseite, Block „Board“:** Firmware, App-Stand, Uhrzeit, Laufzeit, Grund des letzten Neustarts, WLAN mit Signal, IP, freier Speicher, Zustand des CAN-Busses; Knopf **Neustart**.
 - **Log im Browser:** die letzten 80 Meldungen (Info, Warnung, Fehler) des Boards, alle 10 s neu.

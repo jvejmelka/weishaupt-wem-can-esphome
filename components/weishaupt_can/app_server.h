@@ -21,6 +21,9 @@
 #include "esphome/core/component.h"
 #include "esphome/core/preferences.h"
 #include "esphome/components/web_server_base/web_server_base.h"
+#ifdef USE_WEBSERVER
+#include "esphome/components/web_server/web_server.h"
+#endif
 #include "app_logik.h"
 #include "app_dateien.h"
 
@@ -38,8 +41,13 @@ class AppServer : public AsyncWebHandler {
       : wc_(wc), benutzer_(std::move(benutzer)), passwort_(std::move(passwort)), admin_(std::move(admin)),
         firmware_(std::move(firmware)), proxy_(std::move(proxy)) {}
 
+  void einhaengen();   // Handler beim Webserver anmelden - VOR dessen eigener Oberflaeche (Setup, frueh)
   void setup();
   void loop();
+#ifdef USE_WEBSERVER
+  // ab v42: "/" ist die App, die ESPHome-Oberflaeche liegt unter /experten (Admin-Passwort)
+  web_server::WebServer *experten{nullptr};
+#endif
 
   // aus der YAML (Paket app): Schaltbefehl (1 Heizkreis, 2 Warmwasser; Nutzlast wie cmd/heizkreis)
   // und "Betriebsarten einmal lesen" (wie cmd/status)

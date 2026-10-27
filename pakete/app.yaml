@@ -1,7 +1,7 @@
 # Paket APP (ab v38): die Heizungs-App laeuft direkt auf dem Board - kein Server, kein Docker.
 #
-#   http://<board>/app        die App (dieselbe Oberflaeche wie app/ im Repository)
-#   http://<board>/           wie bisher die Weboberflaeche des Boards (Passwort aus web_server)
+#   http://<board>/ und /app  die App (dieselbe Oberflaeche wie app/ im Repository)
+#   http://<board>/experten   die ESPHome-Weboberflaeche (ab v42; Benutzer admin, Admin-Passwort)
 #
 # Login der App: app_benutzer und app_passwort aus secrets.yaml. 5 Fehlversuche
 # je Adresse in 15 min sperren diese Adresse fuer 15 min. Nach dem Login bleibt man angemeldet
@@ -32,6 +32,7 @@ esphome:
           };
           id(wcan)->app->lesen = []() { id(status_lesen)->execute(); };
           id(wcan)->app->werksreset = []() { id(app_werksreset).press(); };
+          id(wcan)->app->experten = id(experten_oberflaeche);
 
 # Werksreset (ab v41): loescht alle gespeicherten Einstellungen, Zaehler und Zugangsdaten und startet neu.
 # Ausgeloest nur ueber die Einstellungsseite (mit Bestaetigung) - kein Knopf in der Weboberflaeche.
