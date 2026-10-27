@@ -19,6 +19,7 @@ weishaupt_can:
     benutzer: !secret app_benutzer
     passwort: !secret app_passwort
     admin_passwort: !secret web_password   # Einstellungsseite und Weboberflaeche (ab v39)
+    proxy: !secret app_proxy               # IP des Reverse Proxys oder "" (ab v42, Login-Sperre hinter Proxy)
     firmware: ${firmware}
 
 esphome:

@@ -35,6 +35,7 @@ CONF_APP = "app"
 CONF_BENUTZER = "benutzer"
 CONF_PASSWORT = "passwort"
 CONF_ADMIN_PASSWORT = "admin_passwort"
+CONF_PROXY = "proxy"
 CONF_FIRMWARE = "firmware"
 
 weishaupt_can_ns = cg.esphome_ns.namespace("weishaupt_can")
@@ -62,6 +63,8 @@ CONFIG_SCHEMA = cv.Schema(
                     cv.Optional(CONF_PASSWORT, default=""): cv.string_strict,
                     cv.Optional(CONF_ADMIN_PASSWORT, default=""): cv.string_strict,
                     cv.Optional(CONF_FIRMWARE, default=""): cv.string,
+                    # Reverse Proxy (IPv4-Adresse): nur von ihm wird X-Forwarded-For geglaubt
+                    cv.Optional(CONF_PROXY, default=""): cv.Any(cv.one_of(""), cv.ipv4address),
                 }
             ),
             cv.requires_component("web_server"),
@@ -117,5 +120,7 @@ async def to_code(config):
 
             request_log_listener()
         cg.add(
-            var.app_einrichten(app[CONF_BENUTZER], app[CONF_PASSWORT], app[CONF_ADMIN_PASSWORT], app[CONF_FIRMWARE])
+            var.app_einrichten(
+                app[CONF_BENUTZER], app[CONF_PASSWORT], app[CONF_ADMIN_PASSWORT], app[CONF_FIRMWARE], str(app[CONF_PROXY])
+            )
         )

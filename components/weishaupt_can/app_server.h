@@ -32,9 +32,11 @@ class WeishauptCan;
 class AppServer : public AsyncWebHandler {
  public:
   // benutzer/passwort/admin: Vorgaben aus der YAML (secrets.yaml) fuer den ersten Start; leer = Ersteinrichtung
-  AppServer(WeishauptCan *wc, std::string benutzer, std::string passwort, std::string admin, std::string firmware)
+  // proxy: IP des Reverse Proxys - nur dessen X-Forwarded-For zaehlt fuer die Login-Sperre (leer = nie)
+  AppServer(WeishauptCan *wc, std::string benutzer, std::string passwort, std::string admin, std::string firmware,
+            std::string proxy)
       : wc_(wc), benutzer_(std::move(benutzer)), passwort_(std::move(passwort)), admin_(std::move(admin)),
-        firmware_(std::move(firmware)) {}
+        firmware_(std::move(firmware)), proxy_(std::move(proxy)) {}
 
   void setup();
   void loop();
@@ -98,7 +100,7 @@ class AppServer : public AsyncWebHandler {
   bool einstellung_setzen_(const std::string &id, JsonVariant wert, std::string &fehler);
 
   WeishauptCan *wc_;
-  std::string benutzer_, passwort_, admin_, firmware_;
+  std::string benutzer_, passwort_, admin_, firmware_, proxy_;
   std::string token_, admin_token_;
   ESPPreferenceObject token_pref_, admin_pref_, zugang_pref_;
   std::vector<Einstellung> einstellungen_;

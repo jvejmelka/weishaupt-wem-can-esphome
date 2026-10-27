@@ -436,26 +436,37 @@ bool AppServer::admin_angemeldet_(AsyncWebServerRequest *r) const {
 }
 
 uint32_t AppServer::adresse_(AsyncWebServerRequest *r) const {
-  // hinter dem Reverse Proxy zaehlt die erste Adresse aus X-Forwarded-For
-  auto xf = r->get_header("X-Forwarded-For");
-  if (xf.has_value() && !xf.value().empty()) {
-    std::string a = xf.value().substr(0, xf.value().find(','));
-    return (uint32_t) zs::fnv(bf::trimmen(a));
-  }
+  // Adresse der Gegenstelle; X-Forwarded-For (erste Adresse) zaehlt NUR, wenn die Anfrage vom
+  // eingetragenen Reverse Proxy kommt - sonst koennte jeder Client die Login-Sperre per Header umgehen
   struct sockaddr_storage sa {};
   socklen_t n = sizeof(sa);
+  uint32_t peer = 0;
+  char text[48] = {0};
   int fd = httpd_req_to_sockfd(*r);
-  if (fd < 0 || getpeername(fd, (struct sockaddr *) &sa, &n) != 0) return 0;
-  if (sa.ss_family == AF_INET) return ((struct sockaddr_in *) &sa)->sin_addr.s_addr;
+  if (fd >= 0 && getpeername(fd, (struct sockaddr *) &sa, &n) == 0) {
+    if (sa.ss_family == AF_INET) {
+      auto *a4 = (struct sockaddr_in *) &sa;
+      peer = a4->sin_addr.s_addr;
+      inet_ntop(AF_INET, &a4->sin_addr, text, sizeof(text));
+    }
 #if LWIP_IPV6
-  if (sa.ss_family == AF_INET6) {
-    auto *a6 = (struct sockaddr_in6 *) &sa;
-    uint32_t h = 0;
-    for (int i = 0; i < 16; i++) h = h * 31 + a6->sin6_addr.s6_addr[i];
-    return h;
-  }
+    else if (sa.ss_family == AF_INET6) {
+      auto *a6 = (struct sockaddr_in6 *) &sa;
+      for (int i = 0; i < 16; i++) peer = peer * 31 + a6->sin6_addr.s6_addr[i];
+      inet_ntop(AF_INET6, &a6->sin6_addr, text, sizeof(text));
+      // IPv4 als IPv6 (::ffff:a.b.c.d) wie IPv4 behandeln
+      if (std::strncmp(text, "::ffff:", 7) == 0 && std::strchr(text + 7, '.')) std::memmove(text, text + 7, std::strlen(text + 7) + 1);
+    }
 #endif
-  return 0;
+  }
+  if (!this->proxy_.empty() && this->proxy_ == text) {
+    auto xf = r->get_header("X-Forwarded-For");
+    if (xf.has_value() && !xf.value().empty()) {
+      std::string a = xf.value().substr(0, xf.value().find(','));
+      return (uint32_t) zs::fnv(bf::trimmen(a));
+    }
+  }
+  return peer;
 }
 
 void AppServer::datei_(AsyncWebServerRequest *r, const ap::Datei *d) {
