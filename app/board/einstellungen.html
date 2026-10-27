@@ -106,6 +106,20 @@
 
     <div id="gruppen"></div>
 
+    <section class="block" id="anzeigeBlock">
+      <div class="block-head"><span class="block-title">ZUSATZANZEIGEN</span><span class="block-zustand" id="anzeigeZustand"></span></div>
+      <p class="hinweis" style="font-size:.75rem;color:var(--text2)">Bis zu 6 Werte aus MQTT, die die App unter den Heizungswerten zeigt
+        (z. B. Steckdosen-Leistung, Raumtemperatur). <b>Feld</b> leer = die Nachricht ist selbst die Zahl, sonst JSON-Pfad wie <code>apower</code> oder <code>temperature.tC</code>.
+        <b>Läuft</b> = Anzeige an/aus ab der Schwelle.</p>
+      <div id="anzeigeListe"></div>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.5rem">
+        <button id="anzeigeNeu" class="knopf">+ EINTRAG</button>
+        <button id="anzeigeSpeichern" class="knopf">SPEICHERN</button>
+        <button id="anzeigeVerwerfen" class="knopf">VERWERFEN</button>
+      </div>
+      <div id="anzeigeMeldung" class="meldung"></div>
+    </section>
+
     <section class="block">
       <div class="block-head"><span class="block-title">ZUGANG</span></div>
       <div class="zeile"><span class="name">App-Benutzer <span class="hinweis" id="benutzerAnzeige">–</span></span></div>
@@ -192,6 +206,20 @@
         Nur eine Firmware-Datei für dieses Board (<code>.ota.bin</code> bzw. <code>firmware.bin</code>). Der ESP32 prüft das Abbild vor dem
         Neustart; ist es beschädigt, läuft die bisherige Version weiter. Die Heizung selbst wird dabei nicht verändert.
       </p>
+    </section>
+
+    <section class="block">
+      <div class="block-head"><span class="block-title">TEILWEISE ZURÜCKSETZEN</span></div>
+      <p class="hinweis" style="font-size:.75rem;color:var(--text2)">Nur einen Bereich auf den Auslieferungszustand setzen, ohne Neustart (außer Zugang).
+        <b>Einstellungen</b> = alle Schalter und Zahlen oben auf die Empfehlung (◆), <b>Zusatzanzeigen</b> = Liste leeren,
+        <b>Oberfläche</b> = eingebaute App, <b>Zugang</b> = Passwörter wie bei Auslieferung (oder neue Einrichtung), danach Neustart.
+        Nur im Heimnetz.</p>
+      <div class="wahl" id="teilreset" style="flex-wrap:wrap">
+        <button data-b="einstellungen">EINSTELLUNGEN</button><button data-b="anzeige">ZUSATZANZEIGEN</button>
+        <button data-b="oberflaeche">OBERFLÄCHE</button><button data-b="zugang" style="color:var(--red)">ZUGANG</button>
+      </div>
+      <input id="teilPass" class="feld" type="password" placeholder="Experten-Passwort" autocomplete="off">
+      <div id="teilMeldung" class="meldung"></div>
     </section>
 
     <section class="block">

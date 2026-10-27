@@ -64,24 +64,25 @@ static const uint32_t ZUGANG_SCHLUESSEL = 0x4150505A;  // "APPZ" Zugangsdaten v3
 static const uint32_t ZUGANG2_SCHLUESSEL = 0x41505A32; // "APZ2" Zugangsdaten ab v42 (Hashes, drei Stufen)
 static const uint32_t TOKEN_TAGE = 90;                 // App-Token nach so vielen Tagen erneuern
 
-// Einstellungen der Einstellungsseite: Gruppe, Name des Schalters bzw. der Zahl auf dem Board.
+// Einstellungen der Einstellungsseite: Gruppe, Name des Schalters bzw. der Zahl auf dem Board, empfohlene
+// Vorgabe fuer Zahlen (wie initial_value in der YAML; Schalter: aus ihrem restore_mode).
 // Was es auf dem Board nicht gibt (Paket nicht eingebunden), fehlt einfach.
-static const char *const EINSTELLUNGEN[][2] = {
-    {"Schalten", "Schalten per CAN statt JSON (Heizkreis, Warmwasser)"},
-    {"Schalten", "Abstand zwischen Befehlen per CAN (s)"},
-    {"Schalten", "Abstand zwischen Befehlen per JSON (s)"},
-    {"Lesen", "Eigene CAN-Anfragen"},
-    {"Lesen", "Lange Lesebefehle auch am Kessel"},
-    {"Lesen", "SD-Dateien abrufen"},
-    {"Regeln", "R1 Warmwasser am Display oder Portal umgeschaltet"},
-    {"Regeln", "R2 Warmwasserbetrieb trotz Aus"},
-    {"Regeln", "R3 Heizung ein oder Standby"},
-    {"Regeln", "R4 Heizanforderung passt nicht"},
-    {"Regeln", "R5 uebrige Statusbits geaendert"},
-    {"Regeln", "Eigene Regeln (Hauptschalter)"},
-    {"Experten", "Freies CAN-Schreiben (Experten)"},
-    {"Experten", "CAN-Rohmitschnitt nach MQTT"},
-    {"Experten", "Waechter: Neustart nach Minuten ohne Bus (0 = aus)"},
+static const char *const EINSTELLUNGEN[][3] = {
+    {"Schalten", "Schalten per CAN statt JSON (Heizkreis, Warmwasser)", ""},
+    {"Schalten", "Abstand zwischen Befehlen per CAN (s)", "10"},
+    {"Schalten", "Abstand zwischen Befehlen per JSON (s)", "60"},
+    {"Lesen", "Eigene CAN-Anfragen", ""},
+    {"Lesen", "Lange Lesebefehle auch am Kessel", ""},
+    {"Lesen", "SD-Dateien abrufen", ""},
+    {"Regeln", "R1 Warmwasser am Display oder Portal umgeschaltet", ""},
+    {"Regeln", "R2 Warmwasserbetrieb trotz Aus", ""},
+    {"Regeln", "R3 Heizung ein oder Standby", ""},
+    {"Regeln", "R4 Heizanforderung passt nicht", ""},
+    {"Regeln", "R5 uebrige Statusbits geaendert", ""},
+    {"Regeln", "Eigene Regeln (Hauptschalter)", ""},
+    {"Experten", "Freies CAN-Schreiben (Experten)", ""},
+    {"Experten", "CAN-Rohmitschnitt nach MQTT", ""},
+    {"Experten", "Waechter: Neustart nach Minuten ohne Bus (0 = aus)", "5"},
 };
 
 // zufaelliges Token (64 Hex-Zeichen), gespeichert; neu = immer ein neues erzeugen (Passwort geaendert)
@@ -313,13 +314,15 @@ void AppServer::einstellungen_sammeln_() {
 #ifdef USE_SWITCH
     for (auto *s : App.get_switches()) {
       if (s->get_name() != e[1]) continue;
-      this->einstellungen_.push_back(Einstellung{s->get_object_id_to(buf).str(), e[1], e[0], s, false});
+      bool an = (s->restore_mode & switch_::RESTORE_MODE_ON_MASK) != 0;
+      this->einstellungen_.push_back(Einstellung{s->get_object_id_to(buf).str(), e[1], e[0], s, false, an ? 1.0f : 0.0f});
     }
 #endif
 #ifdef USE_NUMBER
     for (auto *n : App.get_numbers()) {
       if (n->get_name() != e[1]) continue;
-      this->einstellungen_.push_back(Einstellung{n->get_object_id_to(buf).str(), e[1], e[0], n, true});
+      float v = e[2][0] ? strtof(e[2], nullptr) : NAN;
+      this->einstellungen_.push_back(Einstellung{n->get_object_id_to(buf).str(), e[1], e[0], n, true, v});
     }
 #endif
   }
@@ -341,6 +344,10 @@ std::string AppServer::einstellungen_json_() {
   }
   o["firmware"] = this->firmware_;
   o["app_version"] = ap::APP_VERSION;
+  if (this->zusatz_datei) {
+    JsonArray za = o["zusatz"].to<JsonArray>();
+    for (auto &z : zs::liste()) zs::eintrag_json(za.add<JsonObject>(), z);
+  }
   JsonArray a = o["liste"].to<JsonArray>();
   for (auto &e : this->einstellungen_) {
     JsonObject x = a.add<JsonObject>();
@@ -352,6 +359,7 @@ std::string AppServer::einstellungen_json_() {
       auto *n = static_cast<number::Number *>(e.obj);
       x["art"] = "zahl";
       if (n->has_state()) x["wert"] = n->state; else x["wert"] = nullptr;
+      if (!std::isnan(e.vorgabe)) x["vorgabe"] = e.vorgabe;
       x["min"] = n->traits.get_min_value();
       x["max"] = n->traits.get_max_value();
       x["schritt"] = n->traits.get_step();
@@ -362,6 +370,7 @@ std::string AppServer::einstellungen_json_() {
     auto *s = static_cast<switch_::Switch *>(e.obj);
     x["art"] = "schalter";
     x["wert"] = s->state;
+    x["vorgabe"] = e.vorgabe != 0;
 #endif
   }
   std::string out;
@@ -543,6 +552,72 @@ void AppServer::paket_hochladen_(AsyncWebServerRequest *r) {
   { std::lock_guard<std::mutex> g(this->sperre_); this->paket_ = p; this->paket_aktiv_ = true; }
   ESP_LOGI(TAG, "Oberflaechen-Paket %s aktiv (%u Dateien)", p.version.c_str(), (unsigned) p.dateien.size());
   this->antworten_(r, 200, "{\"ok\":true,\"version\":\"" + p.version + "\"}");
+}
+
+// Zusatzanzeigen der App aendern: {"eintraege":[...]} wie cmd/zusatz (gleiches Skript zs_datei in der YAML)
+void AppServer::anzeige_(AsyncWebServerRequest *r) {
+  if (!this->zusatz_datei) { this->antworten_(r, 404, "{\"error\":\"Paket zusatz nicht eingebunden\"}"); return; }
+  int version = -1;
+  std::vector<zs::Eintrag> v;
+  std::string f, txt = this->body_;
+  if (!zs::datei_lesen(txt, version, v, f)) {
+    JsonDocument e;
+    e["error"] = f;
+    std::string out;
+    serializeJson(e, out);
+    this->antworten_(r, 400, out);
+    return;
+  }
+  ESP_LOGI(TAG, "Zusatzanzeigen ueber die Einstellungsseite: %u Eintrag/Eintraege", (unsigned) v.size());
+  this->wc_->spaeter([this, txt]() { this->zusatz_datei(txt); });
+  this->antworten_(r, 200, "{\"ok\":true}");
+}
+
+// Teil-Werksreset (Experten-Passwort): einstellungen = empfohlene Vorgaben, anzeige = Zusatzanzeigen leeren,
+// oberflaeche = eingebaute Oberflaeche, zugang = Zugangsdaten wie bei Auslieferung (danach Neustart)
+void AppServer::teilreset_(AsyncWebServerRequest *r) {
+  JsonDocument d;
+  if (deserializeJson(d, this->body_) || !d["bereich"].is<const char *>()) { this->antworten_(r, 400, "{\"error\":\"bereich fehlt\"}"); return; }
+  if (!this->experte_ok_(r)) { this->antworten_(r, 400, "{\"error\":\"Experten-Passwort falsch oder nicht gesetzt\"}"); return; }
+  std::string b = d["bereich"].as<std::string>();
+  if (b == "einstellungen") {
+    int n = 0;
+    for (auto &e : this->einstellungen_) {
+      if (std::isnan(e.vorgabe)) continue;
+      std::string f;
+      JsonDocument w;
+      if (e.zahl) w.set(e.vorgabe); else w.set(e.vorgabe != 0);
+      if (this->einstellung_setzen_(e.id, w.as<JsonVariant>(), f)) n++;
+    }
+    ESP_LOGW(TAG, "Teil-Werksreset: %d Einstellungen auf die Vorgabe", n);
+  } else if (b == "anzeige") {
+    if (!this->zusatz_datei) { this->antworten_(r, 404, "{\"error\":\"Paket zusatz nicht eingebunden\"}"); return; }
+    ESP_LOGW(TAG, "Teil-Werksreset: Zusatzanzeigen geloescht");
+    this->wc_->spaeter([this]() { this->zusatz_datei("{\"eintraege\":[]}"); });
+  } else if (b == "oberflaeche") {
+    { std::lock_guard<std::mutex> g(this->sperre_); this->paket_aktiv_ = false; }
+#ifdef USE_WC_DATEIEN
+    remove(PAKET);
+#endif
+    ESP_LOGW(TAG, "Teil-Werksreset: eingebaute Oberflaeche");
+  } else if (b == "zugang") {
+    ESP_LOGW(TAG, "Teil-Werksreset: Zugangsdaten wie bei Auslieferung - Neustart");
+    this->wc_->spaeter([this]() {
+      zg::Zugang2 leer{};
+      this->zugang_pref_.save(&leer);
+      ap::Zugang alt{};
+      auto alt_pref = global_preferences->make_preference<ap::Zugang>(ZUGANG_SCHLUESSEL);
+      alt_pref.save(&alt);
+      this->token_laden_(this->token_pref_, TOKEN_SCHLUESSEL, true);
+      this->token_laden_(this->admin_pref_, ADMIN_SCHLUESSEL, true);
+      global_preferences->sync();
+      App.safe_reboot();
+    });
+  } else {
+    this->antworten_(r, 400, "{\"error\":\"bereich: einstellungen, anzeige, oberflaeche oder zugang\"}");
+    return;
+  }
+  this->antworten_(r, 200, "{\"ok\":true}");
 }
 
 // ---------------------------------------------------------------- Webserver-Faden
@@ -1093,6 +1168,10 @@ void AppServer::handleRequest(AsyncWebServerRequest *request) {
       ESP_LOGW(TAG, "Neustart ueber die Einstellungsseite");
       this->wc_->spaeter([]() { App.safe_reboot(); });
       this->antworten_(request, 200, "{\"ok\":true}");
+    } else if (url == "/api/admin/anzeige" && post) {
+      this->anzeige_(request);
+    } else if (url == "/api/admin/teilreset" && post) {
+      this->teilreset_(request);
     } else if (url == "/api/admin/werksreset" && post) {
       JsonDocument d;
       std::string ex;

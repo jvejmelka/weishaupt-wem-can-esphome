@@ -363,7 +363,7 @@ inline bool extern_erlaubt(const std::string &url) {
   for (auto *p : PFADE)
     if (url == p) return true;
   if (url.compare(0, 5, "/api/") != 0) return false;
-  return url != "/api/admin/werksreset";   // Werksreset nur im LAN
+  return url != "/api/admin/werksreset" && url != "/api/admin/teilreset";   // Ruecksetzen nur im LAN
 }
 
 // Vergleich ohne fruehen Abbruch (die Laenge verraet er trotzdem - Passwoerter sind kurz genug)

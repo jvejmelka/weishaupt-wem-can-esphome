@@ -30,6 +30,10 @@ esphome:
           if (!zs::aus_speicher(id(wcan)->zs.speicher.data(), f)) ESP_LOGW("zusatz", "Liste: %s", f.c_str());
           ESP_LOGI("zusatz", "%u Zusatzanzeige(n) geladen", (unsigned) zs::liste().size());
           id(zs_liste_ts).publish_state(zs::anzeige());
+          #ifdef USE_WC_APP
+          // Einstellungsseite der App (ab v42): gleiche Pruefung und Speicherung wie cmd/zusatz
+          if (id(wcan)->app) id(wcan)->app->zusatz_datei = [](const std::string &t) { id(zs_datei)->execute(t); };
+          #endif
           #ifdef USE_MQTT
           mqtt::global_mqtt_client->subscribe("${geraet}/cmd/zusatz", [](const std::string &t, const std::string &p) {
             id(zs_datei)->execute(p);

@@ -71,12 +71,102 @@ async function setzen(id, wert, meldungEl) {
   }
 }
 
+// ── Zusatzanzeigen (Liste wie cmd/zusatz)
+let anzeigeGeaendert = false, anzeigeStand = [];
+const FELDER = [['name', 'Name', 24], ['topic', 'MQTT-Topic', 100], ['feld', 'Feld (leer = Zahl)', 32], ['einheit', 'Einheit', 8]];
+function anzeigeZeigen(liste) {
+  const b = $('anzeigeBlock');
+  if (liste === undefined) { b.classList.add('hidden'); return; }
+  b.classList.remove('hidden');
+  anzeigeStand = liste;
+  $('anzeigeZustand').textContent = `${liste.length} von 6`;
+  const ziel = $('anzeigeListe');
+  ziel.textContent = '';
+  liste.forEach(e => ziel.appendChild(anzeigeZeile(e)));
+}
+function anzeigeZeile(e = {}) {
+  const z = document.createElement('div');
+  z.className = 'anzeige-eintrag';
+  z.style.cssText = 'border-top:1px solid var(--line, rgba(128,128,128,.25));padding:.5rem 0;display:grid;gap:.3rem';
+  for (const [k, ph, max] of FELDER) {
+    const f = document.createElement('input');
+    f.className = 'feld'; f.dataset.k = k; f.placeholder = ph; f.maxLength = max; f.value = e[k] || '';
+    f.autocomplete = 'off'; f.spellcheck = false;
+    f.addEventListener('input', () => { anzeigeGeaendert = true; });
+    z.appendChild(f);
+  }
+  const r = document.createElement('div');
+  r.style.cssText = 'display:flex;gap:.5rem;align-items:center;flex-wrap:wrap';
+  r.innerHTML = '<label class="hinweis"><input type="checkbox" data-k="laeuft"> läuft ab Schwelle</label>' +
+    '<input class="zahl" data-k="schwelle" type="number" step="any" style="width:6rem">' +
+    '<button class="knopf" style="margin-left:auto">ENTFERNEN</button>';
+  r.querySelector('[data-k=laeuft]').checked = e.art === 'laeuft';
+  r.querySelector('[data-k=schwelle]').value = e.schwelle ?? 1;
+  r.querySelectorAll('input').forEach(i => i.addEventListener('input', () => { anzeigeGeaendert = true; }));
+  r.querySelector('button').addEventListener('click', () => { z.remove(); anzeigeGeaendert = true; });
+  z.appendChild(r);
+  return z;
+}
+function anzeigeLesen() {
+  return [...document.querySelectorAll('#anzeigeListe .anzeige-eintrag')].map(z => {
+    const w = k => z.querySelector(`[data-k=${k}]`);
+    const e = { name: w('name').value.trim(), topic: w('topic').value.trim() };
+    if (w('feld').value.trim()) e.feld = w('feld').value.trim();
+    if (w('einheit').value.trim()) e.einheit = w('einheit').value.trim();
+    e.art = w('laeuft').checked ? 'laeuft' : 'wert';
+    if (e.art === 'laeuft') e.schwelle = Number(w('schwelle').value || 1);
+    return e;
+  });
+}
+$('anzeigeNeu').addEventListener('click', () => {
+  if (document.querySelectorAll('#anzeigeListe .anzeige-eintrag').length >= 6) return;
+  $('anzeigeListe').appendChild(anzeigeZeile()); anzeigeGeaendert = true;
+});
+$('anzeigeVerwerfen').addEventListener('click', () => { anzeigeGeaendert = false; anzeigeZeigen(anzeigeStand); $('anzeigeMeldung').textContent = ''; });
+$('anzeigeSpeichern').addEventListener('click', async () => {
+  const m = $('anzeigeMeldung');
+  try {
+    await api('/api/admin/anzeige', { method: 'POST', body: JSON.stringify({ eintraege: anzeigeLesen() }) });
+    anzeigeGeaendert = false;
+    m.textContent = 'gespeichert – die App zeigt es beim nächsten Abruf'; m.className = 'meldung ok';
+    setTimeout(laden, 1500);
+  } catch (e) { m.textContent = e.message; m.className = 'meldung fehler'; }
+});
+
+// ── Teilweise zuruecksetzen
+document.querySelectorAll('#teilreset button').forEach(b => b.addEventListener('click', async () => {
+  const m = $('teilMeldung'), bereich = b.dataset.b;
+  if (!confirm(`Bereich „${b.textContent}“ wirklich zurücksetzen?`)) return;
+  try {
+    const res = await fetch('/api/admin/teilreset', {
+      method: 'POST', body: JSON.stringify({ bereich }),
+      headers: { 'Content-Type': 'application/json', 'x-admin-token': lies(TOKEN_KEY) || '', 'x-experte': $('teilPass').value }
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(d.error || ('Fehler ' + res.status));
+    $('teilPass').value = '';
+    if (bereich === 'zugang') { schreib(TOKEN_KEY, null); m.textContent = 'Zugang zurückgesetzt – Board startet neu, danach /app aufrufen'; }
+    else m.textContent = 'zurückgesetzt';
+    m.className = 'meldung ok';
+    anzeigeGeaendert = false;
+    setTimeout(() => { laden(); infoLaden(); }, 1500);
+  } catch (e) { m.textContent = e.message; m.className = 'meldung fehler'; }
+}));
+
 function zeile(e) {
   const z = document.createElement('div');
   z.className = 'zeile';
   const n = document.createElement('span');
   n.className = 'name';
   n.textContent = e.name;
+  if (e.vorgabe !== undefined) {
+    const abw = e.art === 'schalter' ? e.wert !== e.vorgabe : e.wert !== e.vorgabe;
+    const v = document.createElement('span');
+    v.className = 'hinweis';
+    v.textContent = `◆ Empfehlung: ${e.art === 'schalter' ? (e.vorgabe ? 'an' : 'aus') : e.vorgabe}${abw ? ' – abweichend' : ''}`;
+    if (abw) v.style.color = 'var(--orange, #e0a030)';
+    n.appendChild(v);
+  }
   z.appendChild(n);
   if (e.art === 'schalter') {
     const s = document.createElement('button');
@@ -118,6 +208,7 @@ async function laden() {
   $('experteZustand').style.color = d.experte_extern_min ? 'var(--red)' : '';
   $('benutzerAnzeige').textContent = d.benutzer || '–';
   document.querySelectorAll('#darstellung button').forEach(b => b.classList.toggle('aktiv', b.dataset.wert === d.darstellung));
+  if (!anzeigeGeaendert) anzeigeZeigen(d.zusatz);
   const gruppen = {};
   for (const e of d.liste || []) (gruppen[e.gruppe] = gruppen[e.gruppe] || []).push(e);
   const ziel = $('gruppen');

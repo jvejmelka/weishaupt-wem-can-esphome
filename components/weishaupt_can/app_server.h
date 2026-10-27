@@ -57,6 +57,7 @@ class AppServer : public AsyncWebHandler {
   std::function<void(int, const std::string &)> befehl;
   std::function<void()> lesen;
   std::function<void()> werksreset;   // ab v41: Knopf factory_reset der YAML
+  std::function<void(const std::string &)> zusatz_datei;   // ab v42: Zusatzanzeigen-Datei (Skript zs_datei)
 
   // Log-Zeile vom Logger (beliebiger Faden) - die letzten Zeilen fuer die Einstellungsseite
   void log_zeile(uint8_t stufe, const char *text, size_t laenge);
@@ -79,6 +80,7 @@ class AppServer : public AsyncWebHandler {
     std::string id, name, gruppe;
     void *obj;          // switch_::Switch* oder number::Number*
     bool zahl;
+    float vorgabe;      // empfohlene Vorgabe (Schalter 0/1), NAN = keine
   };
   struct Abo {
     std::string topic;
@@ -102,6 +104,8 @@ class AppServer : public AsyncWebHandler {
   void paket_hochladen_(AsyncWebServerRequest *r);
   bool experte_ok_(AsyncWebServerRequest *r) const;   // Header x-experte = Experten-Passwort
   void datei_(AsyncWebServerRequest *r, const ap::Datei *d);
+  void anzeige_(AsyncWebServerRequest *r);
+  void teilreset_(AsyncWebServerRequest *r);
   void login_(AsyncWebServerRequest *r);
   void schalten_(AsyncWebServerRequest *r, int ziel);
   bool admin_angemeldet_(AsyncWebServerRequest *r) const;

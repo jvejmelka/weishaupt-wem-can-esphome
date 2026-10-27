@@ -2,6 +2,10 @@
 
 
 ## v42 (in Arbeit)
+- **Zusatzanzeigen auf der Einstellungsseite bearbeiten:** bis zu 6 Einträge (Name, Topic, Feld, Einheit, „läuft ab Schwelle“) anlegen, ändern, entfernen, speichern – gleiche Prüfung und Speicherung wie `cmd/zusatz` (Skript `zs_datei`), wirkt sofort ohne Neustart.
+- **Empfehlungen:** Jede Einstellung zeigt ihre empfohlene Vorgabe (◆, Schalter aus ihrem `restore_mode`, Zahlen wie `initial_value`) und markiert Abweichungen.
+- **Teilweise zurücksetzen** (Experten-Passwort, nur im Heimnetz): Einstellungen auf die Empfehlung, Zusatzanzeigen leeren, eingebaute Oberfläche, Zugang wie bei Auslieferung (mit Neustart). Der große Werksreset bleibt daneben.
+- An der WTC-GW 15-B geprüft: ungültiger Eintrag abgelehnt, Zusatzanzeigen geleert und wieder eingespielt (Werte kommen mit der nächsten MQTT-Nachricht), falsches Passwort und unbekannter Bereich abgelehnt.
 - **Oberfläche ohne Firmware-Update tauschen:** `werkzeuge/app_einbetten.py --paket ui.wui` packt App und Einstellungsseite in ein Oberflächen-Paket (Kopf mit API-Version, SHA-256 je Datei). Einspielen auf der Einstellungsseite (Abschnitt „Oberfläche“, Experten-Passwort): Das Board prüft API-Version, Größe und jede Prüfsumme, legt das Paket ins Dateisystem und liefert es ab sofort aus; bei jedem Fehler bleibt die eingebaute Oberfläche. „Zurück auf eingebaute“ löscht das Paket. Die Infoseite zeigt, welche Oberfläche läuft, und die API-Version. `/api/meta` meldet `api`.
 - Das Dateisystem braucht die Verzeichnisfunktionen der ESP-IDF (`require_vfs_dir`), sonst scheitert `rename` mit ENOSYS.
 - An der WTC-GW 15-B geprüft: falsches Passwort und verändertes Paket (ein Bit) abgelehnt, gültiges Paket aktiv (ETag `p…`), übersteht Neustart, Zurücksetzen auf die eingebaute geht.
