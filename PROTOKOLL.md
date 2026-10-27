@@ -51,6 +51,21 @@ Welche Module auf welchem Knoten liegen, steht in der Systemtabelle auf der SD-K
 Weitere Knoten gibt es an dieser Anlage nicht. Anlagen mit zweitem Heizkreis, Solar oder
 Erweiterungsmodulen haben mehr Einträge – vorher die eigene `systable.csv` ansehen.
 
+**Anlage mit Erweiterungsmodulen** (WTC-GW 25-B mit WEM-EM-HK und WEM-EM-Sol, gleiche WEM-Firmware
+428CC226; `systable.csv` und Tabelle von [geronet1](https://github.com/geronet1/wem-python), danke!):
+
+| Knoten | Gerät | Firmware | Module (MI/MX) | Heartbeat | Schreibkanal in den WEM |
+|---|---|---|---|---|---|
+| 1 | WEM-Systemgerät | 428CC226 | wie oben | `0x701` | – |
+| 2 | Kessel (WTC) | 334EE004 | WE0 (MI 07), MI 09/01, MI 0A/01 | `0x702` | `0x6C2` → `0x682` |
+| **3** | **WEM-EM-HK** (Heizkreis 2, gemischt) | 451CC220 | Heizkreis MI 02 / **MX 01**, MI 09/02, MI 0A/02 | `0x703` | `0x6C3` → `0x683` |
+| **4** | **WEM-EM-Sol** | 452CC210 | SOLAR0 (MI 04), MI 09/03, MI 0A/03 | `0x704` | `0x6C4` → `0x684` |
+
+Daraus folgt die Regel: **Knoten n meldet sich mit Heartbeat `0x700 + n` und schreibt seine Messwerte
+über `0x6C0 + n` in den WEM** (Bestätigung `0x680 + n`). Der Versatz JSON → CAN gilt auch auf den
+Modulknoten: Vorlauf des EM-HK = JSON `MI 02 / MX 01 / 0x2507 / 02` = Knoten 3 `0x2607`/2 (+0x100).
+Die Betriebsart von Heizkreis 2 läge nach diesem Muster auf Knoten 3 `0x2633`/2 – **nicht geprüft**.
+
 Weitere Dateien der SD-Karte liefert der WEM ebenfalls unter `/sd/<datei>` aus (Anmeldung wie für
 JSON; **einzeln abrufen, nie im Takt**):
 
@@ -125,6 +140,7 @@ Teilstücke (segmentiert)                     Block
 | `0x601` → `0x581` | WEM | nur wir (Lesebefehle, Kontrolle nach dem Schalten) |
 | `0x602` → `0x582` | Kessel | **der WEM, etwa 3× pro Sekunde, meist per Block** – und gegebenenfalls wir |
 | `0x6C2` → `0x682` | WEM | der Kessel: schreibt seine Messwerte in den WEM (z. B. `0x2A29` Warmwassertemperatur, `0x2694`–`0x2699`) |
+| `0x6C0 + n` → `0x680 + n` | WEM | weitere Module (n = Knoten, z. B. `0x6C3` EM-HK, `0x6C4` EM-Sol, siehe [Knoten und Module](#knoten-und-module)) |
 
 CAN-Nachrichten haben keinen Absender: Eine Frage von uns auf `0x602` sieht für den Kessel genauso aus
 wie eine des WEM. Mitten in einem Block-Dialog des WEM kann sie dessen Abfrage stören. Darum:

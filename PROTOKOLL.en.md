@@ -51,6 +51,21 @@ Which modules live on which node is listed in the system table on the WEM's SD c
 There are no further nodes on this installation. Installations with a second heating circuit, solar
 or extension modules have more entries – check your own `systable.csv` first.
 
+**Installation with extension modules** (WTC-GW 25-B with WEM-EM-HK and WEM-EM-Sol, same WEM firmware
+428CC226; `systable.csv` and table by [geronet1](https://github.com/geronet1/wem-python), thanks!):
+
+| Node | Device | Firmware | Modules (MI/MX) | Heartbeat | Write channel into the WEM |
+|---|---|---|---|---|---|
+| 1 | WEM system unit | 428CC226 | as above | `0x701` | – |
+| 2 | Boiler (WTC) | 334EE004 | WE0 (MI 07), MI 09/01, MI 0A/01 | `0x702` | `0x6C2` → `0x682` |
+| **3** | **WEM-EM-HK** (heating circuit 2, mixed) | 451CC220 | heating circuit MI 02 / **MX 01**, MI 09/02, MI 0A/02 | `0x703` | `0x6C3` → `0x683` |
+| **4** | **WEM-EM-Sol** | 452CC210 | SOLAR0 (MI 04), MI 09/03, MI 0A/03 | `0x704` | `0x6C4` → `0x684` |
+
+Hence the rule: **node n announces itself with heartbeat `0x700 + n` and writes its readings into the
+WEM via `0x6C0 + n`** (acknowledged on `0x680 + n`). The JSON → CAN offset also applies on the module
+nodes: EM-HK flow temperature = JSON `MI 02 / MX 01 / 0x2507 / 02` = node 3 `0x2607`/2 (+0x100).
+By this pattern the operating mode of heating circuit 2 would be node 3 `0x2633`/2 – **not verified**.
+
 The WEM also serves other files from the SD card under `/sd/<file>` (same login as for JSON;
 **fetch one at a time, never periodically**):
 
@@ -127,6 +142,7 @@ Segmented                                    Block
 | `0x601` → `0x581` | WEM | only us (read commands, verification after switching) |
 | `0x602` → `0x582` | boiler | **the WEM, about 3× per second, mostly by block** – and possibly us |
 | `0x6C2` → `0x682` | WEM | the boiler: writes its readings into the WEM (e.g. `0x2A29` DHW temperature, `0x2694`–`0x2699`) |
+| `0x6C0 + n` → `0x680 + n` | WEM | further modules (n = node, e.g. `0x6C3` EM-HK, `0x6C4` EM-Sol, see [Nodes and modules](#nodes-and-modules)) |
 
 CAN frames carry no sender: a request from us on `0x602` looks exactly like one from the WEM to the
 boiler. In the middle of a WEM block dialogue it can disturb the WEM's query. Therefore: on the boiler
