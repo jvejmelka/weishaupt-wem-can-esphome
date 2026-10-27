@@ -112,6 +112,9 @@ script:
             #ifdef USE_MQTT
             mqtt::global_mqtt_client->publish("${geraet}/befehl/status", bf::befehl_json(e), 0, true);
             #endif
+            #ifdef USE_WC_APP
+            ap::befehl_merken(e);   // Verlauf fuer /api/status der App auf dem Board
+            #endif
           }
           if (!s.ereignisse.empty()) bf::status().geaendert = true;
           s.ereignisse.clear();

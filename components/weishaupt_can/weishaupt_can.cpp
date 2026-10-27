@@ -11,6 +11,13 @@ void WeishauptCan::setup() {
 }
 
 void WeishauptCan::loop() {
+#ifdef USE_WC_APP
+  // erst nach dem Setup aller Bauteile (Sensoren, Webserver, MQTT) einhaengen
+  if (this->app) {
+    if (!this->app_bereit_) { this->app->setup(); this->app_bereit_ = true; }
+    this->app->loop();
+  }
+#endif
   // wie RestoringGlobalsComponent: hoechstens einmal pro Sekunde auf Aenderungen pruefen
   uint32_t jetzt = millis();
   if (jetzt - this->zuletzt_gesichert_ < 1000) return;

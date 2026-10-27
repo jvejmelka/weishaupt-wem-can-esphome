@@ -1,6 +1,15 @@
 # Changelog – ESP-CAN-Brücke Weishaupt (WeAct CAN485, ESPHome)
 
 
+## v38 – 2026-10-27
+- **Handy-App direkt auf dem Board** (neues Paket `app.yaml`): `http://<board>/app` liefert dieselbe App wie `app/` – ohne Server, ohne Docker. Die Dateien aus `app/public/` sind gzip-komprimiert eingebettet (`werkzeuge/app_einbetten.py` → `components/weishaupt_can/app_dateien.h`, zusammen etwa 16 KB); `/api/login`, `/api/status`, `/api/energie`, `/api/meta`, `/api/mode`, `/api/warmwasser`, `/api/lesen` antworten wie die Docker-App.
+  - Login mit `app_benutzer`/`app_passwort` aus `secrets.yaml`; 5 Fehlversuche je Adresse in 15 min → 15 min Sperre (HTTP 429). Sitzungs-Token im Flash, übersteht Updates.
+  - Schaltbefehle gehen wie `cmd/heizkreis`/`cmd/warmwasser` durch Warteschlange, Sperrminute und Kontrolle am Bus; der Fortschritt kommt aus dem Verlauf der letzten 10 Befehle.
+  - Zusatzanzeigen: das Board abonniert die Topics der Liste selbst (das Broker-Konto des Boards braucht Leserecht darauf).
+  - Die Weboberfläche des Boards unter `/` bleibt unverändert (eigenes Passwort). Der Service Worker der Board-App fängt nur die eigenen Dateien ab.
+  - An der WTC-GW 15-B: `/api/status` stimmt mit der Docker-App überein (Messwerte, Kessel, Schalten, Bus, Zusatzwerte); Betriebsart und Statusbits fehlen nach einem Neustart, bis das Board sie wieder gelesen bzw. gesehen hat.
+  - Tests: `app_status_*`, `app_zusatz_zahl`, `app_befehlsverlauf`, `app_login_sperre`, `app_meta_und_energie`, `app_eingebettete_dateien`. CI prüft, dass die eingebettete App aktuell ist.
+
 ## v37 – 2026-10-26
 - **`status/json` → `schalten.weg`**: `"can"` oder `"json"`, je nach Schalter „Schalten per CAN“.
 - **App: Login-Schutz** (seit 21.10. im Betrieb, jetzt im Repo): Anmelde-Tokens aus `crypto.randomBytes`, Vergleich in konstanter Zeit, nach 5 Fehlversuchen je IP in 15 min 15 min Sperre (HTTP 429), Fehlversuche und Schaltbefehle mit IP im Protokoll, optional Mail an `ALARM_MAIL` ab 20 Fehlversuchen am Tag. Alles über Umgebungsvariablen einstellbar (`LOGIN_FEHL_MAX`, `LOGIN_FENSTER_MIN`, `LOGIN_SPERRE_MIN`, `LOGIN_MAIL_AB`, `ALARM_MAIL`; ohne `ALARM_MAIL` keine Mail).

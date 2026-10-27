@@ -30,6 +30,10 @@ CONF_ANLAUFPAUSE = "anlaufpause"
 CONF_STATUSBITS_ANLASS = "statusbits_anlass"
 CONF_VERDACHT = "verdacht"
 CONF_ZUSATZ = "zusatz"
+CONF_APP = "app"
+CONF_BENUTZER = "benutzer"
+CONF_PASSWORT = "passwort"
+CONF_FIRMWARE = "firmware"
 
 weishaupt_can_ns = cg.esphome_ns.namespace("weishaupt_can")
 WeishauptCan = weishaupt_can_ns.class_("WeishauptCan", cg.Component)
@@ -46,6 +50,17 @@ CONFIG_SCHEMA = cv.Schema(
         # gespeicherte Werte der Pakete verdacht bzw. zusatz anlegen (die Pakete setzen das)
         cv.Optional(CONF_VERDACHT, default=False): cv.boolean,
         cv.Optional(CONF_ZUSATZ, default=False): cv.boolean,
+        # Heizungs-App auf dem Board (Paket app, ab v38): Login und Firmware-Text fuer die Anzeige
+        cv.Optional(CONF_APP): cv.All(
+            cv.Schema(
+                {
+                    cv.Optional(CONF_BENUTZER, default="admin"): cv.string_strict,
+                    cv.Required(CONF_PASSWORT): cv.All(cv.string_strict, cv.Length(min=1)),
+                    cv.Optional(CONF_FIRMWARE, default=""): cv.string,
+                }
+            ),
+            cv.requires_component("web_server"),
+        ),
     }
 ).extend(cv.COMPONENT_SCHEMA)
 
@@ -88,3 +103,7 @@ async def to_code(config):
                 schluessel("zs_version"),
             )
         )
+    if CONF_APP in config:
+        app = config[CONF_APP]
+        cg.add_define("USE_WC_APP")
+        cg.add(var.app_einrichten(app[CONF_BENUTZER], app[CONF_PASSWORT], app[CONF_FIRMWARE]))

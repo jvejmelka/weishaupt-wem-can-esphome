@@ -1,0 +1,31 @@
+# Paket APP (ab v38): die Heizungs-App laeuft direkt auf dem Board - kein Server, kein Docker.
+#
+#   http://<board>/app        die App (dieselbe Oberflaeche wie app/ im Repository)
+#   http://<board>/           wie bisher die Weboberflaeche des Boards (Passwort aus web_server)
+#
+# Login der App: app_benutzer und app_passwort aus secrets.yaml. 5 Fehlversuche
+# je Adresse in 15 min sperren diese Adresse fuer 15 min. Nach dem Login bleibt man angemeldet
+# (Sitzungs-Token im Flash, uebersteht Updates).
+#
+# Braucht die Pakete wem-schalten und warmwasser-schalten (Schaltbefehle laufen wie per MQTT durch
+# Warteschlange, Sperrminute und Kontrolle am Bus). Zusatzanzeigen (Paket zusatz): das Board
+# abonniert die Topics der Liste selbst, sobald MQTT verbunden ist.
+#
+# Von aussen: nur ueber einen Reverse Proxy mit HTTPS (das Board kann kein HTTPS).
+# Die Docker-App (app/) laeuft unabhaengig davon weiter, wenn man sie nutzt.
+
+weishaupt_can:
+  app:
+    benutzer: !secret app_benutzer
+    passwort: !secret app_passwort
+    firmware: ${firmware}
+
+esphome:
+  on_boot:
+    priority: -100
+    then:
+      - lambda: |-
+          id(wcan)->app->befehl = [](int ziel, const std::string &nutzlast) {
+            id(befehl_eingang)->execute(ziel, nutzlast, std::string("App"));
+          };
+          id(wcan)->app->lesen = []() { id(status_lesen)->execute(); };

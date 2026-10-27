@@ -11,6 +11,7 @@
 // beim Update erhalten. Die Schluessel berechnet __init__.py aus den alten ids.
 #pragma once
 #include <cstring>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -22,6 +23,9 @@
 #include "esphome/components/time/real_time_clock.h"
 #endif
 #include "kern.h"
+#ifdef USE_WC_APP
+#include "app_server.h"
+#endif
 
 namespace esphome {
 namespace weishaupt_can {
@@ -98,6 +102,16 @@ class WeishauptCan : public Component {
     this->speicher_.emplace_back(new Speicher<int>(&this->zs.version, h_version));
   }
 
+#ifdef USE_WC_APP
+  // Paket app (ab v38): Heizungs-App auf dem Board (app_server.h)
+  std::unique_ptr<AppServer> app;
+  void app_einrichten(const std::string &benutzer, const std::string &passwort, const std::string &firmware) {
+    this->app.reset(new AppServer(this, benutzer, passwort, firmware));
+  }
+#endif
+  // Aufgabe in der Hauptschleife ausfuehren (auch aus dem Webserver-Faden)
+  void spaeter(std::function<void()> f) { this->defer(std::move(f)); }
+
   // --- Helfer fuer die Lambdas
   // jeder Frame: Lebenszeichen des Busses (neu da -> Betriebsarten nach der Pause neu lesen)
   void frame(uint32_t jetzt) {
@@ -117,6 +131,7 @@ class WeishauptCan : public Component {
 #endif
   std::vector<std::unique_ptr<SpeicherBasis>> speicher_;
   uint32_t zuletzt_gesichert_{0};
+  bool app_bereit_{false};
 };
 
 }  // namespace weishaupt_can

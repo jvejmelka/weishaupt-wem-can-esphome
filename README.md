@@ -119,9 +119,10 @@ Nicht benötigte Zeilen unter `packages:` auskommentieren.
 | `warmwasser-schalten.yaml` | Warmwasser Ein/Aus (braucht `wem-schalten` und `warmwasser`) | nein |
 | `verdacht.yaml` | **Regeln:** Betriebsarten nur lesen, wenn das Mithören eine Änderung vermuten lässt; feste Regeln R1–R5 einzeln schaltbar (Vorgabe: R1–R3 an, R4/R5 aus; ausgeschaltete laufen im Schattenmodus weiter), dazu eigene Regeln (experimentell, eigener Hauptschalter, Vorgabe aus); einstellbar per Web, Datei und MQTT (braucht `warmwasser`). Details: [REGELN.md](REGELN.md) | nein |
 | `zusatz.yaml` | **Zusatzanzeigen für die Handy-App:** Liste von bis zu 6 fremden MQTT-Topics (z. B. Raumtemperaturen, „Wärmepumpe läuft“), einstellbar per Web und Datei. Das Board liest diese Werte **nicht** selbst, es verwaltet nur die Liste (braucht `mqtt`). Details: [PROTOKOLL.md, Abschnitt 6b](PROTOKOLL.md#6b-zusatzanzeigen-für-die-handy-app) | nein |
+| `app.yaml` | **Handy-App direkt auf dem Board** (ab v38): `http://<board>/app`, eigener Login (`app_benutzer`/`app_passwort` in `secrets.yaml`), kein Server nötig (braucht `wem-schalten`, `warmwasser-schalten`) | nein |
 | `feste-ip.yaml` | feste IP statt DHCP | nein |
 
-Dazu optional die Handy-App im Ordner `app/` (siehe unten).
+Die Handy-App läuft entweder direkt auf dem Board (Paket `app.yaml`) oder als Docker-Container aus dem Ordner `app/` (siehe unten).
 
 ## Einrichten
 
@@ -208,7 +209,7 @@ Die Dokumente im Überblick:
 - [CHANGELOG.md](CHANGELOG.md) – Änderungen je Firmware-Stand
 - [LICENSE](LICENSE) – Lizenz
 
-## Handy-App (optional, Ordner `app/`)
+## Handy-App (optional: auf dem Board oder Ordner `app/`)
 
 Eine schlanke Web-App (PWA) fürs Handy: eine schmale Spalte (höchstens 520 CSS-px), die die volle Höhe nutzt **ohne Scrollen** – auch auf quadratischen Displays. Die Grundschrift wird dafür nach dem Laden gemessen und angepasst (größte Schrift, bei der alles passt; neu bei Größenänderung oder wenn eine Fortschrittszeile erscheint). Mit `?diag` hinter der Adresse zeigt die Fußzeile Viewport, Pixelverhältnis, gewählte Schrift und Scrollhöhe.
 Auf dem Startbildschirm installierbar („+ App“).
@@ -247,7 +248,24 @@ Anlass (nach dem Start, bei geänderten Statusbits, nach Schaltbefehlen).
 - Braucht Board-Firmware **ab v27** (`status/json`, Befehle mit Kennung). Mit älterer Firmware
   fehlen Fortschritt und Vorgabe-Markierung; Ist-Werte kommen dann ersatzweise aus den Zahlencodes.
 
-### Einrichten
+### Auf dem Board (ab v38, Paket `app.yaml`)
+
+Dieselbe App, ohne Server: das Board liefert sie selbst aus (gzip, zusammen etwa 16 KB im Flash).
+
+- Aufruf: **`http://<board>/app`**. Unter `http://<board>/` bleibt die Weboberfläche des Boards.
+- Login mit `app_benutzer` und `app_passwort` aus `secrets.yaml`. 5 Fehlversuche je Adresse in 15 min
+  sperren diese Adresse für 15 min. Das Sitzungs-Token liegt im Flash und übersteht Updates.
+- Schaltbefehle laufen wie per MQTT durch Warteschlange, Sperrminute und Kontrolle am Bus.
+- **Zusatzanzeigen:** das Board abonniert die Topics der Liste selbst. Sein Broker-Konto braucht
+  dafür je Topic eine `topic read`-Zeile (wie unten für die Docker-App); nach dem Ergänzen der ACL
+  das Board einmal neu starten (ein verweigertes Abo holt es sonst erst beim nächsten Verbinden nach).
+- Nach einem Neustart fehlen Betriebsart und Statusbits, bis das Board sie wieder gelesen bzw.
+  gesehen hat (Betriebsart nach etwa 1 min, Statusbits bei der nächsten Änderung).
+- Von außen **nur über einen Reverse Proxy mit TLS** – das Board spricht nur HTTP.
+- Die Dateien kommen aus `app/public/`; `werkzeuge/app_einbetten.py` bettet sie ein
+  (`components/weishaupt_can/app_dateien.h`, die CI prüft, dass die Datei aktuell ist).
+
+### Als Docker-Container (Ordner `app/`)
 
 ```
 cd app

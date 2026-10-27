@@ -128,6 +128,7 @@ Comment out unneeded lines under `packages:`.
 | `warmwasser-schalten.yaml` | DHW on/off (requires `wem-schalten` and `warmwasser`) | no |
 | `verdacht.yaml` | **Rules:** read the operating modes only when passive listening suggests a change; fixed rules R1–R5 individually switchable (default: R1–R3 on, R4/R5 off; disabled ones keep running in shadow mode), plus custom rules (experimental, own master switch, default off); configurable via web, file and MQTT (requires `warmwasser`). Details: [REGELN.md](REGELN.md) (German) | no |
 | `zusatz.yaml` | **Extra displays for the phone app:** list of up to 6 third-party MQTT topics (e.g. room temperatures, "heat pump running"), configurable via web and file. The board does **not** read these values itself, it only manages the list (requires `mqtt`). Details: [PROTOKOLL.en.md, section 6b](PROTOKOLL.en.md#6b-additional-displays-for-the-phone-app) | no |
+| `app.yaml` | **Phone app served by the board itself** (from v38): `http://<board>/app`, own login (`app_benutzer`/`app_passwort` in `secrets.yaml`), no server needed (needs `wem-schalten`, `warmwasser-schalten`) | no |
 | `feste-ip.yaml` | static IP instead of DHCP | no |
 
 Optionally, there is also the phone app in the `app/` folder (see below).
@@ -221,7 +222,7 @@ The documents at a glance:
 - [CHANGELOG.md](CHANGELOG.md) (German) – changes per firmware version
 - [LICENSE](LICENSE) – license
 
-## Phone app (optional, folder `app/`)
+## Phone app (optional: on the board or folder `app/`)
 
 A lightweight web app (PWA) for phones: a narrow column (at most 520 CSS px) that uses the full height **without scrolling** – even on square displays. To achieve this, the base font size is measured and adjusted after loading (the largest font at which everything fits; recalculated on resize or when a progress line appears). With `?diag` appended to the URL, the footer shows viewport, pixel ratio, selected font size and scroll height.
 Installable on the home screen („+ App“).
@@ -260,7 +261,24 @@ reason (after startup, on changed status bits, after switch commands).
 - Requires board firmware **v27 or later** (`status/json`, commands with ID). With older firmware,
   progress and the requested-state marking are missing; actual values then fall back to the numeric codes.
 
-### Setup
+### On the board (from v38, package `app.yaml`)
+
+The same app without a server: the board serves it itself (gzip, about 16 KB of flash in total).
+
+- Open **`http://<board>/app`**. `http://<board>/` stays the board's web interface.
+- Log in with `app_benutzer` and `app_passwort` from `secrets.yaml`. 5 failed attempts per address within
+  15 min lock that address for 15 min. The session token is kept in flash and survives updates.
+- Switching commands go through the same queue, one-minute lock and bus check as via MQTT.
+- **Extra values:** the board subscribes to the listed topics itself. Its broker account needs one
+  `topic read` line per topic (as shown below for the Docker app); after changing the ACL restart the
+  board once (a refused subscription is otherwise only retried on the next reconnect).
+- After a restart, operating mode and status bits are missing until the board has read or seen them
+  again (mode after about 1 min, status bits on the next change).
+- From outside **only through a reverse proxy with TLS** – the board only speaks HTTP.
+- The files come from `app/public/`; `werkzeuge/app_einbetten.py` embeds them
+  (`components/weishaupt_can/app_dateien.h`; CI checks that the file is up to date).
+
+### As a Docker container (folder `app/`)
 
 ```
 cd app

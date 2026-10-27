@@ -11,6 +11,8 @@
 #include "../components/weishaupt_can/zusatz.h"
 #include "../components/weishaupt_can/befehle.h"
 #include "../components/weishaupt_can/kern.h"
+#include "../components/weishaupt_can/app_logik.h"
+#include "../components/weishaupt_can/app_dateien.h"
 #include "referenz_v29/regellogik_v29.h"
 #include <cstdarg>
 #include <random>
@@ -824,6 +826,7 @@ TEST(register_json_schreiben_wie_v27) {
 #include "referenz_v29/dispatch_v29.inc"
 #include "test_aequivalenz.inc"
 #include "test_regelwerk.inc"
+#include "test_app.inc"
 
 int main() {
   for (auto &t : tests()) {

@@ -17,12 +17,13 @@
 #   pakete/verdacht.yaml             Regeln: Betriebsarten nur lesen, wenn das Mithoeren eine Aenderung
 #                                    vermuten laesst (R1-R5 einzeln, eigene Regeln experimentell; braucht warmwasser)
 #   pakete/zusatz.yaml               Zusatzanzeigen fuer die Handy-App (Liste fremder MQTT-Topics, braucht mqtt)
+#   pakete/app.yaml                  Heizungs-App direkt auf dem Board (http://<board>/app, ab v38)
 #   pakete/feste-ip.yaml             feste IP statt DHCP (Empfehlung: DHCP + Router-Reservierung)
 #
 substitutions:
   geraet: weact-can485-weishaupt       # Geraetename = MQTT-Praefix
   anzeigename: Weishaupt WTC-GW 15-B
-  firmware: "v37 vom 26.10.2026"
+  firmware: "v38 vom 27.10.2026"
   # Eigene CAN-Leseanfragen beim ersten Start (danach gilt der Schalter in der Weboberflaeche):
   #   RESTORE_DEFAULT_OFF = nur mithoeren (Vorgabe, wenn die Zeile fehlt)
   #   RESTORE_DEFAULT_ON  = eigene Leseanfragen im Weishaupt-Takt
@@ -62,6 +63,7 @@ packages:
   warmwasser_schalten: !include pakete/warmwasser-schalten.yaml
   verdacht: !include pakete/verdacht.yaml
   zusatz: !include pakete/zusatz.yaml
+  app: !include pakete/app.yaml
   # feste_ip: !include pakete/feste-ip.yaml
 
 esphome:
