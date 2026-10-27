@@ -127,6 +127,21 @@
       </p>
     </section>
 
+    <section class="block">
+      <div class="block-head"><span class="block-title">FIRMWARE-UPDATE</span></div>
+      <div class="zeile"><span class="name">Installiert <span class="hinweis" id="fwAktuell">–</span></span></div>
+      <input id="fwDatei" class="feld" type="file" accept=".bin">
+      <div id="fwInfo" class="hinweis" style="font-size:.8rem;color:var(--text2);margin-top:.4rem;word-break:break-all"></div>
+      <input id="fwSoll" class="feld" type="text" placeholder="erwartete SHA-256 aus dem Release (optional)" autocomplete="off" spellcheck="false">
+      <input id="fwPass" class="feld" type="password" placeholder="Admin-Passwort zur Bestätigung" autocomplete="current-password">
+      <button id="fwBtn" class="knopf" style="margin-top:.5rem" disabled>FIRMWARE INSTALLIEREN</button>
+      <div id="fwMeldung" class="meldung"></div>
+      <p class="hinweis" style="font-size:.75rem;color:var(--text2);margin-top:.4rem">
+        Nur eine Firmware-Datei für dieses Board (<code>.ota.bin</code> bzw. <code>firmware.bin</code>). Der ESP32 prüft das Abbild vor dem
+        Neustart; ist es beschädigt, läuft die bisherige Version weiter. Die Heizung selbst wird dabei nicht verändert.
+      </p>
+    </section>
+
     <section class="block links">
       <div class="block-head"><span class="block-title">MEHR</span></div>
       <div class="zeile"><a href="/app">← zurück zur App</a></div>

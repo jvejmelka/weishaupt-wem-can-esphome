@@ -1,6 +1,11 @@
 # Changelog – ESP-CAN-Brücke Weishaupt (WeAct CAN485, ESPHome)
 
 
+## v40 – 2026-10-27
+- **Firmware-Update im Browser** (Einstellungsseite → „Firmware-Update“): `.ota.bin` wählen, die Seite zeigt Größe und **SHA-256** (eigene Berechnung, auch ohne HTTPS) und vergleicht sie mit einer eingetragenen Release-Prüfsumme – stimmt sie nicht, bleibt der Knopf gesperrt. Dateien, die nicht mit `0xE9` beginnen (keine ESP32-Firmware), werden abgewiesen. Bestätigung mit dem Admin-Passwort, Fortschritt in Prozent, danach Neustart.
+- Dafür ESPHome-OTA über den Webserver (`ota: platform: web_server`, `/update`, Benutzer `admin` + Admin-Passwort). Der ESP32 prüft das Abbild vor dem Umschalten; ein beschädigtes bleibt ungenutzt, die bisherige Version läuft weiter.
+- An der WTC-GW 15-B: Update über `/update` mit falschem Passwort → 401, mit Admin-Passwort → „Update Successful!“, Neustart, App läuft wieder.
+
 ## v39 – 2026-10-27
 - **Einstellungsseite im Design der App** (`/einstellungen`, ⚙ in der App): eigenes Admin-Passwort und eigenes Token, Gruppen Schalten, Lesen, Regeln, Experten mit den Schaltern und Zahlen des Boards (Abstand CAN/JSON, Schalten per CAN, eigene CAN-Anfragen, lange Lesebefehle, SD-Dateien, R1–R5, eigene Regeln, freies CAN-Schreiben, Rohmitschnitt, Wächter). Werte werden geprüft (Bereich) und in der Hauptschleife gesetzt. Dazu App- und Admin-Passwort ändern; nach einem neuen App-Passwort sind alle App-Geräte abgemeldet.
 - **Zugangsdaten im Board gespeichert:** Beim ersten Start übernimmt das Board `app_benutzer`/`app_passwort` und `web_password` aus `secrets.yaml`; danach gelten die gespeicherten. **Fehlen sie (fertige Firmware ohne eigene Secrets), verlangt `/app` zuerst eine Ersteinrichtung** (Benutzer, App-Passwort, Admin-Passwort, je mindestens 8 Zeichen, verschieden). Bis dahin ist die Weboberfläche mit einem Zufallspasswort gesperrt – kein bekanntes Standardpasswort. Das Admin-Passwort gilt auch für die Weboberfläche (Benutzer `admin`).
