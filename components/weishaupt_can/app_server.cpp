@@ -1,6 +1,8 @@
 #include "weishaupt_can.h"
 #ifdef USE_WC_APP
 #include "app_server.h"
+#include <cerrno>
+#include <cstring>
 #include "esphome/core/application.h"
 #include "esphome/core/helpers.h"
 #include "esphome/core/log.h"
@@ -43,6 +45,9 @@ namespace weishaupt_can {
 static const char *const TAG = "app";
 
 static std::string neues_token();
+static const char *const PAKET = "/fs/oberflaeche.wui";
+static const char *const PAKET_NEU = "/fs/oberflaeche.neu";
+static const size_t PAKET_MAX = 512 * 1024;
 
 // Werte des Boards, die /api/status und /api/energie brauchen (object_id wie im MQTT-Topic)
 static const char *const ZAHLEN[] = {
@@ -161,6 +166,19 @@ void AppServer::setup() {
   if (this->einrichtung_noetig_) ESP_LOGW(TAG, "keine Zugangsdaten - Ersteinrichtung unter /app");
   this->web_passwort_setzen_();
   this->einstellungen_sammeln_();
+#ifdef USE_WC_DATEIEN
+  if (this->wc_->fs.bereit) {
+    ob::Paket p;
+    std::string f;
+    if (this->paket_laden_(PAKET, p, f)) {
+      this->paket_ = p;
+      this->paket_aktiv_ = true;
+      ESP_LOGI(TAG, "Oberflaechen-Paket %s aus dem Dateisystem", p.version.c_str());
+    } else if (f != "keine Datei") {
+      ESP_LOGW(TAG, "Oberflaechen-Paket unbrauchbar (%s) - eingebaute Oberflaeche", f.c_str());
+    }
+  }
+#endif
 #ifdef USE_LOGGER
   if (logger::global_logger != nullptr)
     logger::global_logger->add_log_callback(this, [](void *self, uint8_t stufe, const char *tag, const char *text, size_t n) {
@@ -391,6 +409,11 @@ std::string AppServer::info_json_() {
   JsonObject o = d.to<JsonObject>();
   o["firmware"] = this->firmware_;
   o["app_version"] = ap::APP_VERSION;
+  o["api"] = ap::APP_API;
+  {
+    std::lock_guard<std::mutex> g(this->sperre_);
+    o["oberflaeche"] = this->paket_aktiv_ ? "Paket " + this->paket_.version : std::string("eingebaut");
+  }
   o["laufzeit_s"] = millis() / 1000;
   o["neustart_grund"] = neustart_grund();
   o["speicher_frei"] = esp_get_free_heap_size();
@@ -464,6 +487,64 @@ std::string AppServer::sicherung_json_() {
   return out;
 }
 
+
+// Paket pruefen: Kopf, API-Version, Groesse und SHA-256 jeder Datei
+bool AppServer::paket_laden_(const std::string &pfad, ob::Paket &p, std::string &f) const {
+  FILE *d = fopen(pfad.c_str(), "rb");
+  if (d == nullptr) { f = "keine Datei"; return false; }
+  std::string anfang(ob::KOPF_MAX, '\0');
+  anfang.resize(fread(&anfang[0], 1, ob::KOPF_MAX, d));
+  bool ok = ob::kopf_lesen(anfang, ap::APP_API, p, f);
+  if (ok) {
+    fseek(d, 0, SEEK_END);
+    if ((size_t) ftell(d) != p.groesse) { f = "Groesse passt nicht zum Kopf"; ok = false; }
+  }
+  for (auto &x : p.dateien) {
+    if (!ok) break;
+    std::string inhalt(x.laenge, '\0');
+    fseek(d, (long) x.start, SEEK_SET);
+    if (fread(&inhalt[0], 1, x.laenge, d) != x.laenge || ob::sha256_hex(inhalt) != x.sha256) {
+      f = "Pruefsumme falsch: " + x.pfad;
+      ok = false;
+    }
+  }
+  fclose(d);
+  return ok;
+}
+
+bool AppServer::experte_ok_(AsyncWebServerRequest *r) const {
+  auto h = r->get_header("x-experte");
+  std::lock_guard<std::mutex> g(this->sperre_);
+  return h.has_value() && this->zugang_.experte[0] && ap::gleich(h.value(), this->zugang_.experte);
+}
+
+// Upload abschliessen (der Inhalt kam ueber handleBody in PAKET_NEU)
+void AppServer::paket_hochladen_(AsyncWebServerRequest *r) {
+  if (this->upload_ != nullptr) { fclose(this->upload_); this->upload_ = nullptr; }
+  if (!this->experte_ok_(r)) { remove(PAKET_NEU); this->antworten_(r, 400, "{\"error\":\"Experten-Passwort falsch oder nicht gesetzt\"}"); return; }
+  ob::Paket p;
+  std::string f;
+  if (this->upload_n_ > PAKET_MAX) f = "Paket zu gross";
+  else if (!this->paket_laden_(PAKET_NEU, p, f)) {}
+  else {
+    remove(PAKET);
+    if (rename(PAKET_NEU, PAKET) != 0) f = std::string("Umbenennen fehlgeschlagen: ") + strerror(errno);
+  }
+  if (!f.empty()) {
+    remove(PAKET_NEU);
+    JsonDocument e;
+    e["error"] = f;
+    std::string out;
+    serializeJson(e, out);
+    ESP_LOGW(TAG, "Oberflaechen-Paket abgelehnt: %s", f.c_str());
+    this->antworten_(r, 400, out);
+    return;
+  }
+  { std::lock_guard<std::mutex> g(this->sperre_); this->paket_ = p; this->paket_aktiv_ = true; }
+  ESP_LOGI(TAG, "Oberflaechen-Paket %s aktiv (%u Dateien)", p.version.c_str(), (unsigned) p.dateien.size());
+  this->antworten_(r, 200, "{\"ok\":true,\"version\":\"" + p.version + "\"}");
+}
+
 // ---------------------------------------------------------------- Webserver-Faden
 
 static bool beginnt(const char *s, const char *p) { return std::strncmp(s, p, std::strlen(p)) == 0; }
@@ -477,6 +558,21 @@ bool AppServer::canHandle(AsyncWebServerRequest *request) const {
 }
 
 void AppServer::handleBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+  char buf[AsyncWebServerRequest::URL_BUF_SIZE];
+  if (request->url_to(buf) == "/api/admin/oberflaeche") {
+#ifdef USE_WC_DATEIEN
+    // gleich ins Dateisystem schreiben - nur mit gueltigem Admin-Token und bis PAKET_MAX
+    if (index == 0) {
+      this->upload_n_ = 0;
+      this->upload_erlaubt_ = this->wc_->fs.bereit && this->admin_angemeldet_(request) && total <= PAKET_MAX;
+      if (this->upload_ != nullptr) { fclose(this->upload_); this->upload_ = nullptr; }
+      if (this->upload_erlaubt_) this->upload_ = fopen(PAKET_NEU, "wb");
+    }
+    this->upload_n_ += len;
+    if (this->upload_ != nullptr && fwrite(data, 1, len, this->upload_) != len) { fclose(this->upload_); this->upload_ = nullptr; }
+#endif
+    return;
+  }
   if (index == 0) this->body_.clear();
   if (this->body_.size() + len <= 4096) this->body_.append(reinterpret_cast<const char *>(data), len);
 }
@@ -549,6 +645,38 @@ uint32_t AppServer::adresse_(AsyncWebServerRequest *r) const {
 void AppServer::datei_(AsyncWebServerRequest *r, const ap::Datei *d) {
   auto inm = r->get_header("If-None-Match");
   std::string etag = std::string("\"") + ap::APP_VERSION + "\"";
+  // hochgeladenes Oberflaechen-Paket hat Vorrang vor der eingebauten Oberflaeche
+  ob::Datei x;
+  std::string version;
+  bool aus_paket = false;
+  {
+    std::lock_guard<std::mutex> g(this->sperre_);
+    const ob::Datei *e = this->paket_aktiv_ ? this->paket_.finden(d->pfad) : nullptr;
+    if (e != nullptr) { x = *e; version = this->paket_.version; aus_paket = true; }
+  }
+  if (aus_paket) {
+    std::string inhalt(x.laenge, '\0');
+    FILE *f = fopen(PAKET, "rb");
+    bool ok = f != nullptr && fseek(f, (long) x.start, SEEK_SET) == 0 && fread(&inhalt[0], 1, x.laenge, f) == x.laenge;
+    if (f != nullptr) fclose(f);
+    if (ok) {
+      std::string et = "\"p" + version + "\"";
+      if (inm.has_value() && inm.value() == et) {
+        auto *res = r->beginResponse(304, x.typ.c_str());
+        status_setzen(r, 304);
+        res->addHeader("ETag", et.c_str());
+        r->send(res);
+        return;
+      }
+      auto *res = r->beginResponse(200, x.typ.c_str(), inhalt);
+      res->addHeader("Content-Encoding", "gzip");
+      res->addHeader("Cache-Control", "no-cache");
+      res->addHeader("ETag", et.c_str());
+      r->send(res);
+      return;
+    }
+    ESP_LOGW(TAG, "Paket nicht lesbar - eingebaute Oberflaeche");
+  }
   if (inm.has_value() && inm.value() == etag) {
     auto *res = r->beginResponse(304, d->typ);
     status_setzen(r, 304);
@@ -949,6 +1077,16 @@ void AppServer::handleRequest(AsyncWebServerRequest *request) {
       std::string out;
       serializeJson(d, out);
       this->antworten_(request, 200, out);
+    } else if (url == "/api/admin/oberflaeche" && post) {
+      this->paket_hochladen_(request);
+    } else if (url == "/api/admin/oberflaeche-zurueck" && post) {
+      if (!this->experte_ok_(request)) this->antworten_(request, 400, "{\"error\":\"Experten-Passwort falsch oder nicht gesetzt\"}");
+      else {
+        { std::lock_guard<std::mutex> g(this->sperre_); this->paket_aktiv_ = false; }
+        remove(PAKET);
+        ESP_LOGI(TAG, "Oberflaeche zurueck auf die eingebaute");
+        this->antworten_(request, 200, "{\"ok\":true}");
+      }
     } else if (url == "/api/admin/experte-extern" && post) {
       this->experte_extern_(request);
     } else if (url == "/api/admin/neustart" && post) {

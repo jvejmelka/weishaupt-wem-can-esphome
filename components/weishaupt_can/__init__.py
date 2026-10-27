@@ -182,7 +182,8 @@ async def to_code(config):
             include_builtin_idf_component(k)
         cg.add_define("USE_WC_SD")
     if config[CONF_DATEISYSTEM]:
-        from esphome.components.esp32 import add_idf_component
+        from esphome.components.esp32 import add_idf_component, require_vfs_dir
 
         add_idf_component(name="joltwallet/littlefs", ref="1.23.1")
+        require_vfs_dir()   # rename/unlink/opendir - ESPHome schaltet das sonst ab
         cg.add_define("USE_WC_DATEIEN")

@@ -238,6 +238,7 @@ inline std::string meta_antwort(const std::string &board_url, const std::string 
   JsonDocument d;
   JsonObject o = d.to<JsonObject>();
   o["app"] = "weishaupt-heizungsapp";
+  o["api"] = 1;   // API-Version (wie APP_API in app_dateien.h)
   if (board_url.empty()) o["boardUrl"] = nullptr; else o["boardUrl"] = board_url;
   if (theme_ok(theme)) o["theme"] = theme;
   JsonArray m = o["modes"].to<JsonArray>();

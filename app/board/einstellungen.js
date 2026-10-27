@@ -254,8 +254,9 @@ function dauer(s) {
 async function infoLaden() {
   let d;
   try { d = await api('/api/admin/info'); } catch { return; }
+  $('obZustand').textContent = d.oberflaeche || '';
   const zeilen = [
-    ['Firmware', d.firmware], ['App', d.app_version], ['Uhrzeit', d.uhr || '–'],
+    ['Firmware', d.firmware], ['Oberfläche', `${d.oberflaeche || 'eingebaut'} (API ${d.api})`], ['Uhrzeit', d.uhr || '–'],
     ['Laufzeit', dauer(d.laufzeit_s)], ['Letzter Neustart', d.neustart_grund],
     ['WLAN', d.wlan ? `${d.wlan} (${d.wlan_rssi} dBm)` : '–'], ['IP', d.ip || '–'],
     ['Speicher frei', `${Math.round(d.speicher_frei / 1024)} KB (min. ${Math.round(d.speicher_min / 1024)} KB, Block ${Math.round(d.groesster_block / 1024)} KB)`],
@@ -348,3 +349,34 @@ document.querySelectorAll('#exExtern button').forEach(b => b.addEventListener('c
     setTimeout(laden, 1000);
   } catch (e) { m.textContent = e.message; m.className = 'meldung fehler'; }
 }));
+
+// ── Oberflaechen-Paket
+$('obBtn').addEventListener('click', async () => {
+  const m = $('obMeldung'), f = $('obDatei').files[0];
+  if (!f) { m.textContent = 'Paket wählen'; m.className = 'meldung fehler'; return; }
+  m.textContent = 'übertrage …'; m.className = 'meldung';
+  try {
+    const res = await fetch('/api/admin/oberflaeche', {
+      method: 'POST', body: await f.arrayBuffer(),
+      headers: { 'Content-Type': 'application/octet-stream', 'x-admin-token': lies(TOKEN_KEY) || '', 'x-experte': $('obPass').value }
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(d.error || ('Fehler ' + res.status));
+    $('obPass').value = '';
+    m.textContent = `Paket ${d.version} aktiv – Seite neu laden`; m.className = 'meldung ok';
+    infoLaden();
+  } catch (e) { m.textContent = e.message; m.className = 'meldung fehler'; }
+});
+$('obZurueckBtn').addEventListener('click', async () => {
+  const m = $('obMeldung');
+  try {
+    const res = await fetch('/api/admin/oberflaeche-zurueck', {
+      method: 'POST', body: '{}', headers: { 'Content-Type': 'application/json', 'x-admin-token': lies(TOKEN_KEY) || '', 'x-experte': $('obPass').value }
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(d.error || ('Fehler ' + res.status));
+    $('obPass').value = '';
+    m.textContent = 'eingebaute Oberfläche aktiv – Seite neu laden'; m.className = 'meldung ok';
+    infoLaden();
+  } catch (e) { m.textContent = e.message; m.className = 'meldung fehler'; }
+});

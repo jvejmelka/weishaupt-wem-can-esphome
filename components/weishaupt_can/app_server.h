@@ -26,6 +26,8 @@
 #endif
 #include "app_logik.h"
 #include "zugang.h"
+#include "oberflaeche.h"
+#include <cstdio>
 #include "app_dateien.h"
 
 namespace esphome {
@@ -95,6 +97,10 @@ class AppServer : public AsyncWebHandler {
   bool extern_frei_() const;
   void experte_extern_(AsyncWebServerRequest *r);
   void salz_(uint8_t s[16]) const;
+  // Oberflaechen-Paket im Dateisystem (ab v42)
+  bool paket_laden_(const std::string &pfad, ob::Paket &p, std::string &f) const;
+  void paket_hochladen_(AsyncWebServerRequest *r);
+  bool experte_ok_(AsyncWebServerRequest *r) const;   // Header x-experte = Experten-Passwort
   void datei_(AsyncWebServerRequest *r, const ap::Datei *d);
   void login_(AsyncWebServerRequest *r);
   void schalten_(AsyncWebServerRequest *r, int ziel);
@@ -136,6 +142,12 @@ class AppServer : public AsyncWebHandler {
 
   std::mutex log_sperre_;
   std::deque<std::string> log_;
+
+  ob::Paket paket_;
+  bool paket_aktiv_{false};
+  FILE *upload_{nullptr};          // laufender Upload eines Pakets (nur Webserver-Faden)
+  bool upload_erlaubt_{false};
+  size_t upload_n_{0};
 
   std::string body_;               // POST-Inhalt der laufenden Anfrage (nur Webserver-Faden)
 };

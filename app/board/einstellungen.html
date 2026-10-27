@@ -169,6 +169,17 @@
     </section>
 
     <section class="block">
+      <div class="block-head"><span class="block-title">OBERFLÄCHE</span><span class="block-zustand" id="obZustand"></span></div>
+      <p class="hinweis" style="font-size:.75rem;color:var(--text2)">Neue App- und Einstellungsseite als Paket (<code>.wui</code>) einspielen – ohne Firmware-Update.
+        Das Board prüft API-Version und Prüfsummen; im Zweifel bleibt die eingebaute Oberfläche.</p>
+      <input id="obDatei" class="feld" type="file" accept=".wui">
+      <input id="obPass" class="feld" type="password" placeholder="Experten-Passwort" autocomplete="off">
+      <button id="obBtn" class="knopf" style="margin-top:.5rem">PAKET EINSPIELEN</button>
+      <button id="obZurueckBtn" class="knopf" style="margin-top:.5rem">ZURÜCK AUF EINGEBAUTE</button>
+      <div id="obMeldung" class="meldung"></div>
+    </section>
+
+    <section class="block">
       <div class="block-head"><span class="block-title">FIRMWARE-UPDATE</span></div>
       <div class="zeile"><span class="name">Installiert <span class="hinweis" id="fwAktuell">–</span></span></div>
       <input id="fwDatei" class="feld" type="file" accept=".bin">

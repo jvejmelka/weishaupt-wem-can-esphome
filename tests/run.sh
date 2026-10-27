@@ -13,5 +13,6 @@ if [ ! -f "$DEPS/ArduinoJson.h" ]; then
   echo "$AJ_SHA256  $DEPS/ArduinoJson.h.tmp" | sha256sum -c - >/dev/null
   mv "$DEPS/ArduinoJson.h.tmp" "$DEPS/ArduinoJson.h"
 fi
+python3 werkzeuge/app_einbetten.py --paket "$DEPS/test.wui" > /dev/null   # fuer den Test oberflaeche_paket
 g++ -std=gnu++17 -Wall -Wextra -Werror -I "$DEPS" -o "$DEPS/test_regeln" tests/test_regeln.cpp
 "$DEPS/test_regeln"

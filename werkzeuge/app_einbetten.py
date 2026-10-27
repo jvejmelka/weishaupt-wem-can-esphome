@@ -9,12 +9,14 @@ Fuer das Board werden drei Stellen angepasst (die Docker-App bleibt unveraendert
   - Startseite "/" -> "/app" (auf "/" liegt die Weboberflaeche des Boards)
   - der Service Worker faengt nur die eigenen Dateien ab, nie die Weboberflaeche (/events)
 
-Aufruf ohne Argumente erzeugt die Datei. Mit --pruefen (CI) wird nur verglichen: die Bytes von
+Aufruf ohne Argumente erzeugt die Datei. Mit --paket <datei> entsteht stattdessen ein Oberflaechen-Paket
+(.wui) zum Hochladen auf das Board (Einstellungsseite, ab v42) - ohne neue Firmware. Mit --pruefen (CI) wird nur verglichen: die Bytes von
 gzip haengen von Python- und zlib-Version ab, deshalb vergleicht die Pruefung den entpackten Inhalt.
 """
 
 import gzip
 import hashlib
+import json
 import re
 import sys
 from pathlib import Path
@@ -70,6 +72,8 @@ def pruefen() -> None:
     fehler = []
     if f'APP_VERSION[] = "{version}"' not in h:
         fehler.append("APP_VERSION")
+    if f"APP_API = {API_VERSION};" not in h:
+        fehler.append("APP_API")
     for i, (name, _, _) in enumerate(DATEIEN):
         m = re.search(r"DATEI_%d\[\] = \{(.*?)\};" % i, h, re.S)
         daten = bytes(int(x, 16) for x in re.findall(r"0x([0-9a-f]{2})", m.group(1))) if m else b""
@@ -84,9 +88,30 @@ def pruefen() -> None:
     print(f"{ZIEL.relative_to(WURZEL)} aktuell (Version {version})")
 
 
+# Version der Schnittstelle zwischen Oberflaeche und Firmware (/api/...). Erhoehen, wenn sich die API
+# unvertraeglich aendert - das Board nimmt nur Pakete mit seiner eigenen API-Version an.
+API_VERSION = 1
+
+
+def paket(ziel: str) -> None:
+    """Oberflaechen-Paket: Zeile 'WUI1', Zeile JSON-Kopf, dann die gzip-Daten aller Dateien hintereinander."""
+    version, texte = erwartet()
+    daten, eintraege = b"", []
+    for (name, pfad, typ), text in zip(DATEIEN, texte):
+        z = gzip.compress(text.encode("utf-8"), compresslevel=9, mtime=0)
+        eintraege.append({"pfad": pfad, "typ": typ, "laenge": len(z), "sha256": hashlib.sha256(z).hexdigest()})
+        daten += z
+    kopf = {"art": "weishaupt-wem-can-oberflaeche", "api": API_VERSION, "version": version, "dateien": eintraege}
+    Path(ziel).write_bytes(b"WUI1\n" + json.dumps(kopf, separators=(",", ":")).encode() + b"\n" + daten)
+    print(f"{ziel}: {len(eintraege)} Dateien, {len(daten)} Byte, Version {version}")
+
+
 def main() -> None:
     if "--pruefen" in sys.argv:
         pruefen()
+        return
+    if "--paket" in sys.argv:
+        paket(sys.argv[sys.argv.index("--paket") + 1])
         return
     version, texte = erwartet()
     zeilen = [
@@ -105,6 +130,7 @@ def main() -> None:
         "};",
         "",
         f'static const char APP_VERSION[] = "{version}";',
+        f"static const int APP_API = {API_VERSION};",
         "",
     ]
     eintraege = []

@@ -256,3 +256,22 @@ TEST(zugang_geheim_und_extern) {
   PRUEFE(!ap::extern_erlaubt("/sensor/Laufzeit") && !ap::extern_erlaubt("/api/admin/werksreset"));
   PRUEFE(!ap::extern_erlaubt("/app/../update") && !ap::extern_erlaubt("/apix"));
 }
+
+TEST(oberflaeche_paket) {
+  // echtes Paket aus werkzeuge/app_einbetten.py --paket (tests/run.sh erzeugt es)
+  std::string p = datei("tests/.deps/test.wui");
+  PRUEFE(!p.empty());
+  ob::Paket k;
+  std::string f;
+  PRUEFE(ob::kopf_lesen(p.substr(0, ob::KOPF_MAX), ap::APP_API, k, f));
+  PRUEFE(k.groesse == p.size() && k.version == ap::APP_VERSION && k.finden("/app") && k.finden("/einstellungen.js"));
+  for (auto &d : k.dateien) PRUEFE(ob::sha256_hex(p.substr(d.start, d.laenge)) == d.sha256);
+  // eingebaute und gepackte Datei sind dieselben Bytes nach dem Entpacken - hier genuegt: gzip-Kopf
+  PRUEFE((uint8_t) p[k.finden("/app")->start] == 0x1f);
+  PRUEFE(!ob::kopf_lesen(p.substr(0, ob::KOPF_MAX), ap::APP_API + 1, k, f) && f.find("API") != std::string::npos);
+  PRUEFE(!ob::kopf_lesen("WUI2\n{}\n", ap::APP_API, k, f));
+  PRUEFE(!ob::kopf_lesen("WUI1\n{\"art\":\"weishaupt-wem-can-oberflaeche\",\"api\":1,\"dateien\":[]}\n", ap::APP_API, k, f));
+  std::string kaputt = p;
+  kaputt[k.dateien[1].start + 5] ^= 1;
+  PRUEFE(ob::sha256_hex(kaputt.substr(k.dateien[1].start, k.dateien[1].laenge)) != k.dateien[1].sha256);
+}
