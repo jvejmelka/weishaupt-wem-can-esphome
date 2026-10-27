@@ -19,6 +19,14 @@
 #ifdef USE_NUMBER
 #include "esphome/components/number/number.h"
 #endif
+#ifdef USE_LOGGER
+#include "esphome/components/logger/logger.h"
+#endif
+#ifdef USE_WIFI
+#include "esphome/components/wifi/wifi_component.h"
+#endif
+#include <esp_system.h>
+#include <esp_heap_caps.h>
 #include <lwip/sockets.h>
 #include <cstring>
 
@@ -123,6 +131,12 @@ void AppServer::setup() {
   if (this->einrichtung_noetig_) ESP_LOGW(TAG, "keine Zugangsdaten - Ersteinrichtung unter /app");
   this->web_passwort_setzen_();
   this->einstellungen_sammeln_();
+#ifdef USE_LOGGER
+  if (logger::global_logger != nullptr)
+    logger::global_logger->add_log_callback(this, [](void *self, uint8_t stufe, const char *tag, const char *text, size_t n) {
+      static_cast<AppServer *>(self)->log_zeile(stufe, text, n);
+    });
+#endif
 
   char buf[OBJECT_ID_MAX_LEN];
 #ifdef USE_SENSOR
@@ -217,10 +231,13 @@ void AppServer::zusammenstellen_() {
     l.zusatz.push_back(z);
   }
   std::string s = ap::status_antwort(l), e = ap::energie_antwort(l), st = this->einstellungen_json_();
+  std::string in = this->info_json_(), si = this->sicherung_json_();
   std::lock_guard<std::mutex> g(this->sperre_);
   this->status_.swap(s);
   this->energie_.swap(e);
   this->einstellungen_stand_.swap(st);
+  this->info_.swap(in);
+  this->sicherung_.swap(si);
 }
 
 void AppServer::einstellungen_sammeln_() {
@@ -280,6 +297,101 @@ std::string AppServer::einstellungen_json_() {
   return out;
 }
 
+// Log: nur Info, Warnung, Fehler; Farbcodes entfernen; die letzten 80 Zeilen (Text ab "[I][tag:...]")
+void AppServer::log_zeile(uint8_t stufe, const char *text, size_t laenge) {
+  if (stufe > ESPHOME_LOG_LEVEL_INFO) return;
+  std::string z;
+  z.reserve(laenge < 200 ? laenge : 200);
+  for (size_t i = 0; i < laenge && z.size() < 200; i++) {
+    char c = text[i];
+    if (c == '\033') {                      // ESC [ ... m ueberspringen
+      while (i < laenge && text[i] != 'm') i++;
+      continue;
+    }
+    if (c == '\n' || c == '\r') c = ' ';
+    z.push_back(c);
+  }
+  uint32_t s = millis() / 1000;
+  char t[16];
+  snprintf(t, sizeof(t), "%02u:%02u:%02u ", (unsigned) (s / 3600 % 100), (unsigned) (s / 60 % 60), (unsigned) (s % 60));
+  std::lock_guard<std::mutex> g(this->log_sperre_);
+  this->log_.push_back(t + z);
+  while (this->log_.size() > 80) this->log_.pop_front();
+}
+
+static const char *neustart_grund() {
+  switch (esp_reset_reason()) {
+    case ESP_RST_POWERON: return "Strom an";
+    case ESP_RST_SW: return "Neustart per Software (Update, Knopf, Waechter)";
+    case ESP_RST_PANIC: return "Absturz (Panic)";
+    case ESP_RST_INT_WDT: case ESP_RST_TASK_WDT: case ESP_RST_WDT: return "Watchdog";
+    case ESP_RST_BROWNOUT: return "Unterspannung";
+    case ESP_RST_DEEPSLEEP: return "Tiefschlaf";
+    case ESP_RST_EXT: return "Reset-Taste";
+    default: return "unbekannt";
+  }
+}
+
+std::string AppServer::info_json_() {
+  JsonDocument d;
+  JsonObject o = d.to<JsonObject>();
+  o["firmware"] = this->firmware_;
+  o["app_version"] = ap::APP_VERSION;
+  o["laufzeit_s"] = millis() / 1000;
+  o["neustart_grund"] = neustart_grund();
+  o["speicher_frei"] = esp_get_free_heap_size();
+  o["speicher_min"] = esp_get_minimum_free_heap_size();
+  o["groesster_block"] = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+#ifdef USE_WIFI
+  if (wifi::global_wifi_component != nullptr && wifi::global_wifi_component->is_connected()) {
+    char ssid[wifi::SSID_BUFFER_SIZE];
+    o["wlan"] = wifi::global_wifi_component->wifi_ssid_to(ssid);
+    o["wlan_rssi"] = wifi::global_wifi_component->wifi_rssi();
+    auto ips = wifi::global_wifi_component->get_ip_addresses();
+    char ip[network::IP_ADDRESS_BUFFER_SIZE];
+    if (ips[0].is_set()) o["ip"] = ips[0].str_to(ip);
+  }
+#endif
+  auto &bus = this->wc_->bus;
+  uint32_t jetzt = millis();
+  o["bus_lebt"] = bus.lebt(jetzt);
+  if (bus.letzter_frame != 0) o["letzter_frame_s"] = bus.still(jetzt) / 1000; else o["letzter_frame_s"] = nullptr;
+  o["uhr"] = this->wc_->zeit("%d.%m.%Y %H:%M:%S");
+  std::string out;
+  serializeJson(d, out);
+  return out;
+}
+
+// Sicherung: alle Einstellungen der Einstellungsseite und die Darstellung - OHNE Passwoerter
+std::string AppServer::sicherung_json_() {
+  JsonDocument d;
+  JsonObject o = d.to<JsonObject>();
+  o["art"] = "weishaupt-wem-can-einstellungen";
+  o["version"] = 1;
+  o["firmware"] = this->firmware_;
+  o["uhr"] = this->wc_->zeit("%Y-%m-%d %H:%M");
+  JsonObject e = o["einstellungen"].to<JsonObject>();
+  {
+    std::lock_guard<std::mutex> g(this->sperre_);
+    e["darstellung"] = ap::theme(this->zugang_);
+  }
+  for (auto &x : this->einstellungen_) {
+#ifdef USE_NUMBER
+    if (x.zahl) {
+      auto *n = static_cast<number::Number *>(x.obj);
+      if (n->has_state()) e[x.id] = n->state;
+      continue;
+    }
+#endif
+#ifdef USE_SWITCH
+    e[x.id] = static_cast<switch_::Switch *>(x.obj)->state;
+#endif
+  }
+  std::string out;
+  serializeJson(d, out);
+  return out;
+}
+
 // ---------------------------------------------------------------- Webserver-Faden
 
 static bool beginnt(const char *s, const char *p) { return std::strncmp(s, p, std::strlen(p)) == 0; }
@@ -292,7 +404,7 @@ bool AppServer::canHandle(AsyncWebServerRequest *request) const {
 
 void AppServer::handleBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
   if (index == 0) this->body_.clear();
-  if (this->body_.size() + len <= 1024) this->body_.append(reinterpret_cast<const char *>(data), len);
+  if (this->body_.size() + len <= 4096) this->body_.append(reinterpret_cast<const char *>(data), len);
 }
 
 // Der IDF-Webserver von ESPHome kennt nur einige Statuscodes (sonst 500) - die uebrigen hier setzen.
@@ -464,6 +576,41 @@ void AppServer::einrichtung_(AsyncWebServerRequest *r) {
   this->antworten_(r, 200, "{\"token\":\"" + token + "\"}");
 }
 
+// eine Einstellung pruefen und (in der Hauptschleife) setzen; false + fehler, wenn ungueltig
+bool AppServer::einstellung_setzen_(const std::string &id, JsonVariant wert, std::string &fehler) {
+  if (id == "darstellung") {
+    std::string t = wert.is<const char *>() ? wert.as<std::string>() : "";
+    if (!ap::theme_ok(t)) { fehler = "auto, hell oder dunkel"; return false; }
+    { std::lock_guard<std::mutex> g(this->sperre_); ap::kopieren(this->zugang_.theme, sizeof(this->zugang_.theme), t); }
+    this->wc_->spaeter([this]() { this->zugang_speichern_(); });
+    return true;
+  }
+  for (auto &e : this->einstellungen_) {
+    if (e.id != id) continue;
+#ifdef USE_NUMBER
+    if (e.zahl) {
+      if (!wert.is<float>()) { fehler = "Zahl erwartet"; return false; }
+      float v = wert.as<float>();
+      auto *n = static_cast<number::Number *>(e.obj);
+      if (v < n->traits.get_min_value() || v > n->traits.get_max_value()) { fehler = "ausserhalb des erlaubten Bereichs"; return false; }
+      ESP_LOGI(TAG, "Einstellung %s = %.1f", e.name.c_str(), v);
+      this->wc_->spaeter([n, v]() { n->make_call().set_value(v).perform(); });
+      return true;
+    }
+#endif
+#ifdef USE_SWITCH
+    if (!wert.is<bool>()) { fehler = "an/aus erwartet"; return false; }
+    bool an = wert.as<bool>();
+    auto *s = static_cast<switch_::Switch *>(e.obj);
+    ESP_LOGI(TAG, "Einstellung %s = %s", e.name.c_str(), an ? "an" : "aus");
+    this->wc_->spaeter([s, an]() { if (an) s->turn_on(); else s->turn_off(); });
+    return true;
+#endif
+  }
+  fehler = "unbekannte Einstellung";
+  return false;
+}
+
 // eine Einstellung aendern: {"id": "<object_id>" | "darstellung", "wert": true/false/Zahl/"hell"}
 void AppServer::einstellen_(AsyncWebServerRequest *r) {
   JsonDocument d;
@@ -471,43 +618,36 @@ void AppServer::einstellen_(AsyncWebServerRequest *r) {
     this->antworten_(r, 400, "{\"error\":\"ungueltige Anfrage\"}");
     return;
   }
-  std::string id = d["id"].as<std::string>();
-  if (id == "darstellung") {
-    std::string t = d["wert"].is<const char *>() ? d["wert"].as<std::string>() : "";
-    if (!ap::theme_ok(t)) { this->antworten_(r, 400, "{\"error\":\"auto, hell oder dunkel\"}"); return; }
-    { std::lock_guard<std::mutex> g(this->sperre_); ap::kopieren(this->zugang_.theme, sizeof(this->zugang_.theme), t); }
-    this->wc_->spaeter([this]() { this->zugang_speichern_(); });
-    this->antworten_(r, 200, "{\"ok\":true}");
+  std::string f;
+  if (this->einstellung_setzen_(d["id"].as<std::string>(), d["wert"], f)) { this->antworten_(r, 200, "{\"ok\":true}"); return; }
+  JsonDocument e;
+  e["error"] = f;
+  std::string out;
+  serializeJson(e, out);
+  this->antworten_(r, f == "unbekannte Einstellung" ? 404 : 400, out);
+}
+
+// Sicherung einspielen: jede bekannte Einstellung wird geprueft und gesetzt, unbekannte uebersprungen
+void AppServer::sicherung_einspielen_(AsyncWebServerRequest *r) {
+  JsonDocument d;
+  if (deserializeJson(d, this->body_) || d["art"] != "weishaupt-wem-can-einstellungen" || !d["einstellungen"].is<JsonObject>()) {
+    this->antworten_(r, 400, "{\"error\":\"keine Sicherungsdatei dieses Boards\"}");
     return;
   }
-  for (auto &e : this->einstellungen_) {
-    if (e.id != id) continue;
-#ifdef USE_NUMBER
-    if (e.zahl) {
-      if (!d["wert"].is<float>()) { this->antworten_(r, 400, "{\"error\":\"Zahl erwartet\"}"); return; }
-      float v = d["wert"].as<float>();
-      auto *n = static_cast<number::Number *>(e.obj);
-      if (v < n->traits.get_min_value() || v > n->traits.get_max_value()) {
-        this->antworten_(r, 400, "{\"error\":\"ausserhalb des erlaubten Bereichs\"}");
-        return;
-      }
-      ESP_LOGI(TAG, "Einstellung %s = %.1f", e.name.c_str(), v);
-      this->wc_->spaeter([n, v]() { n->make_call().set_value(v).perform(); });
-      this->antworten_(r, 200, "{\"ok\":true}");
-      return;
-    }
-#endif
-#ifdef USE_SWITCH
-    if (!d["wert"].is<bool>()) { this->antworten_(r, 400, "{\"error\":\"an/aus erwartet\"}"); return; }
-    bool an = d["wert"].as<bool>();
-    auto *s = static_cast<switch_::Switch *>(e.obj);
-    ESP_LOGI(TAG, "Einstellung %s = %s", e.name.c_str(), an ? "an" : "aus");
-    this->wc_->spaeter([s, an]() { if (an) s->turn_on(); else s->turn_off(); });
-    this->antworten_(r, 200, "{\"ok\":true}");
-    return;
-#endif
+  int ok = 0;
+  JsonDocument a;
+  JsonArray fehler = a["fehler"].to<JsonArray>();
+  for (JsonPair p : d["einstellungen"].as<JsonObject>()) {
+    std::string f, id = p.key().c_str();
+    if (this->einstellung_setzen_(id, p.value(), f)) ok++;
+    else fehler.add(id + ": " + f);
   }
-  this->antworten_(r, 404, "{\"error\":\"unbekannte Einstellung\"}");
+  a["ok"] = true;
+  a["gesetzt"] = ok;
+  ESP_LOGI(TAG, "Sicherung eingespielt: %d Einstellungen, %u uebersprungen", ok, (unsigned) fehler.size());
+  std::string out;
+  serializeJson(a, out);
+  this->antworten_(r, 200, out);
 }
 
 // Passwort aendern: {"art": "app" | "admin", "benutzer" (nur app, optional), "passwort"}.
@@ -624,6 +764,32 @@ void AppServer::handleRequest(AsyncWebServerRequest *request) {
       this->einstellen_(request);
     } else if (url == "/api/admin/passwort" && post) {
       this->passwort_aendern_(request);
+    } else if ((url == "/api/admin/info" || url == "/api/admin/sicherung") && !post) {
+      std::string s;
+      { std::lock_guard<std::mutex> g(this->sperre_); s = url == "/api/admin/info" ? this->info_ : this->sicherung_; }
+      this->antworten_(request, s.empty() ? 503 : 200, s.empty() ? "{\"error\":\"Board startet noch\"}" : s);
+    } else if (url == "/api/admin/sicherung" && post) {
+      this->sicherung_einspielen_(request);
+    } else if (url == "/api/admin/log" && !post) {
+      JsonDocument d;
+      JsonArray a = d.to<JsonArray>();
+      { std::lock_guard<std::mutex> g(this->log_sperre_); for (auto &z : this->log_) a.add(z); }
+      std::string out;
+      serializeJson(d, out);
+      this->antworten_(request, 200, out);
+    } else if (url == "/api/admin/neustart" && post) {
+      ESP_LOGW(TAG, "Neustart ueber die Einstellungsseite");
+      this->wc_->spaeter([]() { App.safe_reboot(); });
+      this->antworten_(request, 200, "{\"ok\":true}");
+    } else if (url == "/api/admin/werksreset" && post) {
+      JsonDocument d;
+      if (deserializeJson(d, this->body_) || d["bestaetigung"] != "WERKSRESET" || !this->werksreset) {
+        this->antworten_(request, 400, "{\"error\":\"zur Bestaetigung WERKSRESET eingeben\"}");
+      } else {
+        ESP_LOGW(TAG, "Werksreset ueber die Einstellungsseite");
+        this->wc_->spaeter([this]() { this->werksreset(); });
+        this->antworten_(request, 200, "{\"ok\":true}");
+      }
     } else {
       this->antworten_(request, 404, "{\"error\":\"Unbekannt\"}");
     }

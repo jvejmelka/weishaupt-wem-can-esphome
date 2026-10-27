@@ -1,6 +1,14 @@
 # Changelog – ESP-CAN-Brücke Weishaupt (WeAct CAN485, ESPHome)
 
 
+## v41 – 2026-10-27
+- **Einstellungsseite, Block „Board“:** Firmware, App-Stand, Uhrzeit, Laufzeit, Grund des letzten Neustarts, WLAN mit Signal, IP, freier Speicher, Zustand des CAN-Busses; Knopf **Neustart**.
+- **Log im Browser:** die letzten 80 Meldungen (Info, Warnung, Fehler) des Boards, alle 10 s neu.
+- **Sicherung:** alle Einstellungen der Seite als JSON-Datei herunterladen und wieder einspielen (ohne Passwörter; jede Einstellung wird beim Einspielen geprüft, unbekannte übersprungen).
+- **Werksreset** mit Bestätigung („WERKSRESET“): löscht gespeicherte Einstellungen, Zähler, Zugangsdaten und ein geändertes WLAN, dann Neustart.
+- **Anmeldung an der Weboberfläche per Digest** statt Basic – das Passwort geht nicht mehr im Klartext über das Netz. Das Firmware-Update der Einstellungsseite meldet sich ebenfalls per Digest an.
+- An der WTC-GW 15-B geprüft: Digest 200 / Basic 401, Info und Log liefern, Sicherung hin und zurück (16 Einstellungen), Werksreset ohne Bestätigung abgelehnt.
+
 ## v40 – 2026-10-27
 - **Firmware-Update im Browser** (Einstellungsseite → „Firmware-Update“): `.ota.bin` wählen, die Seite zeigt Größe und **SHA-256** (eigene Berechnung, auch ohne HTTPS) und vergleicht sie mit einer eingetragenen Release-Prüfsumme – stimmt sie nicht, bleibt der Knopf gesperrt. Dateien, die nicht mit `0xE9` beginnen (keine ESP32-Firmware), werden abgewiesen. Bestätigung mit dem Admin-Passwort, Fortschritt in Prozent, danach Neustart.
 - Dafür ESPHome-OTA über den Webserver (`ota: platform: web_server`, `/update`, Benutzer `admin` + Admin-Passwort). Der ESP32 prüft das Abbild vor dem Umschalten; ein beschädigtes bleibt ungenutzt, die bisherige Version läuft weiter.

@@ -30,3 +30,12 @@ esphome:
             id(befehl_eingang)->execute(ziel, nutzlast, std::string("App"));
           };
           id(wcan)->app->lesen = []() { id(status_lesen)->execute(); };
+          id(wcan)->app->werksreset = []() { id(app_werksreset).press(); };
+
+# Werksreset (ab v41): loescht alle gespeicherten Einstellungen, Zaehler und Zugangsdaten und startet neu.
+# Ausgeloest nur ueber die Einstellungsseite (mit Bestaetigung) - kein Knopf in der Weboberflaeche.
+button:
+  - platform: factory_reset
+    id: app_werksreset
+    name: "Werksreset"
+    internal: true

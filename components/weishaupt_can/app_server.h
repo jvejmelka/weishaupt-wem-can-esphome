@@ -13,6 +13,7 @@
 // Hauptschleife weiter - dort laufen die Skripte wie bei einem MQTT-Befehl.
 #pragma once
 #ifdef USE_WC_APP
+#include <deque>
 #include <functional>
 #include <mutex>
 #include <string>
@@ -42,6 +43,10 @@ class AppServer : public AsyncWebHandler {
   // und "Betriebsarten einmal lesen" (wie cmd/status)
   std::function<void(int, const std::string &)> befehl;
   std::function<void()> lesen;
+  std::function<void()> werksreset;   // ab v41: Knopf factory_reset der YAML
+
+  // Log-Zeile vom Logger (beliebiger Faden) - die letzten Zeilen fuer die Einstellungsseite
+  void log_zeile(uint8_t stufe, const char *text, size_t laenge);
 
   bool canHandle(AsyncWebServerRequest *request) const override;
   void handleRequest(AsyncWebServerRequest *request) override;
@@ -87,6 +92,10 @@ class AppServer : public AsyncWebHandler {
   void zugang_speichern_();          // nur in der Hauptschleife
   void web_passwort_setzen_();       // Weboberflaeche des Boards: Admin-Passwort (bzw. gesperrt)
   std::string token_laden_(ESPPreferenceObject &pref, uint32_t schluessel, bool neu);
+  std::string info_json_();          // Hauptschleife
+  std::string sicherung_json_();     // Hauptschleife
+  void sicherung_einspielen_(AsyncWebServerRequest *r);
+  bool einstellung_setzen_(const std::string &id, JsonVariant wert, std::string &fehler);
 
   WeishauptCan *wc_;
   std::string benutzer_, passwort_, admin_, firmware_;
@@ -102,10 +111,13 @@ class AppServer : public AsyncWebHandler {
 
   // nur unter sperre_: fertige Antworten fuer den Webserver-Faden
   mutable std::mutex sperre_;
-  std::string status_, energie_, einstellungen_stand_;
+  std::string status_, energie_, einstellungen_stand_, info_, sicherung_;
   ap::Anmeldung anmeldung_;
   ap::Zugang zugang_;
   bool einrichtung_noetig_{false};
+
+  std::mutex log_sperre_;
+  std::deque<std::string> log_;
 
   std::string body_;               // POST-Inhalt der laufenden Anfrage (nur Webserver-Faden)
 };

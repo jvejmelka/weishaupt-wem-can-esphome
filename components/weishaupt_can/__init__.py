@@ -19,6 +19,7 @@ import hashlib
 import esphome.codegen as cg
 from esphome.components import canbus, time as time_
 import esphome.config_validation as cv
+from esphome.core import CORE
 from esphome.const import CONF_ID, CONF_TIME_ID
 
 CODEOWNERS = ["@jvejmelka"]
@@ -110,6 +111,11 @@ async def to_code(config):
     if CONF_APP in config:
         app = config[CONF_APP]
         cg.add_define("USE_WC_APP")
+        # Log-Zeilen fuer die Einstellungsseite (ab v41): einen Platz in der Liste der Log-Empfaenger anfordern
+        if "logger" in CORE.config:
+            from esphome.components.logger import request_log_listener
+
+            request_log_listener()
         cg.add(
             var.app_einrichten(app[CONF_BENUTZER], app[CONF_PASSWORT], app[CONF_ADMIN_PASSWORT], app[CONF_FIRMWARE])
         )

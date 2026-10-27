@@ -128,6 +128,27 @@
     </section>
 
     <section class="block">
+      <div class="block-head"><span class="block-title">BOARD</span>
+        <button id="neustartBtn" class="knopf" style="margin-left:auto">NEUSTART</button></div>
+      <div id="info"></div>
+    </section>
+
+    <section class="block">
+      <div class="block-head"><span class="block-title">LOG</span>
+        <button id="logBtn" class="knopf" style="margin-left:auto">AKTUALISIEREN</button></div>
+      <pre id="log" style="font-family:var(--mono);font-size:.68rem;color:var(--text2);white-space:pre-wrap;word-break:break-all;max-height:18rem;overflow:auto;margin:0">–</pre>
+    </section>
+
+    <section class="block">
+      <div class="block-head"><span class="block-title">SICHERUNG</span></div>
+      <p class="hinweis" style="font-size:.75rem;color:var(--text2);margin-bottom:.4rem">Alle Einstellungen dieser Seite als Datei – ohne Passwörter.</p>
+      <button id="sicherungBtn" class="knopf">HERUNTERLADEN</button>
+      <input id="sicherungDatei" class="feld" type="file" accept=".json,application/json">
+      <button id="einspielenBtn" class="knopf" style="margin-top:.5rem" disabled>EINSPIELEN</button>
+      <div id="sicherungMeldung" class="meldung"></div>
+    </section>
+
+    <section class="block">
       <div class="block-head"><span class="block-title">FIRMWARE-UPDATE</span></div>
       <div class="zeile"><span class="name">Installiert <span class="hinweis" id="fwAktuell">–</span></span></div>
       <input id="fwDatei" class="feld" type="file" accept=".bin">
@@ -140,6 +161,16 @@
         Nur eine Firmware-Datei für dieses Board (<code>.ota.bin</code> bzw. <code>firmware.bin</code>). Der ESP32 prüft das Abbild vor dem
         Neustart; ist es beschädigt, läuft die bisherige Version weiter. Die Heizung selbst wird dabei nicht verändert.
       </p>
+    </section>
+
+    <section class="block">
+      <div class="block-head"><span class="block-title">WERKSRESET</span></div>
+      <p class="hinweis" style="font-size:.75rem;color:var(--text2)">Löscht alle gespeicherten Einstellungen, Zähler (z. B. Brennerstarts), Zugangsdaten und ein
+        über die Weboberfläche geändertes WLAN, dann Neustart. Danach gelten die Vorgaben der Firmware; ohne eigene Vorgaben
+        verlangt die App eine neue Einrichtung. An der Heizung selbst ändert sich nichts.</p>
+      <input id="resetText" class="feld" type="text" placeholder="zur Bestätigung WERKSRESET eingeben" autocomplete="off">
+      <button id="resetBtn" class="knopf" style="margin-top:.5rem;border-color:var(--red);color:var(--red)" disabled>ZURÜCKSETZEN</button>
+      <div id="resetMeldung" class="meldung"></div>
     </section>
 
     <section class="block links">

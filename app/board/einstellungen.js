@@ -53,7 +53,7 @@ async function login() {
     schreib(TOKEN_KEY, data.token);
     $('loginPass').value = '';
     $('loginOverlay').classList.add('hidden');
-    laden();
+    laden(); infoLaden(); logLaden();
   } catch { err.textContent = 'Verbindungsfehler'; err.classList.remove('hidden'); }
 }
 $('loginBtn').addEventListener('click', login);
@@ -223,8 +223,8 @@ $('fwBtn').addEventListener('click', () => {
   const form = new FormData();
   form.append('update', new Blob([fwBytes], { type: 'application/octet-stream' }), 'firmware.bin');
   const xhr = new XMLHttpRequest();
-  xhr.open('POST', '/update');
-  xhr.setRequestHeader('Authorization', 'Basic ' + btoa('admin:' + $('fwPass').value));
+  // Benutzer/Passwort an open(): der Browser beantwortet die Digest-Anfrage des Boards selbst
+  xhr.open('POST', '/update', true, 'admin', $('fwPass').value);
   xhr.upload.onprogress = e => { if (e.lengthComputable) { m.textContent = `übertrage … ${Math.round(e.loaded / e.total * 100)} %`; m.className = 'meldung'; } };
   xhr.onload = () => {
     if (xhr.status === 401) { m.textContent = 'Admin-Passwort falsch'; m.className = 'meldung fehler'; return; }
@@ -243,3 +243,81 @@ $('fwBtn').addEventListener('click', () => {
   xhr.send(form);
   $('fwBtn').disabled = true;
 });
+
+// ── Board: Infos, Log, Neustart
+function dauer(s) {
+  const t = Math.floor(s / 86400), h = Math.floor(s / 3600) % 24, m = Math.floor(s / 60) % 60;
+  return (t ? t + ' d ' : '') + h + ' h ' + m + ' min';
+}
+async function infoLaden() {
+  let d;
+  try { d = await api('/api/admin/info'); } catch { return; }
+  const zeilen = [
+    ['Firmware', d.firmware], ['App', d.app_version], ['Uhrzeit', d.uhr || '–'],
+    ['Laufzeit', dauer(d.laufzeit_s)], ['Letzter Neustart', d.neustart_grund],
+    ['WLAN', d.wlan ? `${d.wlan} (${d.wlan_rssi} dBm)` : '–'], ['IP', d.ip || '–'],
+    ['Speicher frei', `${Math.round(d.speicher_frei / 1024)} KB (min. ${Math.round(d.speicher_min / 1024)} KB, Block ${Math.round(d.groesster_block / 1024)} KB)`],
+    ['CAN-Bus', d.bus_lebt ? `lebt (letzte Nachricht vor ${d.letzter_frame_s} s)` : 'still']
+  ];
+  const ziel = $('info');
+  ziel.textContent = '';
+  for (const [k, v] of zeilen) {
+    const z = document.createElement('div');
+    z.className = 'zeile';
+    const a = document.createElement('span'); a.className = 'name'; a.textContent = k;
+    const b = document.createElement('span'); b.style.cssText = 'font-family:var(--mono);font-size:.85rem;text-align:right'; b.textContent = v;
+    z.append(a, b);
+    ziel.appendChild(z);
+  }
+}
+async function logLaden() {
+  try {
+    const zeilen = await api('/api/admin/log');
+    const el = $('log');
+    const unten = el.scrollTop + el.clientHeight >= el.scrollHeight - 5;
+    el.textContent = zeilen.length ? zeilen.join('\n') : '(noch nichts)';
+    if (unten) el.scrollTop = el.scrollHeight;
+  } catch { /* abgemeldet */ }
+}
+$('logBtn').addEventListener('click', logLaden);
+$('neustartBtn').addEventListener('click', async () => {
+  if (!confirm('Board neu starten? Die Heizung läuft dabei normal weiter.')) return;
+  try { await api('/api/admin/neustart', { method: 'POST', body: '{}' }); $('info').textContent = 'startet neu …'; } catch (e) { alert(e.message); }
+});
+
+// ── Sicherung
+$('sicherungBtn').addEventListener('click', async () => {
+  try {
+    const d = await api('/api/admin/sicherung');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' }));
+    a.download = `heizung-einstellungen-${(d.uhr || 'stand').replace(/[: ]/g, '-')}.json`;
+    a.click();
+  } catch (e) { $('sicherungMeldung').textContent = e.message; $('sicherungMeldung').className = 'meldung fehler'; }
+});
+$('sicherungDatei').addEventListener('change', () => { $('einspielenBtn').disabled = !$('sicherungDatei').files[0]; });
+$('einspielenBtn').addEventListener('click', async () => {
+  const m = $('sicherungMeldung');
+  try {
+    const text = await $('sicherungDatei').files[0].text();
+    const d = await api('/api/admin/sicherung', { method: 'POST', body: text });
+    m.textContent = `${d.gesetzt} Einstellungen übernommen` + (d.fehler && d.fehler.length ? ` · übersprungen: ${d.fehler.join(', ')}` : '');
+    m.className = 'meldung ok';
+    setTimeout(laden, 1500);
+  } catch (e) { m.textContent = e.message; m.className = 'meldung fehler'; }
+});
+
+// ── Werksreset
+$('resetText').addEventListener('input', () => { $('resetBtn').disabled = $('resetText').value !== 'WERKSRESET'; });
+$('resetBtn').addEventListener('click', async () => {
+  if (!confirm('Wirklich alle gespeicherten Einstellungen und Zugangsdaten des Boards löschen?')) return;
+  const m = $('resetMeldung');
+  try {
+    await api('/api/admin/werksreset', { method: 'POST', body: JSON.stringify({ bestaetigung: 'WERKSRESET' }) });
+    schreib(TOKEN_KEY, null);
+    m.textContent = 'zurückgesetzt – Board startet neu, danach /app aufrufen'; m.className = 'meldung ok';
+  } catch (e) { m.textContent = e.message; m.className = 'meldung fehler'; }
+});
+
+if (lies(TOKEN_KEY)) { infoLaden(); logLaden(); }
+setInterval(() => { if (lies(TOKEN_KEY) && !document.hidden) { infoLaden(); logLaden(); } }, 10000);
