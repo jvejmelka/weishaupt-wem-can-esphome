@@ -88,10 +88,10 @@ script:
             s.ablehnen(ziel, a, f);
             id(schalt_status).publish_state(a.quelle + ": " + zn + " abgelehnt - " + f);
           } else {
-            uint32_t seit = millis() - id(wcan)->schalten.letzter_befehl;
-            int warten = (id(wem_senden).is_running() || id(can_senden).is_running() || id(can_frei_senden).is_running() || id(sd_holen).is_running()) ? 60 :
-                         (id(wcan)->schalten.letzter_befehl != 0 && seit < 60000) ? (int) ((60000 - seit) / 1000) + 1 : 0;
-            if (ziel == 2 && s.hat_wunsch[1] && warten == 0) warten = 60;   // Heizkreis geht vor
+            int warten = id(wcan)->schalten.warten_s(millis(), id(wem_senden).is_running() || id(can_senden).is_running() ||
+                                                              id(can_frei_senden).is_running() || id(sd_holen).is_running());
+            // ein frueher eingegangener Wunsch fuer das andere Ziel wird zuerst gesendet (Reihenfolge des Eingangs)
+            if (warten == 0 && s.hat_wunsch[ziel == 1 ? 2 : 1]) warten = (int) id(wcan)->schalten.sperre_s();
             s.annehmen(ziel, a, warten);
             id(schalt_status).publish_state("vorgemerkt (" + a.quelle + "): " + zn + " " + bf::wert_text(ziel, a.wert) +
                                             (warten > 0 ? ", wird in " + to_string(warten) + " s gesendet" : ""));
@@ -143,7 +143,7 @@ script:
           if (sc.letzter_befehl != sc.letzter_gesehen) {
             sc.letzter_gesehen = sc.letzter_befehl;
             auto t = id(uhr).now();
-            if (t.is_valid()) { t = ESPTime::from_epoch_local(t.timestamp + 60); sc.frei_ab = t.strftime("%H:%M:%S"); }
+            if (t.is_valid()) { t = ESPTime::from_epoch_local(t.timestamp + sc.sperre_s()); sc.frei_ab = t.strftime("%H:%M:%S"); }
             else sc.frei_ab = "";
           }
           bf::status().setze(bf::status().weg_can, (bool) id(can_schalten).state);   // fuer status/json und App
@@ -165,8 +165,10 @@ script:
           if (bb.ziel == 1) reg::json_vg_schreiben(b, sizeof(b), reg::HK_BETRIEBSART_JSON, bb.wert);   // MI02 HZK0 Betriebsart
           else              reg::json_vg_schreiben(b, sizeof(b), reg::WW_BETRIEBSART_JSON, bb.wert);   // MI03 WW0 Betriebsart
           sc.ziel = bb.ziel; sc.vg = b;
-          sc.letzter_befehl = millis() | 1; id(wcan)->anlass.eigener_befehl_ms = sc.letzter_befehl;
-          bf::status().setze(bf::status().frei_ab, s.uhr ? s.uhr + 60 : 0u);
+          // Abstand zum naechsten Befehl: per CAN kurz, ueber die JSON-Schnittstelle mindestens 1 min
+          sc.beginnen(millis(), (uint32_t) (id(can_schalten).state ? id(abstand_can).state : id(abstand_json).state) * 1000);
+          id(wcan)->anlass.eigener_befehl_ms = sc.letzter_befehl;
+          bf::status().setze(bf::status().frei_ab, s.uhr ? s.uhr + sc.sperre_s() : 0u);
           sc.senden = true;
       - script.execute: befehl_melden
       - if:
@@ -239,14 +241,14 @@ script:
           sc.can_frei_gesendet = false;
           if (!id(can_frei).state) { id(can_antwort).publish_state("gesperrt - Schalter \"Freies CAN-Schreiben\" ist aus"); return; }
           if (id(wem_senden).is_running() || id(can_senden).is_running() || sc.sperrminute(millis())) {
-            id(can_antwort).publish_state("bitte warten - hoechstens ein Befehl pro Minute"); return;
+            id(can_antwort).publish_state("bitte warten - Abstand zum letzten Befehl"); return;
           }
           if (id(wcan)->bus.tot(millis())) { id(can_antwort).publish_state("Bus tot - nicht gesendet"); return; }
           wc::CanSchreibbefehl c; std::string f;
           if (!wc::can_schreib_lesen(eingabe, c, f)) { id(can_antwort).publish_state(f); return; }
-          sc.letzter_befehl = millis() | 1; id(wcan)->anlass.eigener_befehl_ms = sc.letzter_befehl;
+          sc.beginnen(millis(), (uint32_t) id(abstand_can).state * 1000); id(wcan)->anlass.eigener_befehl_ms = sc.letzter_befehl;
           uint32_t u = id(wcan)->unix_zeit();
-          if (u != 0) bf::status().setze(bf::status().frei_ab, u + 60);
+          if (u != 0) bf::status().setze(bf::status().frei_ab, u + sc.sperre_s());
           uint32_t cid = 0; std::vector<uint8_t> d;
           sc.can_fertig = false; sc.can_text.clear();
           id(wcan)->schreiben.starten(c, cid, d);
@@ -285,11 +287,11 @@ script:
           if (!id(sd_erlaubt).state) { id(sd_antwort).publish_state("gesperrt - Schalter \"SD-Dateien abrufen\" ist aus"); return; }
           if (!wc::sd_name_ok(name)) { id(sd_antwort).publish_state("ungueltiger Dateiname (nur Buchstaben, Ziffern, _ . -)"); return; }
           if (id(wem_senden).is_running() || id(can_senden).is_running() || id(can_frei_senden).is_running() || sc.sperrminute(millis())) {
-            id(sd_antwort).publish_state("bitte warten - hoechstens ein WEM-Zugriff pro Minute"); return;
+            id(sd_antwort).publish_state("bitte warten - Abstand zum letzten WEM-Zugriff"); return;
           }
-          sc.letzter_befehl = millis() | 1;
+          sc.beginnen(millis(), (uint32_t) id(abstand_json).state * 1000);   // HTTP an den WEM wie JSON
           uint32_t u = id(wcan)->unix_zeit();
-          if (u != 0) bf::status().setze(bf::status().frei_ab, u + 60);
+          if (u != 0) bf::status().setze(bf::status().frei_ab, u + sc.sperre_s());
           id(sd_antwort).publish_state("hole " + name + " ...");
           id(sd_ok) = true;
       - if:
@@ -486,16 +488,16 @@ button:
           auto &sc = id(wcan)->schalten;
           sc.senden = false;
           if ((id(wem_senden).is_running() || id(can_senden).is_running() || id(can_frei_senden).is_running() || id(sd_holen).is_running()) || sc.sperrminute(millis())) {
-            id(schreib_antwort).publish_state("bitte warten - hoechstens ein Befehl pro Minute"); return;
+            id(schreib_antwort).publish_state("bitte warten - Abstand zum letzten Befehl"); return;
           }
           // Format: MI MX OX OS WERT (hex), z.B. "03 00 2520 02 02" = Warmwasser Aus.
           // Nur Systemgeraet (MI 01 SYSTEM0, 02 HZK0, 03 WW0) - nie der Kessel (wc::schreib_vg)
           std::string vg, fehler;
           if (!wc::schreib_vg(id(schreib_eingabe).state, vg, fehler)) { id(schreib_antwort).publish_state(fehler); return; }
           sc.vg = vg; sc.ziel = 3;
-          sc.letzter_befehl = millis() | 1; id(wcan)->anlass.eigener_befehl_ms = sc.letzter_befehl; sc.senden = true;
+          sc.beginnen(millis(), (uint32_t) id(abstand_json).state * 1000); id(wcan)->anlass.eigener_befehl_ms = sc.letzter_befehl; sc.senden = true;
           uint32_t u = id(wcan)->unix_zeit();
-          if (u != 0) bf::status().setze(bf::status().frei_ab, u + 60);
+          if (u != 0) bf::status().setze(bf::status().frei_ab, u + sc.sperre_s());
           id(schreib_antwort).publish_state("sende VG " + vg + " ...");
       - if:
           condition:
@@ -615,6 +617,34 @@ text_sensor:
     name: "Systemtabelle (Knoten, Module)"
     id: systabelle
     web_server: { sorting_group_id: g_sd, sorting_weight: 6 }
+
+number:
+  # Abstand zwischen zwei Befehlen an den WEM (ab v38). Ueber die JSON-Schnittstelle mindestens 60 s
+  # (sie verklemmt sonst); per CAN nimmt der WEM sofort an - der Abstand schont nur sein EEPROM.
+  - platform: template
+    id: abstand_can
+    name: "Abstand zwischen Befehlen per CAN (s)"
+    min_value: 5
+    max_value: 300
+    step: 1
+    initial_value: 10
+    restore_value: true
+    optimistic: true
+    mode: box
+    entity_category: config
+    web_server: { sorting_group_id: g_can_schreiben, sorting_weight: 3 }
+  - platform: template
+    id: abstand_json
+    name: "Abstand zwischen Befehlen per JSON (s)"
+    min_value: 60
+    max_value: 600
+    step: 1
+    initial_value: 60
+    restore_value: true
+    optimistic: true
+    mode: box
+    entity_category: config
+    web_server: { sorting_group_id: g_schalten, sorting_weight: 9 }
 
 switch:
   - platform: template

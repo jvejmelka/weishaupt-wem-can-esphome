@@ -8,7 +8,9 @@
   - Zusatzanzeigen: das Board abonniert die Topics der Liste selbst (das Broker-Konto des Boards braucht Leserecht darauf).
   - Die Weboberfläche des Boards unter `/` bleibt unverändert (eigenes Passwort). Der Service Worker der Board-App fängt nur die eigenen Dateien ab.
   - An der WTC-GW 15-B: `/api/status` stimmt mit der Docker-App überein (Messwerte, Kessel, Schalten, Bus, Zusatzwerte); Betriebsart und Statusbits fehlen nach einem Neustart, bis das Board sie wieder gelesen bzw. gesehen hat.
-  - Tests: `app_status_*`, `app_zusatz_zahl`, `app_befehlsverlauf`, `app_login_sperre`, `app_meta_und_energie`, `app_eingebettete_dateien`. CI prüft, dass die eingebettete App aktuell ist.
+  - **Warteschlange in der Reihenfolge des Eingangs** (vorher immer Heizkreis vor Warmwasser): Heizung → Wasser → Heizung sendet jetzt Wasser vor der zweiten Heizung. Ein neuer Wunsch für dasselbe Ziel ersetzt den alten weiterhin und stellt sich hinten an.
+  - **Abstand zwischen Befehlen einstellbar:** „Abstand zwischen Befehlen per CAN (s)“ (Vorgabe 10 s, 5–300) und „… per JSON (s)“ (Vorgabe 60 s, 60–600). Per CAN nimmt der WEM sofort an, der Abstand schont nur sein EEPROM; die JSON-Schnittstelle braucht weiter mindestens 1 min. SD-Dateien und Schreibbefehle über JSON zählen als JSON.
+  - Tests: `kern_abstand_einstellbar`, `kern_warteschlange_reihenfolge_des_eingangs`, `app_status_*`, `app_zusatz_zahl`, `app_befehlsverlauf`, `app_login_sperre`, `app_meta_und_energie`, `app_eingebettete_dateien`. CI prüft, dass die eingebettete App aktuell ist.
 
 ## v37 – 2026-10-26
 - **`status/json` → `schalten.weg`**: `"can"` oder `"json"`, je nach Schalter „Schalten per CAN“.

@@ -157,11 +157,14 @@ inline bool ist_ende(const std::string &phase) {
 enum class Wem { BESTAETIGT, UNKLAR, NICHT_ERREICHBAR, CM05 };
 
 // Warteschlange und laufender Befehl. Hoechstens ein Wunsch je Ziel; ein neuer Wunsch fuer
-// dasselbe Ziel ersetzt den alten (der NEUESTE gewinnt). Heizkreis wird vor Warmwasser gesendet.
+// dasselbe Ziel ersetzt den alten (der NEUESTE gewinnt) und reiht sich hinten ein.
+// Gesendet wird in der Reihenfolge des Eingangs (ab v38; vorher immer Heizkreis vor Warmwasser).
 // Jede Phase landet in "ereignisse" - die YAML veroeffentlicht und leert die Liste.
 struct Schaltung {
   Befehl wunsch[3];
   bool hat_wunsch[3] = {false, false, false};
+  uint32_t eingang[3] = {0, 0, 0};   // Reihenfolge des Eingangs je Ziel
+  uint32_t reihe = 0;
   Befehl lauf;
   bool laeuft = false;
   Befehl letzte[3];
@@ -203,14 +206,25 @@ struct Schaltung {
     }
     b.warten_s = warten_s < 0 ? 0 : warten_s;
     melden(b, "vorgemerkt");
-    wunsch[ziel] = b; hat_wunsch[ziel] = true;
+    wunsch[ziel] = b; hat_wunsch[ziel] = true; eingang[ziel] = ++reihe;
     return b;
+  }
+
+  // Ziel des aeltesten Wunsches (0 = keiner), zweiter = der danach
+  int erster() const {
+    if (hat_wunsch[ZIEL_HK] && hat_wunsch[ZIEL_WW]) return eingang[ZIEL_HK] < eingang[ZIEL_WW] ? ZIEL_HK : ZIEL_WW;
+    return hat_wunsch[ZIEL_HK] ? ZIEL_HK : (hat_wunsch[ZIEL_WW] ? ZIEL_WW : 0);
+  }
+  int zweiter() const {
+    int e = erster();
+    int a = e == ZIEL_HK ? ZIEL_WW : ZIEL_HK;
+    return e && hat_wunsch[a] ? a : 0;
   }
 
   // Wunsch holen und als laufend markieren. Nur rufen, wenn gesendet werden darf.
   bool naechster(Befehl &b) {
     if (laeuft) return false;
-    int z = hat_wunsch[ZIEL_HK] ? ZIEL_HK : (hat_wunsch[ZIEL_WW] ? ZIEL_WW : 0);
+    int z = erster();
     if (!z) return false;
     lauf = wunsch[z]; hat_wunsch[z] = false; laeuft = true;
     lauf.warten_s = -1;
@@ -405,7 +419,7 @@ inline std::string status_json(const Status &s, const Schaltung &sch, const std:
   JsonObject sc = o["schalten"].to<JsonObject>();
   if (sch.laeuft) befehl_objekt(sc["laufend"].to<JsonObject>(), sch.lauf); else sc["laufend"] = nullptr;
   JsonArray wl = sc["warteschlange"].to<JsonArray>();
-  for (int z = 1; z <= 2; z++) if (sch.hat_wunsch[z]) befehl_objekt(wl.add<JsonObject>(), sch.wunsch[z]);
+  for (int z : {sch.erster(), sch.zweiter()}) if (z) befehl_objekt(wl.add<JsonObject>(), sch.wunsch[z]);
   setze_zeit(sc, "frei_ab", (s.frei_ab != 0 && jetzt != 0 && s.frei_ab > jetzt) ? s.frei_ab : 0);
   sc["weg"] = s.weg_can ? "can" : "json";
   JsonObject le = sc["letzte"].to<JsonObject>();

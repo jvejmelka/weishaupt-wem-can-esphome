@@ -12,8 +12,9 @@ das am CAN-Bus einer Weishaupt-Brennwertheizung mit **WEM-Systemgerät** (z. B. 
 - **Schalten über die JSON-Schnittstelle des WEM**, mit Kontrolle am Bus:
   Heizkreis-Betriebsart (Standby, Zeitprogramm 1–3, Sommer, Komfort, Normal, Absenk)
   und Warmwasser Ein/Aus – über Weboberfläche, Home Assistant oder MQTT.
-  Höchstens ein Befehl pro Minute; was in der Sperrminute kommt, wird vorgemerkt
-  (höchstens einer je Ziel, der neueste Wunsch gewinnt) und danach gesendet – sichtbar im Feld
+  Zwischen zwei Befehlen liegt ein Abstand (ab v38 einstellbar: per CAN 10 s, über JSON mindestens 60 s);
+  was in dieser Zeit kommt, wird vorgemerkt (höchstens einer je Ziel, der neueste Wunsch gewinnt)
+  und in der Reihenfolge des Eingangs gesendet – sichtbar im Feld
   „Warteschlange“, mit Knopf zum Leeren.
 - **Schaltprotokoll** der letzten zehn Befehle mit Quelle und Ergebnis am Bus.
 - **Der WEM wird nie von selbst abgefragt** – nur dann, wenn jemand schaltet. Jede zusätzliche

@@ -447,21 +447,28 @@ struct Schalten {
   bool can_frei_gesendet = false;  // freier Schreibbefehl ist raus, Ergebnis abholen
   std::string can_text;
 
-  bool sperrminute(uint32_t j) const { return letzter_befehl != 0 && j - letzter_befehl < SPERRMINUTE_MS; }
+  // Abstand nach dem letzten Befehl (ab v38 einstellbar): per CAN kurz, ueber JSON/HTTP mindestens 1 min.
+  // gilt fuer den Befehl, der zuletzt gesendet wurde (beginnen() setzt ihn)
+  uint32_t sperre_ms = SPERRMINUTE_MS;
+  void beginnen(uint32_t j, uint32_t abstand_ms) { letzter_befehl = j | 1; sperre_ms = abstand_ms; }
+  uint32_t sperre_s() const { return sperre_ms / 1000; }
+  bool sperrminute(uint32_t j) const { return letzter_befehl != 0 && j - letzter_befehl < sperre_ms; }
   // Sekunden, bis ein neuer Wunsch gesendet werden darf
   int warten_s(uint32_t j, bool wem_laeuft) const {
     uint32_t seit = j - letzter_befehl;
-    return wem_laeuft ? 60 : (letzter_befehl != 0 && seit < SPERRMINUTE_MS) ? (int) ((SPERRMINUTE_MS - seit) / 1000) + 1 : 0;
+    return wem_laeuft ? (int) sperre_s() : (letzter_befehl != 0 && seit < sperre_ms) ? (int) ((sperre_ms - seit) / 1000) + 1 : 0;
   }
 };
 
 // Anzeige "Warteschlange"
 inline std::string warteschlange_text(const bf::Schaltung &s, bool gesperrt, const std::string &frei_ab) {
   std::string w;
-  if (s.hat_wunsch[1]) w = std::string("1. Heizkreis -> ") + bf::hk_text(s.wunsch[1].wert) + " (" + s.wunsch[1].quelle + ")";
-  if (s.hat_wunsch[2]) {
-    if (!w.empty()) w += " | 2. "; else w = "1. ";
-    w += std::string("Warmwasser -> ") + bf::ww_text(s.wunsch[2].wert) + " (" + s.wunsch[2].quelle + ")";
+  int n = 0;
+  for (int z : {s.erster(), s.zweiter()}) {
+    if (!z) continue;
+    if (n) w += " | ";
+    w += std::to_string(++n) + ". " + (z == bf::ZIEL_HK ? "Heizkreis -> " : "Warmwasser -> ") +
+         bf::wert_text(z, s.wunsch[z].wert) + " (" + s.wunsch[z].quelle + ")";
   }
   if (w.empty()) w = "leer";
   else if (gesperrt) w += frei_ab.empty() ? " - wartet auf die Sperrminute" : " - naechster Befehl ab " + frei_ab;

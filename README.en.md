@@ -12,8 +12,9 @@ that listens passively on the CAN bus of a Weishaupt condensing boiler with a **
 - **Switching via the WEM's JSON interface**, verified on the bus:
   heating circuit operating mode (Standby, time program 1–3, Summer, Comfort, Normal, Setback)
   and DHW on/off – via the web interface, Home Assistant or MQTT.
-  At most one command per minute; anything arriving during the lockout minute is queued
-  (at most one per target, the most recent request wins) and sent afterwards – visible in the field
+  Commands are spaced apart (configurable from v38: 10 s via CAN, at least 60 s via JSON); anything
+  arriving in between is queued (at most one per target, the most recent request wins) and sent
+  in order of arrival – visible in the field
   „Warteschlange“ ("queue"), with a button to clear it.
 - **Switching log** of the last ten commands with source and result on the bus.
 - **The WEM is never polled on its own initiative** – only when someone switches. Every additional

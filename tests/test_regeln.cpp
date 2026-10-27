@@ -645,10 +645,10 @@ TEST(befehl_neuester_wunsch_gewinnt_und_reihenfolge) {
   PRUEFE((p == std::vector<std::string>{"h2:angenommen", "h1:ersetzt", "h2:vorgemerkt"}));
   PRUEFE(!s.hat_letzte[bf::ZIEL_HK]);                         // ersetzt zaehlt nicht als "letzte"
   bf::Befehl b;
-  PRUEFE(s.naechster(b) && b.id == "h2");                     // Heizkreis zuerst
+  PRUEFE(s.naechster(b) && b.id == "w1");                     // Reihenfolge des Eingangs: Warmwasser kam zuerst
   s.wem_antwort(bf::Wem::BESTAETIGT, "");
-  s.bus_wert(bf::ZIEL_HK, 4);
-  PRUEFE(s.naechster(b) && b.id == "w1");
+  s.bus_wert(bf::ZIEL_WW, 1);
+  PRUEFE(s.naechster(b) && b.id == "h2");                     // der ersetzte Heizkreis-Wunsch reiht sich hinten ein
   s.ereignisse.clear();
   s.annehmen(bf::ZIEL_HK, h1, 60);
   PRUEFE(s.leeren() == 1 && !s.hat_wunsch[bf::ZIEL_HK]);

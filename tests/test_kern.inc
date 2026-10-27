@@ -601,3 +601,29 @@ TEST(kern_speicher_feste_groesse) {
   PRUEFE(wc::Verdacht().stby_vorher == -1 && wc::Verdacht().rest_vorher == -1 && wc::Verdacht().datei_version == -1 &&
          wc::Zusatz().version == -1 && wc::Brenner().starts == 0);
 }
+
+TEST(kern_abstand_einstellbar) {
+  wc::Schalten sc;
+  PRUEFE(!sc.sperrminute(1000) && sc.warten_s(1000, false) == 0);
+  const uint32_t t0 = 4294960000UL;          // ueber den millis()-Ueberlauf hinweg
+  sc.beginnen(t0, 10000);
+  PRUEFE(sc.sperrminute((uint32_t) (t0 + 10000u)) && !sc.sperrminute((uint32_t) (t0 + 10001u)));   // letzter_befehl = t0 | 1
+  PRUEFE(sc.warten_s(t0 + 1000u, false) == 10 && sc.sperre_s() == 10);
+  PRUEFE(sc.warten_s(t0 + 1000u, true) == 10);
+  sc.beginnen(5000, 60000);
+  PRUEFE(sc.sperrminute(65000) && !sc.sperrminute(65001) && sc.warten_s(6000, false) == 60);   // letzter_befehl = 5000 | 1
+}
+
+TEST(kern_warteschlange_reihenfolge_des_eingangs) {
+  bf::Schaltung s;
+  bf::Anfrage h; h.wert = 1;
+  bf::Anfrage w; w.wert = 2;
+  s.annehmen(bf::ZIEL_WW, w, 0);
+  s.annehmen(bf::ZIEL_HK, h, 0);
+  PRUEFE(wc::warteschlange_text(s, true, "") == "1. Warmwasser -> Aus (MQTT) | 2. Heizkreis -> Standby (MQTT) - wartet auf die Sperrminute");
+  JsonDocument d;
+  deserializeJson(d, bf::status_json(bf::status(), s, "x", 0, -1));
+  PRUEFE(std::string(d["schalten"]["warteschlange"][0]["ziel"].as<const char *>()) == "warmwasser");
+  bf::Befehl b;
+  PRUEFE(s.naechster(b) && b.ziel == bf::ZIEL_WW);
+}
