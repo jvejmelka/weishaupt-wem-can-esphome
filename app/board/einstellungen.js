@@ -259,6 +259,7 @@ async function infoLaden() {
     ['Laufzeit', dauer(d.laufzeit_s)], ['Letzter Neustart', d.neustart_grund],
     ['WLAN', d.wlan ? `${d.wlan} (${d.wlan_rssi} dBm)` : '–'], ['IP', d.ip || '–'],
     ['Speicher frei', `${Math.round(d.speicher_frei / 1024)} KB (min. ${Math.round(d.speicher_min / 1024)} KB, Block ${Math.round(d.groesster_block / 1024)} KB)`],
+    ['Dateisystem', !d.dateisystem ? 'nicht eingebaut' : d.dateisystem.bereit ? `${Math.round(d.dateisystem.kb / 1024 * 10) / 10} MB, belegt ${d.dateisystem.belegt_kb} KB` : d.dateisystem.fehler],
     ['SD-Karte', !d.sd ? 'nicht eingebaut' : d.sd.eingebunden ? `${d.sd.name || 'Karte'} · ${d.sd.mb} MB, frei ${d.sd.frei_mb} MB` : (d.sd.fehler || 'keine')],
     ['Flash', d.flash_echt ? `${d.flash_echt / 1048576} MB im Chip (Firmware für ${d.flash / 1048576} MB gebaut)` : '–'],
     ['CAN-Bus', d.bus_lebt ? `lebt (letzte Nachricht vor ${d.letzter_frame_s} s)` : 'still']

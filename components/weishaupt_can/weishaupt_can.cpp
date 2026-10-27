@@ -21,6 +21,9 @@ void WeishauptCan::loop() {
 #ifdef USE_WC_SD
       this->sd.einbinden();
 #endif
+#ifdef USE_WC_DATEIEN
+      this->fs.einbinden();
+#endif
       this->app->setup();
       this->app_bereit_ = true;
     }

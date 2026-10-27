@@ -24,6 +24,7 @@
 #endif
 #include "kern.h"
 #include "sd_karte.h"
+#include "dateisystem.h"
 #ifdef USE_WC_APP
 #include "app_server.h"
 #endif
@@ -113,6 +114,9 @@ class WeishauptCan : public Component {
 #endif
 #ifdef USE_WC_SD
   SdKarte sd;
+#endif
+#ifdef USE_WC_DATEIEN
+  Dateisystem fs;
 #endif
   // Aufgabe in der Hauptschleife ausfuehren (auch aus dem Webserver-Faden)
   void spaeter(std::function<void()> f) { this->defer(std::move(f)); }

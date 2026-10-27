@@ -76,6 +76,7 @@ esphome:
 # Board WeAct CAN485 DevBoard V1: microSD-Steckplatz einbinden (ab v42; ohne Karte harmlos)
 weishaupt_can:
   sd_karte: true
+  dateisystem: true        # LittleFS in den oberen 4 MB (WeAct hat 8 MB Flash), ab v42
 
 esp32:
   board: esp32dev
