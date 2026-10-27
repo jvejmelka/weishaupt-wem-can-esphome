@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bettet die Heizungs-App (app/public) gzip-komprimiert in die Firmware ein.
+"""Bettet die Heizungs-App (app/public, dazu app/board) gzip-komprimiert in die Firmware ein.
 
 Erzeugt components/weishaupt_can/app_dateien.h. Das Board liefert die Dateien unter
 /app (index.html), /app.js, /style.css, /manifest.json, /icon.svg und /sw.js aus.
@@ -20,17 +20,20 @@ import sys
 from pathlib import Path
 
 WURZEL = Path(__file__).resolve().parent.parent
-QUELLE = WURZEL / "app" / "public"
+QUELLE = WURZEL / "app"
 ZIEL = WURZEL / "components" / "weishaupt_can" / "app_dateien.h"
 
-# (Datei in app/public, Pfad auf dem Board, Inhaltstyp)
+# (Datei unter app/, Pfad auf dem Board, Inhaltstyp). public/ = dieselben Dateien wie die Docker-App,
+# board/ = nur auf dem Board (Einstellungsseite, ab v39)
 DATEIEN = [
-    ("index.html", "/app", "text/html; charset=utf-8"),
-    ("app.js", "/app.js", "application/javascript; charset=utf-8"),
-    ("style.css", "/style.css", "text/css; charset=utf-8"),
-    ("manifest.json", "/manifest.json", "application/manifest+json"),
-    ("icon.svg", "/icon.svg", "image/svg+xml"),
-    ("sw.js", "/sw.js", "application/javascript; charset=utf-8"),
+    ("public/index.html", "/app", "text/html; charset=utf-8"),
+    ("public/app.js", "/app.js", "application/javascript; charset=utf-8"),
+    ("public/style.css", "/style.css", "text/css; charset=utf-8"),
+    ("public/manifest.json", "/manifest.json", "application/manifest+json"),
+    ("public/icon.svg", "/icon.svg", "image/svg+xml"),
+    ("public/sw.js", "/sw.js", "application/javascript; charset=utf-8"),
+    ("board/einstellungen.html", "/einstellungen", "text/html; charset=utf-8"),
+    ("board/einstellungen.js", "/einstellungen.js", "application/javascript; charset=utf-8"),
 ]
 
 
@@ -43,9 +46,9 @@ def ersetzen(text: str, alt: str, neu: str) -> str:
 
 def anpassen(name: str, text: str, version: str) -> str:
     text = text.replace("__VERSION__", version)
-    if name == "manifest.json":
+    if name == "public/manifest.json":
         text = ersetzen(text, '"start_url": "/"', '"start_url": "/app"')
-    if name == "sw.js":
+    if name == "public/sw.js":
         text = ersetzen(text, "const ASSETS = ['/', '/index.html',", "const ASSETS = ['/app',")
         text = ersetzen(
             text,

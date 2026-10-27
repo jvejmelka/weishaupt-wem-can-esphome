@@ -1,6 +1,13 @@
 # Changelog – ESP-CAN-Brücke Weishaupt (WeAct CAN485, ESPHome)
 
 
+## v39 – 2026-10-27
+- **Einstellungsseite im Design der App** (`/einstellungen`, ⚙ in der App): eigenes Admin-Passwort und eigenes Token, Gruppen Schalten, Lesen, Regeln, Experten mit den Schaltern und Zahlen des Boards (Abstand CAN/JSON, Schalten per CAN, eigene CAN-Anfragen, lange Lesebefehle, SD-Dateien, R1–R5, eigene Regeln, freies CAN-Schreiben, Rohmitschnitt, Wächter). Werte werden geprüft (Bereich) und in der Hauptschleife gesetzt. Dazu App- und Admin-Passwort ändern; nach einem neuen App-Passwort sind alle App-Geräte abgemeldet.
+- **Zugangsdaten im Board gespeichert:** Beim ersten Start übernimmt das Board `app_benutzer`/`app_passwort` und `web_password` aus `secrets.yaml`; danach gelten die gespeicherten. **Fehlen sie (fertige Firmware ohne eigene Secrets), verlangt `/app` zuerst eine Ersteinrichtung** (Benutzer, App-Passwort, Admin-Passwort, je mindestens 8 Zeichen, verschieden). Bis dahin ist die Weboberfläche mit einem Zufallspasswort gesperrt – kein bekanntes Standardpasswort. Das Admin-Passwort gilt auch für die Weboberfläche (Benutzer `admin`).
+- **Hell / Dunkel / Auto** für App und Einstellungen: Knopf in der Kopfzeile (Auto → Hell → Dunkel), Wahl je Gerät im Browser; Vorgabe für alle Geräte auf der Einstellungsseite (ab Werk Auto = wie das Gerät). Dunkel sieht aus wie bisher.
+- **Statusbits nach einem Neustart:** Das Board liest `0x274D` einmal mit der Heizkreis-Betriebsart, solange es die Statusbits noch nicht kennt – „Zustand“ in der App steht damit etwa 1 min nach dem Start statt erst bei der nächsten Änderung.
+- Tests: `app_zugang_einrichtung`; Bilder der Oberfläche mit Testdaten geprüft (hell, dunkel, Einstellungen, Ersteinrichtung).
+
 ## v38 – 2026-10-27
 - **Handy-App direkt auf dem Board** (neues Paket `app.yaml`): `http://<board>/app` liefert dieselbe App wie `app/` – ohne Server, ohne Docker. Die Dateien aus `app/public/` sind gzip-komprimiert eingebettet (`werkzeuge/app_einbetten.py` → `components/weishaupt_can/app_dateien.h`, zusammen etwa 16 KB); `/api/login`, `/api/status`, `/api/energie`, `/api/meta`, `/api/mode`, `/api/warmwasser`, `/api/lesen` antworten wie die Docker-App.
   - Login mit `app_benutzer`/`app_passwort` aus `secrets.yaml`; 5 Fehlversuche je Adresse in 15 min → 15 min Sperre (HTTP 429). Sitzungs-Token im Flash, übersteht Updates.

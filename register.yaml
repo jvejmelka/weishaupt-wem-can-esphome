@@ -477,7 +477,7 @@ objekte:
     typ: uint16
     weg: []
     status: plausibel
-    beleg: wird nicht abgefragt, der WEM sendet es bei Änderung als PDO `0x1C1`
+    beleg: der WEM sendet es bei Änderung als PDO `0x1C1`; ab v39 einmal gelesen, solange es nach einem Neustart noch fehlt
   - id: HK_BETRIEBSART
     name: Heizkreis-Betriebsart
     firmware: Heizkreis Betriebsart

@@ -141,6 +141,13 @@ interval:
             lambda: 'return id(wcan)->anlass.hk_jetzt;'
           then:
             - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: !lambda 'return reg::lese(reg::HK_BETRIEBSART);' }  # Heizkreis-Betriebsart
+            # Statusbits nach einem Neustart einmal lesen (sonst erst bei der naechsten Aenderung per PDO 0x1C1)
+            - if:
+                condition:
+                  lambda: 'return bf::status().hk_bits < 0;'
+                then:
+                  - delay: 150ms
+                  - canbus.send: { canbus_id: my_can_bus, can_id: 0x601, data: !lambda 'return reg::lese(reg::STATUSBITS);' }
 
 script:
   # Status auf Wunsch: Heizkreis-Betriebsart (0x2933/2) und - mit Paket warmwasser -

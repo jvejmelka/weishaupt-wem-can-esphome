@@ -262,8 +262,16 @@ Dieselbe App, ohne Server: das Board liefert sie selbst aus (gzip, zusammen etwa
   das Board einmal neu starten (ein verweigertes Abo holt es sonst erst beim nächsten Verbinden nach).
 - Nach einem Neustart fehlen Betriebsart und Statusbits, bis das Board sie wieder gelesen bzw.
   gesehen hat (Betriebsart nach etwa 1 min, Statusbits bei der nächsten Änderung).
+- **Einstellungen** (ab v39): ⚙ in der App öffnet `http://<board>/einstellungen` – im Design der App,
+  mit eigenem Admin-Passwort. Schalter und Zahlen des Boards, App- und Admin-Passwort ändern,
+  Vorgabe für Hell/Dunkel/Auto. Die volle Weboberfläche bleibt unter `/` (Benutzer `admin`, Admin-Passwort).
+- **Ersteinrichtung** (ab v39): Das Board speichert die Zugangsdaten. Ohne Vorgaben in `secrets.yaml`
+  verlangt `/app` beim ersten Aufruf Benutzer, App- und Admin-Passwort (mindestens 8 Zeichen) – vorher
+  ist nichts bedienbar, auch die Weboberfläche nicht. Mit Vorgaben werden diese beim ersten Start übernommen;
+  spätere Änderungen an `secrets.yaml` wirken dann nicht mehr (Passwort auf der Einstellungsseite ändern).
+- **Hell / Dunkel / Auto:** Knopf oben in der App, Wahl je Gerät; Auto folgt der Einstellung des Geräts.
 - Von außen **nur über einen Reverse Proxy mit TLS** – das Board spricht nur HTTP.
-- Die Dateien kommen aus `app/public/`; `werkzeuge/app_einbetten.py` bettet sie ein
+- Die Dateien kommen aus `app/public/` (dazu `app/board/` für die Einstellungsseite); `werkzeuge/app_einbetten.py` bettet sie ein
   (`components/weishaupt_can/app_dateien.h`, die CI prüft, dass die Datei aktuell ist).
 
 ### Als Docker-Container (Ordner `app/`)

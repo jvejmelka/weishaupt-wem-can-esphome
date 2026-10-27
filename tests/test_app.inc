@@ -175,7 +175,7 @@ TEST(app_meta_und_energie) {
 }
 
 TEST(app_eingebettete_dateien) {
-  const char *pfade[] = {"/app", "/app.js", "/style.css", "/manifest.json", "/icon.svg", "/sw.js"};
+  const char *pfade[] = {"/app", "/app.js", "/style.css", "/manifest.json", "/icon.svg", "/sw.js", "/einstellungen", "/einstellungen.js"};
   for (auto *p : pfade) {
     auto *f = ap::datei(p, std::strlen(p));
     PRUEFE(f != nullptr);
@@ -184,4 +184,29 @@ TEST(app_eingebettete_dateien) {
   PRUEFE(ap::datei("/", 1) == nullptr);
   PRUEFE(ap::datei("/app.j", 6) == nullptr);
   PRUEFE(std::strlen(ap::APP_VERSION) == 10);
+}
+
+TEST(app_zugang_einrichtung) {
+  ap::Zugang z;
+  PRUEFE(!ap::vollstaendig(z));
+  std::string f;
+  PRUEFE(!ap::einrichtung_lesen("kaputt", z, f));
+  PRUEFE(!ap::einrichtung_lesen("{\"benutzer\":\"jo\",\"app_passwort\":\"kurz\",\"admin_passwort\":\"lang-genug-1\"}", z, f));
+  PRUEFE(f.find("8 bis 64") != std::string::npos && !ap::vollstaendig(z));
+  PRUEFE(!ap::einrichtung_lesen("{\"benutzer\":\"j o\",\"app_passwort\":\"geheim-123\",\"admin_passwort\":\"admin-4567\"}", z, f));
+  PRUEFE(!ap::einrichtung_lesen("{\"benutzer\":\"jo\",\"app_passwort\":\"gleich-123\",\"admin_passwort\":\"gleich-123\"}", z, f));
+  PRUEFE(f.find("verschieden") != std::string::npos);
+  PRUEFE(ap::einrichtung_lesen("{\"benutzer\":\"jo\",\"app_passwort\":\"geheim-123\",\"admin_passwort\":\"admin-4567\"}", z, f));
+  PRUEFE(ap::vollstaendig(z) && std::string(z.benutzer) == "jo" && std::string(z.app_pw) == "geheim-123" &&
+         std::string(z.admin_pw) == "admin-4567");
+  PRUEFE(ap::theme(z) == "auto");
+  PRUEFE(ap::kopieren(z.theme, sizeof(z.theme), "hell") && ap::theme(z) == "hell");
+  PRUEFE(!ap::kopieren(z.theme, sizeof(z.theme), "viel-zu-lang"));
+  PRUEFE(!ap::passwort_ok(std::string(65, 'x'), f) && ap::passwort_ok(std::string(64, 'x'), f));
+  PRUEFE(!ap::passwort_ok("abc\ndefgh", f));
+  JsonDocument d;
+  deserializeJson(d, ap::meta_antwort("/einstellungen", "dunkel"));
+  PRUEFE(std::string(d["theme"].as<const char *>()) == "dunkel");
+  deserializeJson(d, ap::meta_antwort("/"));
+  PRUEFE(d["theme"].isNull());
 }

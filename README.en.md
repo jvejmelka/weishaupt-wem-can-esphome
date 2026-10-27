@@ -275,8 +275,16 @@ The same app without a server: the board serves it itself (gzip, about 16 KB of 
   board once (a refused subscription is otherwise only retried on the next reconnect).
 - After a restart, operating mode and status bits are missing until the board has read or seen them
   again (mode after about 1 min, status bits on the next change).
+- **Settings** (from v39): ⚙ in the app opens `http://<board>/einstellungen` – in the app's design, with
+  its own admin password. Switches and numbers of the board, change app and admin password, default for
+  light/dark/auto. The full web interface stays at `/` (user `admin`, admin password).
+- **First-run setup** (from v39): the board stores the credentials. Without defaults in `secrets.yaml`,
+  `/app` first asks for user, app password and admin password (at least 8 characters) – nothing can be
+  operated before that, not even the web interface. With defaults they are taken over on the first start;
+  later changes to `secrets.yaml` then have no effect (change the password on the settings page).
+- **Light / dark / auto:** button at the top of the app, chosen per device; auto follows the device.
 - From outside **only through a reverse proxy with TLS** – the board only speaks HTTP.
-- The files come from `app/public/`; `werkzeuge/app_einbetten.py` embeds them
+- The files come from `app/public/` (plus `app/board/` for the settings page); `werkzeuge/app_einbetten.py` embeds them
   (`components/weishaupt_can/app_dateien.h`; CI checks that the file is up to date).
 
 ### As a Docker container (folder `app/`)

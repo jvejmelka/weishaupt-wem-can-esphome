@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f0f0f">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <title>Heizung – Einstellungen</title>
+  <script>
+    // Darstellung wie in der App (dieselbe Wahl im Browser), vor dem ersten Zeichnen
+    (function () {
+      var w = 'auto';
+      try { w = localStorage.getItem('wem_theme') || localStorage.getItem('wem_theme_vorgabe') || 'auto'; } catch (e) {}
+      if (w === 'auto') w = window.matchMedia && matchMedia('(prefers-color-scheme: light)').matches ? 'hell' : 'dunkel';
+      document.documentElement.setAttribute('data-theme', w);
+    })();
+  </script>
+  <link rel="stylesheet" href="/style.css?v=__VERSION__">
+  <style>
+    /* Einstellungen: normale, scrollbare Seite (die App passt ihre Schrift dagegen der Hoehe an) */
+    html { font-size: 17px; }
+    .app { gap: .8rem; padding-bottom: 2rem; }
+    .zeile {
+      display: flex; align-items: center; gap: .8rem; justify-content: space-between;
+      padding: .55rem 0; border-top: 1px solid var(--border); font-size: .95rem;
+    }
+    .zeile:first-of-type { border-top: none; }
+    .zeile .name { color: var(--text); min-width: 0; }
+    .zeile .hinweis { display: block; color: var(--text2); font-size: .75rem; margin-top: .1rem; }
+    .schalter {
+      flex: none; width: 3.1rem; height: 1.7rem; border-radius: 1rem; border: 1px solid var(--border);
+      background: var(--bg3); position: relative; cursor: pointer; transition: background .2s;
+    }
+    .schalter::after {
+      content: ''; position: absolute; top: .15rem; left: .15rem; width: 1.3rem; height: 1.3rem;
+      border-radius: 50%; background: var(--muted); transition: left .2s, background .2s;
+    }
+    .schalter.an { background: var(--amber); border-color: var(--amber); }
+    .schalter.an::after { left: 1.6rem; background: var(--auf-amber); }
+    .zahl {
+      flex: none; width: 5.5rem; padding: .35rem .5rem; text-align: right;
+      background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+      font-family: var(--mono); font-size: .95rem; border-radius: 2px;
+    }
+    .zahl:focus, .feld:focus { outline: none; border-color: var(--amber); }
+    .wahl { display: flex; gap: .4rem; flex: none; }
+    .wahl button, .knopf {
+      background: var(--bg3); color: var(--text2); border: 1px solid var(--border); border-radius: 2px;
+      padding: .4rem .7rem; font-family: var(--sans); font-size: .9rem; font-weight: 600; letter-spacing: .08em; cursor: pointer;
+    }
+    .wahl button.aktiv, .knopf.haupt { background: var(--amber); border-color: var(--amber); color: var(--auf-amber); }
+    .feld {
+      width: 100%; padding: .55rem .6rem; margin-top: .4rem; background: var(--bg3);
+      border: 1px solid var(--border); color: var(--text); font-family: var(--sans); font-size: 1rem; border-radius: 2px;
+    }
+    .meldung { font-size: .85rem; margin-top: .4rem; min-height: 1.1rem; }
+    .meldung.ok { color: var(--green); }
+    .meldung.fehler { color: var(--red); }
+    .links a { color: var(--amber); text-decoration: none; }
+    .links a:hover { text-decoration: underline; }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div id="loginOverlay" class="login-overlay hidden">
+    <div class="login-box">
+      <div class="login-logo">⬡</div>
+      <h2>EINSTELLUNGEN</h2>
+      <p class="login-sub">Admin-Passwort eingeben</p>
+      <input id="loginPass" type="password" placeholder="Admin-Passwort" autocomplete="current-password">
+      <div id="loginError" class="login-error hidden"></div>
+      <button id="loginBtn">ANMELDEN</button>
+      <p class="login-sub links"><a href="/app">← zurück zur App</a></p>
+    </div>
+  </div>
+
+  <main class="app">
+    <header class="header">
+      <div class="header-left">
+        <a href="/app" class="logo" style="text-decoration:none" title="zurück zur App">⬡</a>
+        <span class="header-title">EINSTELLUNGEN</span>
+      </div>
+      <div class="header-right">
+        <button id="themeBtn" class="theme-btn" title="Darstellung" aria-label="Darstellung umschalten"></button>
+        <button id="logoutBtn" class="logout-btn" title="Abmelden">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18.36 6.64a9 9 0 1 1-12.73 0"/>
+            <line x1="12" y1="2" x2="12" y2="12"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+    <div class="progress-bar"><div class="progress-fill" style="width:100%"></div></div>
+
+    <section class="block">
+      <div class="block-head"><span class="block-title">DARSTELLUNG</span></div>
+      <div class="zeile">
+        <span class="name">Vorgabe für alle Geräte<span class="hinweis">gilt, solange ein Gerät nichts Eigenes gewählt hat (Symbol oben in der App)</span></span>
+        <div class="wahl" id="darstellung">
+          <button data-wert="auto">AUTO</button><button data-wert="hell">HELL</button><button data-wert="dunkel">DUNKEL</button>
+        </div>
+      </div>
+    </section>
+
+    <div id="gruppen"></div>
+
+    <section class="block">
+      <div class="block-head"><span class="block-title">ZUGANG</span></div>
+      <div class="zeile"><span class="name">App-Benutzer <span class="hinweis" id="benutzerAnzeige">–</span></span></div>
+      <div>
+        <input id="appUser" class="feld" type="text" placeholder="neuer Benutzername (leer = bleibt)" autocomplete="off">
+        <input id="appPass" class="feld" type="password" placeholder="neues App-Passwort (mind. 8 Zeichen)" autocomplete="new-password">
+        <input id="appPass2" class="feld" type="password" placeholder="wiederholen" autocomplete="new-password">
+        <button id="appPassBtn" class="knopf" style="margin-top:.5rem">APP-PASSWORT ÄNDERN</button>
+        <div id="appPassMeldung" class="meldung"></div>
+      </div>
+      <div style="margin-top:.6rem">
+        <input id="adminPass" class="feld" type="password" placeholder="neues Admin-Passwort (mind. 8 Zeichen)" autocomplete="new-password">
+        <input id="adminPass2" class="feld" type="password" placeholder="wiederholen" autocomplete="new-password">
+        <button id="adminPassBtn" class="knopf" style="margin-top:.5rem">ADMIN-PASSWORT ÄNDERN</button>
+        <div id="adminPassMeldung" class="meldung"></div>
+      </div>
+      <p class="hinweis" style="font-size:.75rem;color:var(--text2);margin-top:.4rem">
+        Nach dem Ändern des App-Passworts sind alle Geräte abgemeldet. Das Admin-Passwort gilt auch für die Weboberfläche (Benutzer „admin“).
+      </p>
+    </section>
+
+    <section class="block links">
+      <div class="block-head"><span class="block-title">MEHR</span></div>
+      <div class="zeile"><a href="/app">← zurück zur App</a></div>
+      <div class="zeile"><span class="name"><a href="/" target="_blank" rel="noopener">Weboberfläche des Boards</a><span class="hinweis">alle Werte, Lese- und Schreibbefehle, Firmware-Update (Experten)</span></span></div>
+    </section>
+
+    <div class="app-version"><span id="version"></span></div>
+  </main>
+  <script src="/einstellungen.js?v=__VERSION__"></script>
+</body>
+</html>

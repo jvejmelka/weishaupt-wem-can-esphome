@@ -33,6 +33,7 @@ CONF_ZUSATZ = "zusatz"
 CONF_APP = "app"
 CONF_BENUTZER = "benutzer"
 CONF_PASSWORT = "passwort"
+CONF_ADMIN_PASSWORT = "admin_passwort"
 CONF_FIRMWARE = "firmware"
 
 weishaupt_can_ns = cg.esphome_ns.namespace("weishaupt_can")
@@ -50,12 +51,15 @@ CONFIG_SCHEMA = cv.Schema(
         # gespeicherte Werte der Pakete verdacht bzw. zusatz anlegen (die Pakete setzen das)
         cv.Optional(CONF_VERDACHT, default=False): cv.boolean,
         cv.Optional(CONF_ZUSATZ, default=False): cv.boolean,
-        # Heizungs-App auf dem Board (Paket app, ab v38): Login und Firmware-Text fuer die Anzeige
+        # Heizungs-App auf dem Board (Paket app, ab v38): Vorgaben fuer den Zugang und Firmware-Text.
+        # Ab v39 gelten die im Board gespeicherten Zugangsdaten; die Vorgaben nur beim ersten Start.
+        # Fehlt ein Passwort, verlangt das Board beim ersten Aufruf von /app eine Ersteinrichtung.
         cv.Optional(CONF_APP): cv.All(
             cv.Schema(
                 {
                     cv.Optional(CONF_BENUTZER, default="admin"): cv.string_strict,
-                    cv.Required(CONF_PASSWORT): cv.All(cv.string_strict, cv.Length(min=1)),
+                    cv.Optional(CONF_PASSWORT, default=""): cv.string_strict,
+                    cv.Optional(CONF_ADMIN_PASSWORT, default=""): cv.string_strict,
                     cv.Optional(CONF_FIRMWARE, default=""): cv.string,
                 }
             ),
@@ -106,4 +110,6 @@ async def to_code(config):
     if CONF_APP in config:
         app = config[CONF_APP]
         cg.add_define("USE_WC_APP")
-        cg.add(var.app_einrichten(app[CONF_BENUTZER], app[CONF_PASSWORT], app[CONF_FIRMWARE]))
+        cg.add(
+            var.app_einrichten(app[CONF_BENUTZER], app[CONF_PASSWORT], app[CONF_ADMIN_PASSWORT], app[CONF_FIRMWARE])
+        )

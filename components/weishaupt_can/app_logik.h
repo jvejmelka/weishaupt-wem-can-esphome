@@ -7,6 +7,7 @@
 #include "zusatz.h"
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <deque>
 #include <map>
 #include <string>
@@ -230,12 +231,15 @@ inline std::string energie_antwort(const Lage &l) {
   return out;
 }
 
-// Antwort von GET /api/meta
-inline std::string meta_antwort(const std::string &board_url) {
+inline bool theme_ok(const std::string &t);
+
+// Antwort von GET /api/meta (theme = Vorgabe der Darstellung, leer = keine)
+inline std::string meta_antwort(const std::string &board_url, const std::string &theme = "") {
   JsonDocument d;
   JsonObject o = d.to<JsonObject>();
   o["app"] = "weishaupt-heizungsapp";
   if (board_url.empty()) o["boardUrl"] = nullptr; else o["boardUrl"] = board_url;
+  if (theme_ok(theme)) o["theme"] = theme;
   JsonArray m = o["modes"].to<JsonArray>();
   for (int c = 1; c <= 8; c++) {
     JsonObject e = m.add<JsonObject>();
@@ -291,6 +295,61 @@ class Anmeldung {
   };
   std::vector<Eintrag> e_;
 };
+
+// ---------------------------------------------------------------- Zugangsdaten (ab v39)
+// Im Flash gespeichert. Fehlen sie (fertige Firmware, erster Start), verlangt das Board zuerst eine
+// Einrichtung: App-Benutzer und -Passwort sowie das Admin-Passwort fuer Einstellungen und Weboberflaeche.
+struct Zugang {
+  char benutzer[33] = {0};
+  char app_pw[65] = {0};
+  char admin_pw[65] = {0};
+  char theme[8] = {0};      // Vorgabe der Darstellung: auto | hell | dunkel
+  uint8_t version = 1;
+};
+
+inline bool vollstaendig(const Zugang &z) { return z.benutzer[0] && z.app_pw[0] && z.admin_pw[0]; }
+
+inline bool kopieren(char *ziel, size_t n, const std::string &q) {
+  if (q.size() >= n) return false;
+  std::memset(ziel, 0, n);
+  std::memcpy(ziel, q.data(), q.size());
+  return true;
+}
+
+inline bool benutzer_ok(const std::string &b, std::string &f) {
+  if (b.empty() || b.size() > 32) { f = "Benutzer: 1 bis 32 Zeichen"; return false; }
+  for (unsigned char c : b)
+    if (c <= ' ' || c == 0x7F || c == '"' || c == '\\') { f = "Benutzer: keine Leer- oder Sonderzeichen wie \" oder \\"; return false; }
+  return true;
+}
+
+// neue Passwoerter: 8 bis 64 Zeichen, keine Steuerzeichen
+inline bool passwort_ok(const std::string &p, std::string &f) {
+  if (p.size() < 8 || p.size() > 64) { f = "Passwort: 8 bis 64 Zeichen"; return false; }
+  for (unsigned char c : p)
+    if (c < ' ' || c == 0x7F) { f = "Passwort: keine Steuerzeichen"; return false; }
+  return true;
+}
+
+inline bool theme_ok(const std::string &t) { return t == "auto" || t == "hell" || t == "dunkel"; }
+inline std::string theme(const Zugang &z) { return theme_ok(z.theme) ? std::string(z.theme) : std::string("auto"); }
+
+// Ersteinrichtung: {"benutzer","app_passwort","admin_passwort"} -> Zugang (App- und Admin-Passwort verschieden)
+inline bool einrichtung_lesen(const std::string &body, Zugang &z, std::string &f) {
+  JsonDocument d;
+  if (deserializeJson(d, body)) { f = "ungueltige Anfrage"; return false; }
+  std::string b = d["benutzer"].is<const char *>() ? d["benutzer"].as<std::string>() : "";
+  std::string a = d["app_passwort"].is<const char *>() ? d["app_passwort"].as<std::string>() : "";
+  std::string m = d["admin_passwort"].is<const char *>() ? d["admin_passwort"].as<std::string>() : "";
+  if (!benutzer_ok(b, f) || !passwort_ok(a, f) || !passwort_ok(m, f)) return false;
+  if (a == m) { f = "App- und Admin-Passwort muessen verschieden sein"; return false; }
+  Zugang n = z;
+  kopieren(n.benutzer, sizeof(n.benutzer), b);
+  kopieren(n.app_pw, sizeof(n.app_pw), a);
+  kopieren(n.admin_pw, sizeof(n.admin_pw), m);
+  z = n;
+  return true;
+}
 
 // Vergleich ohne fruehen Abbruch (die Laenge verraet er trotzdem - Passwoerter sind kurz genug)
 inline bool gleich(const std::string &a, const std::string &b) {

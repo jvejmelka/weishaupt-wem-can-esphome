@@ -12,8 +12,35 @@
   --muted:    #555;
   --text:     #e5e5e5;
   --text2:    #999;
+  --auf-amber: #000;       /* Schrift auf orangem Grund */
+  --amber-tint: #1a1200;   /* vorgemerkt / Hover */
+  --rot-tint:  #1a0606;
+  --rot-dunkel: #5a0000;
+  --blitz:    #fff;
+  --leise:    #2a2a2a;     /* Versionszeile */
   --mono:     'Share Tech Mono', monospace;
   --sans:     'Barlow Condensed', sans-serif;
+}
+
+/* ── HELL ── (Dunkel ist die Vorgabe oben; app.js setzt data-theme nach Wahl bzw. Geraeteeinstellung) */
+:root[data-theme="hell"] {
+  --bg:       #f3f3f1;
+  --bg2:      #ffffff;
+  --bg3:      #e9e9e6;
+  --border:   #d4d4cf;
+  --amber:    #d97706;
+  --amber2:   #b45309;
+  --red:      #dc2626;
+  --green:    #15803d;
+  --muted:    #8a8a85;
+  --text:     #171717;
+  --text2:    #57574f;
+  --auf-amber: #000;
+  --amber-tint: #fff1d6;
+  --rot-tint:  #fde7e7;
+  --rot-dunkel: #7f1d1d;
+  --blitz:    #000;
+  --leise:    #c8c8c2;
 }
 
 /* ── GROESSE ──
@@ -77,7 +104,7 @@ html, body {
 }
 .login-error.hidden { display: none; }
 .login-box button {
-  background: var(--amber); color: #000;
+  background: var(--amber); color: var(--auf-amber);
   border: none; padding: 1rem;
   font-family: var(--sans); font-size: 1rem; font-weight: 700;
   letter-spacing: .2em; cursor: pointer;
@@ -95,7 +122,7 @@ html, body {
   transition: width linear;
 }
 .progress-fill.flash {
-  background: #fff;
+  background: var(--blitz);
 }
 
 /* ── LAYOUT ── */
@@ -148,9 +175,15 @@ html, body {
   min-width: 2.2rem; min-height: 2.75rem;
   display: flex; align-items: center; justify-content: center; transition: color .2s;
 }
-.board-btn:hover { color: var(--amber); }
+.board-btn:hover, .theme-btn:hover { color: var(--amber); }
+.theme-btn {
+  background: transparent; border: none; cursor: pointer;
+  color: var(--muted); line-height: 1;
+  min-width: 2.2rem; min-height: 2.75rem;
+  display: flex; align-items: center; justify-content: center; transition: color .2s;
+}
 .board-btn.hidden { display: none; }
-.logout-btn svg { width: 1.15rem; height: 1.15rem; }
+.logout-btn svg, .theme-btn svg { width: 1.15rem; height: 1.15rem; }
 .logout-btn:hover { color: var(--red); }
 
 /* ── BLOECKE (Heizkreis, Warmwasser, Kessel, Aussen) ── */
@@ -224,21 +257,21 @@ html, body {
   border-radius: 2px;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .15rem;
 }
-@media (hover: hover) { .mode-btn:hover { border-color: var(--amber); color: var(--amber); background: #1a1200; } }  /* nur echte Maus: am Handy blieb der zuletzt beruehrte Knopf sonst umrandet */
+@media (hover: hover) { .mode-btn:hover { border-color: var(--amber); color: var(--amber); background: var(--amber-tint); } }  /* nur echte Maus: am Handy blieb der zuletzt beruehrte Knopf sonst umrandet */
 /* voll markiert = Ist (am Bus bestaetigt) */
-.mode-btn.active { border-color: var(--amber); color: #000; background: var(--amber); }
+.mode-btn.active { border-color: var(--amber); color: var(--auf-amber); background: var(--amber); }
 /* eigene Vorgabe, noch nicht am Bus bestaetigt: vorgemerkt (Warteschlange) / gesendet (Kontrolle steht aus) */
 .mode-btn.vorgemerkt, .mode-btn.gesendet { border-style: dashed; border-color: var(--amber2); }
-.mode-btn.vorgemerkt:not(.active), .mode-btn.gesendet:not(.active) { color: var(--amber); background: #1a1200; }
+.mode-btn.vorgemerkt:not(.active), .mode-btn.gesendet:not(.active) { color: var(--amber); background: var(--amber-tint); }
 /* Befehl nicht uebernommen / abgelehnt / keine Rueckmeldung */
 .mode-btn.fehler { border-style: dashed; border-color: var(--red); }
-.mode-btn.fehler:not(.active) { color: var(--red); background: #1a0606; }
+.mode-btn.fehler:not(.active) { color: var(--red); background: var(--rot-tint); }
 .mode-btn .hinweis {
   font-size: .58rem; letter-spacing: .04em; font-weight: 400; text-transform: none;
   line-height: 1.05; white-space: normal; text-align: center; max-width: 100%;
 }
 .mode-btn.gesendet .hinweis { animation: pulse 1s ease infinite; }
-.mode-btn.fehler.active .hinweis { color: #5a0000; font-weight: 600; }
+.mode-btn.fehler.active .hinweis { color: var(--rot-dunkel); font-weight: 600; }
 
 /* ── KESSEL / AUSSEN ── */
 .kessel-zeile { display: flex; align-items: center; gap: .9rem; padding: .15rem 0; }
@@ -293,7 +326,7 @@ html, body {
   flex: none;
   text-align: center; padding: .1rem 1rem .3rem;
   font-family: var(--mono); font-size: .6rem;
-  color: #2a2a2a; letter-spacing: .1em;
+  color: var(--leise); letter-spacing: .1em;
 }
 
 /* Kessel und Aussen stehen untereinander (die Reihe gibt ihre Bloecke an .app weiter) */

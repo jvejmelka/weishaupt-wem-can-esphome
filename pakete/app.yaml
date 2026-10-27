@@ -18,6 +18,7 @@ weishaupt_can:
   app:
     benutzer: !secret app_benutzer
     passwort: !secret app_passwort
+    admin_passwort: !secret web_password   # Einstellungsseite und Weboberflaeche (ab v39)
     firmware: ${firmware}
 
 esphome:

@@ -13,6 +13,12 @@
 #ifdef USE_MQTT
 #include "esphome/components/mqtt/mqtt_client.h"
 #endif
+#ifdef USE_SWITCH
+#include "esphome/components/switch/switch.h"
+#endif
+#ifdef USE_NUMBER
+#include "esphome/components/number/number.h"
+#endif
 #include <lwip/sockets.h>
 #include <cstring>
 
@@ -29,21 +35,94 @@ static const char *const ZAHLEN[] = {
     "w__rmemenge_vortag_ww", "w__rmemenge_vortag_gesamt"};
 static const char *const TEXTE[] = {"warmwasser_aktiv", "warmwasser_betriebsart"};
 
-// Schluessel des gespeicherten Sitzungs-Tokens (fest, wie die Globals der anderen Pakete)
-static const uint32_t TOKEN_SCHLUESSEL = 0x41505054;   // "APPT"
+// Schluessel im Flash (fest, wie die Globals der anderen Pakete)
+static const uint32_t TOKEN_SCHLUESSEL = 0x41505054;   // "APPT" Sitzungs-Token der App
+static const uint32_t ADMIN_SCHLUESSEL = 0x41505041;   // "APPA" Sitzungs-Token der Einstellungsseite
+static const uint32_t ZUGANG_SCHLUESSEL = 0x4150505A;  // "APPZ" Zugangsdaten
 
-void AppServer::setup() {
-  // Sitzungs-Token: einmal erzeugt, im Flash gespeichert - ein Update meldet niemanden ab
+// Einstellungen der Einstellungsseite: Gruppe, Name des Schalters bzw. der Zahl auf dem Board.
+// Was es auf dem Board nicht gibt (Paket nicht eingebunden), fehlt einfach.
+static const char *const EINSTELLUNGEN[][2] = {
+    {"Schalten", "Schalten per CAN statt JSON (Heizkreis, Warmwasser)"},
+    {"Schalten", "Abstand zwischen Befehlen per CAN (s)"},
+    {"Schalten", "Abstand zwischen Befehlen per JSON (s)"},
+    {"Lesen", "Eigene CAN-Anfragen"},
+    {"Lesen", "Lange Lesebefehle auch am Kessel"},
+    {"Lesen", "SD-Dateien abrufen"},
+    {"Regeln", "R1 Warmwasser am Display oder Portal umgeschaltet"},
+    {"Regeln", "R2 Warmwasserbetrieb trotz Aus"},
+    {"Regeln", "R3 Heizung ein oder Standby"},
+    {"Regeln", "R4 Heizanforderung passt nicht"},
+    {"Regeln", "R5 uebrige Statusbits geaendert"},
+    {"Regeln", "Eigene Regeln (Hauptschalter)"},
+    {"Experten", "Freies CAN-Schreiben (Experten)"},
+    {"Experten", "CAN-Rohmitschnitt nach MQTT"},
+    {"Experten", "Waechter: Neustart nach Minuten ohne Bus (0 = aus)"},
+};
+
+// zufaelliges Token (64 Hex-Zeichen), gespeichert; neu = immer ein neues erzeugen (Passwort geaendert)
+std::string AppServer::token_laden_(ESPPreferenceObject &pref, uint32_t schluessel, bool neu) {
   std::array<char, 65> t{};
-  this->token_pref_ = global_preferences->make_preference<std::array<char, 65>>(TOKEN_SCHLUESSEL);
-  if (!this->token_pref_.load(&t) || std::strlen(t.data()) != 64) {
+  pref = global_preferences->make_preference<std::array<char, 65>>(schluessel);
+  if (neu || !pref.load(&t) || std::strlen(t.data()) != 64) {
     uint8_t z[32];
     random_bytes(z, sizeof(z));
     for (int i = 0; i < 32; i++) snprintf(&t[i * 2], 3, "%02x", z[i]);
-    this->token_pref_.save(&t);
-    ESP_LOGI(TAG, "neues Sitzungs-Token erzeugt");
+    pref.save(&t);
   }
-  this->token_ = t.data();
+  return t.data();
+}
+
+void AppServer::zugang_speichern_() {
+  ap::Zugang z;
+  { std::lock_guard<std::mutex> g(this->sperre_); z = this->zugang_; }
+  this->zugang_pref_.save(&z);
+  global_preferences->sync();
+}
+
+void AppServer::web_passwort_setzen_() {
+#ifdef USE_WEBSERVER_AUTH
+  std::string pw;
+  {
+    std::lock_guard<std::mutex> g(this->sperre_);
+    pw = this->zugang_.admin_pw;
+  }
+  if (pw.empty()) {
+    // noch nicht eingerichtet: Weboberflaeche mit Zufallspasswort sperren (kein bekanntes Standardpasswort)
+    uint8_t z[16];
+    random_bytes(z, sizeof(z));
+    for (int i = 0; i < 16; i++) snprintf(&this->web_pw_[i * 2], 3, "%02x", z[i]);
+  } else {
+    ap::kopieren(this->web_pw_, sizeof(this->web_pw_), pw);
+  }
+  web_server_base::global_web_server_base->set_auth_username("admin");
+  web_server_base::global_web_server_base->set_auth_password(this->web_pw_);
+#endif
+}
+
+void AppServer::setup() {
+  // Sitzungs-Token: einmal erzeugt, im Flash gespeichert - ein Update meldet niemanden ab
+  this->token_ = this->token_laden_(this->token_pref_, TOKEN_SCHLUESSEL, false);
+  this->admin_token_ = this->token_laden_(this->admin_pref_, ADMIN_SCHLUESSEL, false);
+
+  // Zugangsdaten: gespeicherte gelten; sonst die Vorgaben aus der YAML; fehlen auch die -> Ersteinrichtung
+  this->zugang_pref_ = global_preferences->make_preference<ap::Zugang>(ZUGANG_SCHLUESSEL);
+  ap::Zugang z;
+  if (!this->zugang_pref_.load(&z) || !ap::vollstaendig(z)) {
+    z = ap::Zugang{};
+    ap::kopieren(z.benutzer, sizeof(z.benutzer), this->benutzer_.substr(0, 32));
+    ap::kopieren(z.app_pw, sizeof(z.app_pw), this->passwort_.substr(0, 64));
+    ap::kopieren(z.admin_pw, sizeof(z.admin_pw), this->admin_.substr(0, 64));
+    if (ap::vollstaendig(z)) {
+      this->zugang_pref_.save(&z);
+      ESP_LOGI(TAG, "Zugangsdaten aus der Konfiguration uebernommen");
+    }
+  }
+  this->zugang_ = z;
+  this->einrichtung_noetig_ = !ap::vollstaendig(z);
+  if (this->einrichtung_noetig_) ESP_LOGW(TAG, "keine Zugangsdaten - Ersteinrichtung unter /app");
+  this->web_passwort_setzen_();
+  this->einstellungen_sammeln_();
 
   char buf[OBJECT_ID_MAX_LEN];
 #ifdef USE_SENSOR
@@ -74,6 +153,7 @@ void AppServer::setup() {
     }
   }
 #endif
+  // vor dem Handler der Weboberflaeche einhaengen ist nicht noetig: der kennt /app und /api/ nicht
   web_server_base::global_web_server_base->add_handler_without_auth(this);
   ESP_LOGI(TAG, "Heizungs-App unter /app (%u Werte, Version %s)", (unsigned) this->quellen_.size(), ap::APP_VERSION);
 }
@@ -136,10 +216,68 @@ void AppServer::zusammenstellen_() {
     }
     l.zusatz.push_back(z);
   }
-  std::string s = ap::status_antwort(l), e = ap::energie_antwort(l);
+  std::string s = ap::status_antwort(l), e = ap::energie_antwort(l), st = this->einstellungen_json_();
   std::lock_guard<std::mutex> g(this->sperre_);
   this->status_.swap(s);
   this->energie_.swap(e);
+  this->einstellungen_stand_.swap(st);
+}
+
+void AppServer::einstellungen_sammeln_() {
+  char buf[OBJECT_ID_MAX_LEN];
+  for (auto &e : EINSTELLUNGEN) {
+#ifdef USE_SWITCH
+    for (auto *s : App.get_switches()) {
+      if (s->get_name() != e[1]) continue;
+      this->einstellungen_.push_back(Einstellung{s->get_object_id_to(buf).str(), e[1], e[0], s, false});
+    }
+#endif
+#ifdef USE_NUMBER
+    for (auto *n : App.get_numbers()) {
+      if (n->get_name() != e[1]) continue;
+      this->einstellungen_.push_back(Einstellung{n->get_object_id_to(buf).str(), e[1], e[0], n, true});
+    }
+#endif
+  }
+}
+
+// Stand aller Einstellungen (Hauptschleife, jede Sekunde) - der Webserver liefert ihn nur aus
+std::string AppServer::einstellungen_json_() {
+  JsonDocument d;
+  JsonObject o = d.to<JsonObject>();
+  {
+    std::lock_guard<std::mutex> g(this->sperre_);
+    o["benutzer"] = this->zugang_.benutzer;
+    o["darstellung"] = ap::theme(this->zugang_);
+  }
+  o["firmware"] = this->firmware_;
+  o["app_version"] = ap::APP_VERSION;
+  JsonArray a = o["liste"].to<JsonArray>();
+  for (auto &e : this->einstellungen_) {
+    JsonObject x = a.add<JsonObject>();
+    x["id"] = e.id;
+    x["name"] = e.name;
+    x["gruppe"] = e.gruppe;
+#ifdef USE_NUMBER
+    if (e.zahl) {
+      auto *n = static_cast<number::Number *>(e.obj);
+      x["art"] = "zahl";
+      if (n->has_state()) x["wert"] = n->state; else x["wert"] = nullptr;
+      x["min"] = n->traits.get_min_value();
+      x["max"] = n->traits.get_max_value();
+      x["schritt"] = n->traits.get_step();
+      continue;
+    }
+#endif
+#ifdef USE_SWITCH
+    auto *s = static_cast<switch_::Switch *>(e.obj);
+    x["art"] = "schalter";
+    x["wert"] = s->state;
+#endif
+  }
+  std::string out;
+  serializeJson(d, out);
+  return out;
 }
 
 // ---------------------------------------------------------------- Webserver-Faden
@@ -161,6 +299,7 @@ void AppServer::handleBody(AsyncWebServerRequest *request, uint8_t *data, size_t
 // Die Antwort gehoert der Anfrage (wird mit ihr geloescht).
 static void status_setzen(AsyncWebServerRequest *r, int code) {
   if (code == 304) httpd_resp_set_status(*r, "304 Not Modified");
+  else if (code == 409) httpd_resp_set_status(*r, "409 Conflict");
   else if (code == 429) httpd_resp_set_status(*r, "429 Too Many Requests");
   else if (code == 503) httpd_resp_set_status(*r, "503 Service Unavailable");
 }
@@ -174,7 +313,14 @@ void AppServer::antworten_(AsyncWebServerRequest *r, int code, const std::string
 
 bool AppServer::angemeldet_(AsyncWebServerRequest *r) const {
   auto t = r->get_header("x-app-token");
-  return t.has_value() && ap::gleich(t.value(), this->token_);
+  std::lock_guard<std::mutex> g(this->sperre_);
+  return t.has_value() && !this->einrichtung_noetig_ && ap::gleich(t.value(), this->token_);
+}
+
+bool AppServer::admin_angemeldet_(AsyncWebServerRequest *r) const {
+  auto t = r->get_header("x-admin-token");
+  std::lock_guard<std::mutex> g(this->sperre_);
+  return t.has_value() && !this->einrichtung_noetig_ && ap::gleich(t.value(), this->admin_token_);
 }
 
 uint32_t AppServer::adresse_(AsyncWebServerRequest *r) const {
@@ -217,36 +363,200 @@ void AppServer::datei_(AsyncWebServerRequest *r, const ap::Datei *d) {
   r->send(res);
 }
 
+// gemeinsamer Teil von App- und Admin-Login: Sperre pruefen, Fehlversuch zaehlen
+static const char *const ZU_VIELE = "{\"error\":\"Zu viele Fehlversuche - bitte 15 Minuten warten\"}";
+
 void AppServer::login_(AsyncWebServerRequest *r) {
   uint32_t adr = this->adresse_(r), jetzt = millis();
-  {
-    std::lock_guard<std::mutex> g(this->sperre_);
-    if (this->anmeldung_.gesperrt(adr, jetzt)) {
-      this->antworten_(r, 429, "{\"error\":\"Zu viele Fehlversuche - bitte 15 Minuten warten\"}");
-      return;
-    }
-  }
   JsonDocument d;
   std::string user, pass;
   if (!deserializeJson(d, this->body_)) {
     if (d["user"].is<const char *>()) user = d["user"].as<std::string>();
     if (d["pass"].is<const char *>()) pass = d["pass"].as<std::string>();
   }
-  if (!this->passwort_.empty() && ap::gleich(user, this->benutzer_) && ap::gleich(pass, this->passwort_)) {
-    ESP_LOGI(TAG, "Login erfolgreich");
-    this->antworten_(r, 200, "{\"token\":\"" + this->token_ + "\"}");
-    return;
-  }
-  bool gesperrt;
+  bool ok, gesperrt;
   uint32_t heute;
+  std::string token;
   {
     std::lock_guard<std::mutex> g(this->sperre_);
-    gesperrt = this->anmeldung_.fehlversuch(adr, jetzt);
+    if (this->anmeldung_.gesperrt(adr, jetzt)) { this->antworten_(r, 429, ZU_VIELE); return; }
+    ok = !this->einrichtung_noetig_ && ap::gleich(user, this->zugang_.benutzer) && ap::gleich(pass, this->zugang_.app_pw);
+    token = this->token_;
+    gesperrt = !ok && this->anmeldung_.fehlversuch(adr, jetzt);
     heute = this->anmeldung_.heute;
+  }
+  if (ok) {
+    ESP_LOGI(TAG, "Login erfolgreich");
+    this->antworten_(r, 200, "{\"token\":\"" + token + "\"}");
+    return;
   }
   ESP_LOGW(TAG, "Login fehlgeschlagen (%s, %u seit dem Start)", gesperrt ? "Adresse 15 min gesperrt" : "falsche Zugangsdaten",
            (unsigned) heute);
   this->antworten_(r, 401, "{\"error\":\"Falsche Zugangsdaten\"}");
+}
+
+void AppServer::admin_login_(AsyncWebServerRequest *r) {
+  uint32_t adr = this->adresse_(r), jetzt = millis();
+  JsonDocument d;
+  std::string pass;
+  if (!deserializeJson(d, this->body_) && d["pass"].is<const char *>()) pass = d["pass"].as<std::string>();
+  bool ok, gesperrt;
+  std::string token;
+  {
+    std::lock_guard<std::mutex> g(this->sperre_);
+    if (this->anmeldung_.gesperrt(adr, jetzt)) { this->antworten_(r, 429, ZU_VIELE); return; }
+    ok = !this->einrichtung_noetig_ && ap::gleich(pass, this->zugang_.admin_pw);
+    token = this->admin_token_;
+    gesperrt = !ok && this->anmeldung_.fehlversuch(adr, jetzt);
+  }
+  if (ok) {
+    ESP_LOGI(TAG, "Einstellungen: Login erfolgreich");
+    this->antworten_(r, 200, "{\"token\":\"" + token + "\"}");
+    return;
+  }
+  ESP_LOGW(TAG, "Einstellungen: Login fehlgeschlagen%s", gesperrt ? " - Adresse 15 min gesperrt" : "");
+  this->antworten_(r, 401, "{\"error\":\"Falsches Passwort\"}");
+}
+
+static std::string neues_token() {
+  uint8_t z[32];
+  char t[65];
+  random_bytes(z, sizeof(z));
+  for (int i = 0; i < 32; i++) snprintf(&t[i * 2], 3, "%02x", z[i]);
+  return std::string(t, 64);
+}
+
+// Ersteinrichtung: nur solange keine Zugangsdaten gespeichert sind (wie bei einem neuen Router)
+void AppServer::einrichtung_(AsyncWebServerRequest *r) {
+  ap::Zugang z;
+  std::string f, token = neues_token(), admin = neues_token();
+  {
+    std::lock_guard<std::mutex> g(this->sperre_);
+    if (!this->einrichtung_noetig_) { this->antworten_(r, 409, "{\"error\":\"Zugang ist schon eingerichtet\"}"); return; }
+    z = this->zugang_;
+  }
+  if (!ap::einrichtung_lesen(this->body_, z, f)) {
+    JsonDocument e;
+    e["error"] = f;
+    std::string out;
+    serializeJson(e, out);
+    this->antworten_(r, 400, out);
+    return;
+  }
+  {
+    std::lock_guard<std::mutex> g(this->sperre_);
+    this->zugang_ = z;
+    this->token_ = token;
+    this->admin_token_ = admin;
+    this->einrichtung_noetig_ = false;
+  }
+  ESP_LOGI(TAG, "Ersteinrichtung: Zugangsdaten gesetzt");
+  this->wc_->spaeter([this]() {
+    this->zugang_speichern_();
+    std::array<char, 65> t{};
+    { std::lock_guard<std::mutex> g(this->sperre_); ap::kopieren(t.data(), t.size(), this->token_); }
+    this->token_pref_.save(&t);
+    { std::lock_guard<std::mutex> g(this->sperre_); ap::kopieren(t.data(), t.size(), this->admin_token_); }
+    this->admin_pref_.save(&t);
+    global_preferences->sync();
+    this->web_passwort_setzen_();
+  });
+  this->antworten_(r, 200, "{\"token\":\"" + token + "\"}");
+}
+
+// eine Einstellung aendern: {"id": "<object_id>" | "darstellung", "wert": true/false/Zahl/"hell"}
+void AppServer::einstellen_(AsyncWebServerRequest *r) {
+  JsonDocument d;
+  if (deserializeJson(d, this->body_) || !d["id"].is<const char *>()) {
+    this->antworten_(r, 400, "{\"error\":\"ungueltige Anfrage\"}");
+    return;
+  }
+  std::string id = d["id"].as<std::string>();
+  if (id == "darstellung") {
+    std::string t = d["wert"].is<const char *>() ? d["wert"].as<std::string>() : "";
+    if (!ap::theme_ok(t)) { this->antworten_(r, 400, "{\"error\":\"auto, hell oder dunkel\"}"); return; }
+    { std::lock_guard<std::mutex> g(this->sperre_); ap::kopieren(this->zugang_.theme, sizeof(this->zugang_.theme), t); }
+    this->wc_->spaeter([this]() { this->zugang_speichern_(); });
+    this->antworten_(r, 200, "{\"ok\":true}");
+    return;
+  }
+  for (auto &e : this->einstellungen_) {
+    if (e.id != id) continue;
+#ifdef USE_NUMBER
+    if (e.zahl) {
+      if (!d["wert"].is<float>()) { this->antworten_(r, 400, "{\"error\":\"Zahl erwartet\"}"); return; }
+      float v = d["wert"].as<float>();
+      auto *n = static_cast<number::Number *>(e.obj);
+      if (v < n->traits.get_min_value() || v > n->traits.get_max_value()) {
+        this->antworten_(r, 400, "{\"error\":\"ausserhalb des erlaubten Bereichs\"}");
+        return;
+      }
+      ESP_LOGI(TAG, "Einstellung %s = %.1f", e.name.c_str(), v);
+      this->wc_->spaeter([n, v]() { n->make_call().set_value(v).perform(); });
+      this->antworten_(r, 200, "{\"ok\":true}");
+      return;
+    }
+#endif
+#ifdef USE_SWITCH
+    if (!d["wert"].is<bool>()) { this->antworten_(r, 400, "{\"error\":\"an/aus erwartet\"}"); return; }
+    bool an = d["wert"].as<bool>();
+    auto *s = static_cast<switch_::Switch *>(e.obj);
+    ESP_LOGI(TAG, "Einstellung %s = %s", e.name.c_str(), an ? "an" : "aus");
+    this->wc_->spaeter([s, an]() { if (an) s->turn_on(); else s->turn_off(); });
+    this->antworten_(r, 200, "{\"ok\":true}");
+    return;
+#endif
+  }
+  this->antworten_(r, 404, "{\"error\":\"unbekannte Einstellung\"}");
+}
+
+// Passwort aendern: {"art": "app" | "admin", "benutzer" (nur app, optional), "passwort"}.
+// Danach sind alle Geraete dieser Art abgemeldet (neues Token); die Einstellungsseite bekommt ihr neues.
+void AppServer::passwort_aendern_(AsyncWebServerRequest *r) {
+  JsonDocument d;
+  std::string f;
+  if (deserializeJson(d, this->body_) || !d["art"].is<const char *>() || !d["passwort"].is<const char *>()) {
+    this->antworten_(r, 400, "{\"error\":\"ungueltige Anfrage\"}");
+    return;
+  }
+  std::string art = d["art"].as<std::string>(), pw = d["passwort"].as<std::string>();
+  std::string benutzer = d["benutzer"].is<const char *>() ? d["benutzer"].as<std::string>() : "";
+  bool app = art == "app";
+  if ((!app && art != "admin") || !ap::passwort_ok(pw, f) || (app && !benutzer.empty() && !ap::benutzer_ok(benutzer, f))) {
+    JsonDocument e;
+    e["error"] = f.empty() ? "art: app oder admin" : f;
+    std::string out;
+    serializeJson(e, out);
+    this->antworten_(r, 400, out);
+    return;
+  }
+  std::string token = neues_token(), antwort = "{\"ok\":true}";
+  {
+    std::lock_guard<std::mutex> g(this->sperre_);
+    if ((app && pw == this->zugang_.admin_pw) || (!app && pw == this->zugang_.app_pw)) {
+      this->antworten_(r, 400, "{\"error\":\"App- und Admin-Passwort muessen verschieden sein\"}");
+      return;
+    }
+    if (app) {
+      ap::kopieren(this->zugang_.app_pw, sizeof(this->zugang_.app_pw), pw);
+      if (!benutzer.empty()) ap::kopieren(this->zugang_.benutzer, sizeof(this->zugang_.benutzer), benutzer);
+      this->token_ = token;
+    } else {
+      ap::kopieren(this->zugang_.admin_pw, sizeof(this->zugang_.admin_pw), pw);
+      this->admin_token_ = token;
+      antwort = "{\"ok\":true,\"token\":\"" + token + "\"}";
+    }
+  }
+  ESP_LOGI(TAG, "%s-Passwort geaendert", app ? "App" : "Admin");
+  this->wc_->spaeter([this, app]() {
+    this->zugang_speichern_();
+    std::array<char, 65> t{};
+    { std::lock_guard<std::mutex> g(this->sperre_); ap::kopieren(t.data(), t.size(), app ? this->token_ : this->admin_token_); }
+    (app ? this->token_pref_ : this->admin_pref_).save(&t);
+    global_preferences->sync();
+    if (!app) this->web_passwort_setzen_();
+  });
+  this->antworten_(r, 200, antwort);
 }
 
 void AppServer::schalten_(AsyncWebServerRequest *r, int ziel) {
@@ -293,8 +603,30 @@ void AppServer::handleRequest(AsyncWebServerRequest *request) {
 
   if (const ap::Datei *d = ap::datei(url.c_str(), url.size())) {
     this->datei_(request, d);
+  } else if (url == "/api/einrichtung") {
+    bool noetig;
+    { std::lock_guard<std::mutex> g(this->sperre_); noetig = this->einrichtung_noetig_; }
+    if (post) this->einrichtung_(request);
+    else this->antworten_(request, 200, noetig ? "{\"noetig\":true}" : "{\"noetig\":false}");
   } else if (url == "/api/login" && post) {
     this->login_(request);
+  } else if (url == "/api/admin/login" && post) {
+    this->admin_login_(request);
+  } else if (beginnt(url.c_str(), "/api/admin/")) {
+    if (!this->admin_angemeldet_(request)) {
+      if (post) ESP_LOGW(TAG, "POST %s ohne gueltiges Admin-Token", url.c_str());
+      this->antworten_(request, 401, "{\"error\":\"Nicht autorisiert\"}");
+    } else if (url == "/api/admin/einstellungen" && !post) {
+      std::string s;
+      { std::lock_guard<std::mutex> g(this->sperre_); s = this->einstellungen_stand_; }
+      this->antworten_(request, s.empty() ? 503 : 200, s.empty() ? "{\"error\":\"Board startet noch\"}" : s);
+    } else if (url == "/api/admin/einstellungen" && post) {
+      this->einstellen_(request);
+    } else if (url == "/api/admin/passwort" && post) {
+      this->passwort_aendern_(request);
+    } else {
+      this->antworten_(request, 404, "{\"error\":\"Unbekannt\"}");
+    }
   } else if (!this->angemeldet_(request)) {
     if (post) ESP_LOGW(TAG, "POST %s ohne gueltiges Token", url.c_str());
     this->antworten_(request, 401, "{\"error\":\"Nicht autorisiert\"}");
@@ -308,7 +640,9 @@ void AppServer::handleRequest(AsyncWebServerRequest *request) {
     { std::lock_guard<std::mutex> g(this->sperre_); s = this->energie_; }
     this->antworten_(request, 200, s.empty() ? "{}" : s);
   } else if (url == "/api/meta" && !post) {
-    this->antworten_(request, 200, ap::meta_antwort("/"));
+    std::string t;
+    { std::lock_guard<std::mutex> g(this->sperre_); t = ap::theme(this->zugang_); }
+    this->antworten_(request, 200, ap::meta_antwort("/einstellungen", t));
   } else if (url == "/api/mode" && post) {
     this->schalten_(request, bf::ZIEL_HK);
   } else if (url == "/api/warmwasser" && post) {

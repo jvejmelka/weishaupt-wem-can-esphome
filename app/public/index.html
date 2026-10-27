@@ -11,6 +11,15 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@300;400;600;700&display=swap" rel="stylesheet">
   <title>Heizung</title>
+  <script>
+    // Darstellung vor dem ersten Zeichnen setzen (kein Aufblitzen): hell | dunkel | auto (= Geraet)
+    (function () {
+      var w = 'auto';
+      try { w = localStorage.getItem('wem_theme') || localStorage.getItem('wem_theme_vorgabe') || 'auto'; } catch (e) {}
+      if (w === 'auto') w = window.matchMedia && matchMedia('(prefers-color-scheme: light)').matches ? 'hell' : 'dunkel';
+      document.documentElement.setAttribute('data-theme', w);
+    })();
+  </script>
   <link rel="stylesheet" href="/style.css?v=__VERSION__">
 </head>
 <body>
@@ -28,6 +37,22 @@
     </div>
   </div>
 
+  <!-- Ersteinrichtung (nur App auf dem Board, solange keine Zugangsdaten gespeichert sind) -->
+  <div id="setupOverlay" class="login-overlay hidden">
+    <div class="login-box">
+      <div class="login-logo">⬡</div>
+      <h2>EINRICHTEN</h2>
+      <p class="login-sub">Erster Start: eigene Zugangsdaten festlegen</p>
+      <input id="setupUser" type="text" placeholder="Benutzername für die App" autocomplete="username">
+      <input id="setupPass" type="password" placeholder="App-Passwort (mind. 8 Zeichen)" autocomplete="new-password">
+      <input id="setupPass2" type="password" placeholder="App-Passwort wiederholen" autocomplete="new-password">
+      <input id="setupAdmin" type="password" placeholder="Admin-Passwort für Einstellungen" autocomplete="new-password">
+      <input id="setupAdmin2" type="password" placeholder="Admin-Passwort wiederholen" autocomplete="new-password">
+      <div id="setupError" class="login-error hidden"></div>
+      <button id="setupBtn">SPEICHERN</button>
+    </div>
+  </div>
+
   <main class="app">
 
     <header class="header">
@@ -38,6 +63,7 @@
       <div class="header-right">
         <button id="installBtn" class="install-btn hidden">+ App</button>
         <span id="statusDot" class="status-dot"></span>
+        <button id="themeBtn" class="theme-btn" title="Darstellung: Auto" aria-label="Darstellung umschalten"></button>
         <a id="boardBtn" class="board-btn hidden" href="#" target="_blank" rel="noopener" title="Board" aria-label="Weboberfläche des Boards">⚙</a>
         <button id="logoutBtn" class="logout-btn" title="Ausloggen">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

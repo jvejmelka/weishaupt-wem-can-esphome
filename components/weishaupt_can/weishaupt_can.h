@@ -105,8 +105,9 @@ class WeishauptCan : public Component {
 #ifdef USE_WC_APP
   // Paket app (ab v38): Heizungs-App auf dem Board (app_server.h)
   std::unique_ptr<AppServer> app;
-  void app_einrichten(const std::string &benutzer, const std::string &passwort, const std::string &firmware) {
-    this->app.reset(new AppServer(this, benutzer, passwort, firmware));
+  void app_einrichten(const std::string &benutzer, const std::string &passwort, const std::string &admin,
+                      const std::string &firmware) {
+    this->app.reset(new AppServer(this, benutzer, passwort, admin, firmware));
   }
 #endif
   // Aufgabe in der Hauptschleife ausfuehren (auch aus dem Webserver-Faden)

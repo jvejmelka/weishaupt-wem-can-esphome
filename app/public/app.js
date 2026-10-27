@@ -490,9 +490,42 @@ function pruefeStatusLesung(data) {
 }
 lesenBtn.addEventListener('click', statusLesen);
 
+// ── Darstellung: Auto (wie das Geraet) -> Hell -> Dunkel. Wahl je Geraet im Browser gespeichert;
+// ohne eigene Wahl gilt die Vorgabe des Servers (/api/meta "theme"), sonst Auto.
+const THEME_KEY = 'wem_theme', THEME_VORGABE_KEY = 'wem_theme_vorgabe';
+const THEME_ZEICHEN = {
+  auto: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg>',
+  hell: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+  dunkel: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>'
+};
+const THEME_TEXT = { auto: 'Auto (wie das Gerät)', hell: 'Hell', dunkel: 'Dunkel' };
+const hellMq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: light)') : null;
+function lies(k) { try { return localStorage.getItem(k); } catch { return null; } }
+function schreib(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch { /* privat */ } }
+function themeWahl() { return lies(THEME_KEY) || lies(THEME_VORGABE_KEY) || 'auto'; }
+function themeAnwenden() {
+  const w = themeWahl();
+  const echt = w === 'auto' ? (hellMq && hellMq.matches ? 'hell' : 'dunkel') : w;
+  document.documentElement.setAttribute('data-theme', echt);
+  const btn = document.getElementById('themeBtn');
+  btn.innerHTML = THEME_ZEICHEN[w] || THEME_ZEICHEN.auto;
+  btn.title = 'Darstellung: ' + (THEME_TEXT[w] || w);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', echt === 'hell' ? '#f3f3f1' : '#0f0f0f');
+}
+document.getElementById('themeBtn').addEventListener('click', () => {
+  const folge = ['auto', 'hell', 'dunkel'];
+  schreib(THEME_KEY, folge[(folge.indexOf(themeWahl()) + 1) % folge.length]);
+  themeAnwenden();
+});
+if (hellMq) (hellMq.addEventListener ? hellMq.addEventListener('change', themeAnwenden) : hellMq.addListener(themeAnwenden));
+themeAnwenden();
+
 async function loadMeta() {
   const res = await apiFetch('/api/meta');
   const data = await res.json();
+  // Vorgabe der Darstellung vom Server (nur das Board kennt sie); eigene Wahl am Geraet gewinnt
+  if (['auto', 'hell', 'dunkel'].includes(data.theme)) { schreib(THEME_VORGABE_KEY, data.theme); themeAnwenden(); }
   // Knopf zur Weboberflaeche des Boards: nur, wenn BOARD_URL gesetzt ist
   const boardBtn = document.getElementById('boardBtn');
   if (data.boardUrl) { boardBtn.href = data.boardUrl; boardBtn.classList.remove('hidden'); }
@@ -603,4 +636,39 @@ if (window.visualViewport) window.visualViewport.addEventListener('resize', pass
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(passeAn);
 passeAn();
 
-if (getToken()) { init(); } else { showLogin(); }
+// Ersteinrichtung: nur die App auf dem Board kennt /api/einrichtung (Docker-App: 404 -> normaler Login)
+async function einrichtungNoetig() {
+  try {
+    const res = await fetch('/api/einrichtung', { cache: 'no-store' });
+    if (!res.ok) return false;
+    return (await res.json()).noetig === true;
+  } catch { return false; }
+}
+document.getElementById('setupBtn').addEventListener('click', async () => {
+  const wert = id => document.getElementById(id).value;
+  const errEl = document.getElementById('setupError');
+  const fehler = t => { errEl.textContent = t; errEl.classList.remove('hidden'); };
+  errEl.classList.add('hidden');
+  if (wert('setupPass') !== wert('setupPass2')) return fehler('App-Passwörter stimmen nicht überein');
+  if (wert('setupAdmin') !== wert('setupAdmin2')) return fehler('Admin-Passwörter stimmen nicht überein');
+  try {
+    const res = await fetch('/api/einrichtung', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ benutzer: wert('setupUser').trim(), app_passwort: wert('setupPass'), admin_passwort: wert('setupAdmin') })
+    });
+    const data = await res.json();
+    if (!res.ok) return fehler(data.error || 'Fehler');
+    saveToken(data.token);
+    document.getElementById('setupOverlay').classList.add('hidden');
+    init();
+  } catch { fehler('Verbindungsfehler'); }
+});
+
+(async () => {
+  if (await einrichtungNoetig()) {
+    clearToken();
+    document.getElementById('setupOverlay').classList.remove('hidden');
+    document.getElementById('setupUser').focus();
+  } else if (getToken()) init();
+  else showLogin();
+})();
