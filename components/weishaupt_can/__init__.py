@@ -41,6 +41,7 @@ CONF_PASSWORT = "passwort"
 CONF_ADMIN_PASSWORT = "admin_passwort"
 CONF_EXPERTE_PASSWORT = "experte_passwort"
 CONF_PROXY = "proxy"
+CONF_SD_KARTE = "sd_karte"
 CONF_FIRMWARE = "firmware"
 
 weishaupt_can_ns = cg.esphome_ns.namespace("weishaupt_can")
@@ -58,6 +59,8 @@ CONFIG_SCHEMA = cv.Schema(
         # gespeicherte Werte der Pakete verdacht bzw. zusatz anlegen (die Pakete setzen das)
         cv.Optional(CONF_VERDACHT, default=False): cv.boolean,
         cv.Optional(CONF_ZUSATZ, default=False): cv.boolean,
+        # microSD-Karte im Steckplatz des WeAct-Boards (SPI: CS 13, SCK 14, MOSI 15, MISO 2), ab v42
+        cv.Optional(CONF_SD_KARTE, default=False): cv.boolean,
         # Heizungs-App auf dem Board (Paket app, ab v38): Vorgaben fuer den Zugang und Firmware-Text.
         # Ab v39 gelten die im Board gespeicherten Zugangsdaten; die Vorgaben nur beim ersten Start.
         # Fehlt ein Passwort, verlangt das Board beim ersten Aufruf von /app eine Ersteinrichtung.
@@ -168,3 +171,10 @@ async def to_code(config):
                 str(app[CONF_PROXY]),
             )
         )
+
+    if config[CONF_SD_KARTE]:
+        from esphome.components.esp32 import include_builtin_idf_component
+
+        for k in ("fatfs", "sdmmc", "esp_driver_sdspi", "esp_driver_sdmmc", "wear_levelling"):
+            include_builtin_idf_component(k)
+        cg.add_define("USE_WC_SD")

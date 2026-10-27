@@ -400,6 +400,12 @@ std::string AppServer::info_json_() {
   esp_flash_get_size(nullptr, &fl);
   esp_flash_get_physical_size(nullptr, &fl_echt);
   o["flash"] = fl;             // so ist die Firmware gebaut
+#ifdef USE_WC_SD
+  JsonObject sd = o["sd"].to<JsonObject>();
+  sd["eingebunden"] = this->wc_->sd.eingebunden;
+  if (this->wc_->sd.eingebunden) { sd["name"] = this->wc_->sd.name; sd["mb"] = (uint32_t) (this->wc_->sd.groesse >> 20); sd["frei_mb"] = (uint32_t) (this->wc_->sd.frei >> 20); }
+  else sd["fehler"] = this->wc_->sd.fehler;
+#endif
   o["flash_echt"] = fl_echt;   // so viel hat der Chip wirklich
 #ifdef USE_WIFI
   if (wifi::global_wifi_component != nullptr && wifi::global_wifi_component->is_connected()) {

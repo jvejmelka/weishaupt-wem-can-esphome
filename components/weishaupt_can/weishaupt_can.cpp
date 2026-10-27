@@ -17,7 +17,13 @@ void WeishauptCan::loop() {
 #ifdef USE_WC_APP
   // erst nach dem Setup aller Bauteile (Sensoren, Webserver, MQTT) einhaengen
   if (this->app) {
-    if (!this->app_bereit_) { this->app->setup(); this->app_bereit_ = true; }
+    if (!this->app_bereit_) {
+#ifdef USE_WC_SD
+      this->sd.einbinden();
+#endif
+      this->app->setup();
+      this->app_bereit_ = true;
+    }
     this->app->loop();
   }
 #endif

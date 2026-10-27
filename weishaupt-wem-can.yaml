@@ -73,6 +73,10 @@ esphome:
     name: "jvejmelka.weishaupt-wem-can"
     version: "27"
 
+# Board WeAct CAN485 DevBoard V1: microSD-Steckplatz einbinden (ab v42; ohne Karte harmlos)
+weishaupt_can:
+  sd_karte: true
+
 esp32:
   board: esp32dev
   framework:

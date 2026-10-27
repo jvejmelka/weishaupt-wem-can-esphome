@@ -23,6 +23,7 @@
 #include "esphome/components/time/real_time_clock.h"
 #endif
 #include "kern.h"
+#include "sd_karte.h"
 #ifdef USE_WC_APP
 #include "app_server.h"
 #endif
@@ -109,6 +110,9 @@ class WeishauptCan : public Component {
                       const std::string &experte, const std::string &firmware, const std::string &proxy) {
     this->app.reset(new AppServer(this, benutzer, passwort, admin, experte, firmware, proxy));
   }
+#endif
+#ifdef USE_WC_SD
+  SdKarte sd;
 #endif
   // Aufgabe in der Hauptschleife ausfuehren (auch aus dem Webserver-Faden)
   void spaeter(std::function<void()> f) { this->defer(std::move(f)); }
