@@ -502,6 +502,7 @@ Zusammenfassung statt Rohdateien (die können Seriennummern und Gerätekennungen
 
 Fragen, Fehlermeldungen und Rückmeldungen von anderen Anlagen bitte als
 [GitHub-Issue](https://github.com/jvejmelka/weishaupt-wem-can-esphome/issues).
+Sonst per Mail an github-wem (at) vejmelka (punkt) com.
 
 ## Herkunft
 

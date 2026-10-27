@@ -521,6 +521,7 @@ summary rather than raw files (those may contain serial numbers and device ident
 
 Please submit questions, bug reports and feedback from other installations as a
 [GitHub issue](https://github.com/jvejmelka/weishaupt-wem-can-esphome/issues).
+Otherwise by e-mail to github-wem (at) vejmelka (dot) com.
 
 ## Origin
 
