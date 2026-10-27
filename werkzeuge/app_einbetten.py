@@ -9,11 +9,14 @@ Fuer das Board werden drei Stellen angepasst (die Docker-App bleibt unveraendert
   - Startseite "/" -> "/app" (auf "/" liegt die Weboberflaeche des Boards)
   - der Service Worker faengt nur die eigenen Dateien ab, nie die Weboberflaeche (/events)
 
-Aufruf ohne Argumente; CI prueft mit "git diff --exit-code", dass die Datei aktuell ist.
+Aufruf ohne Argumente erzeugt die Datei. Mit --pruefen (CI) wird nur verglichen: die Bytes von
+gzip haengen von Python- und zlib-Version ab, deshalb vergleicht die Pruefung den entpackten Inhalt.
 """
 
 import gzip
 import hashlib
+import re
+import sys
 from pathlib import Path
 
 WURZEL = Path(__file__).resolve().parent.parent
@@ -52,9 +55,37 @@ def anpassen(name: str, text: str, version: str) -> str:
     return text
 
 
-def main() -> None:
+def erwartet() -> tuple[str, list[str]]:
     roh = {n: (QUELLE / n).read_text(encoding="utf-8") for n, _, _ in DATEIEN}
     version = hashlib.sha256("".join(roh[n] for n, _, _ in DATEIEN).encode()).hexdigest()[:10]
+    return version, [anpassen(n, roh[n], version) for n, _, _ in DATEIEN]
+
+
+def pruefen() -> None:
+    version, texte = erwartet()
+    h = ZIEL.read_text(encoding="utf-8")
+    fehler = []
+    if f'APP_VERSION[] = "{version}"' not in h:
+        fehler.append("APP_VERSION")
+    for i, (name, _, _) in enumerate(DATEIEN):
+        m = re.search(r"DATEI_%d\[\] = \{(.*?)\};" % i, h, re.S)
+        daten = bytes(int(x, 16) for x in re.findall(r"0x([0-9a-f]{2})", m.group(1))) if m else b""
+        try:
+            ok = gzip.decompress(daten).decode("utf-8") == texte[i]
+        except OSError:
+            ok = False
+        if not ok:
+            fehler.append(name)
+    if fehler:
+        sys.exit(f"{ZIEL.relative_to(WURZEL)} ist veraltet ({', '.join(fehler)}) - werkzeuge/app_einbetten.py ausfuehren")
+    print(f"{ZIEL.relative_to(WURZEL)} aktuell (Version {version})")
+
+
+def main() -> None:
+    if "--pruefen" in sys.argv:
+        pruefen()
+        return
+    version, texte = erwartet()
     zeilen = [
         "// ERZEUGT von werkzeuge/app_einbetten.py aus app/public - nicht von Hand aendern.",
         "#pragma once",
@@ -75,7 +106,7 @@ def main() -> None:
     ]
     eintraege = []
     for i, (name, pfad, typ) in enumerate(DATEIEN):
-        text = anpassen(name, roh[name], version)
+        text = texte[i]
         # mtime=0: gleiche Eingabe -> gleiche Bytes (CI vergleicht)
         daten = gzip.compress(text.encode("utf-8"), compresslevel=9, mtime=0)
         zeilen.append(f"// {name}: {len(text.encode())} Byte, gzip {len(daten)} Byte")

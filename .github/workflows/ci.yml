@@ -31,11 +31,12 @@ jobs:
       - name: Erzeugen und pruefen, dass nichts veraltet ist
         # register.yaml ist die einzige Quelle; components/weishaupt_can/register_gen.h und die Tabellen in
         # PROTOKOLL.md/README.md muessen dazu passen (sonst: Generator lokal laufen lassen)
-        # dasselbe fuer die eingebettete Heizungs-App (app/public -> components/weishaupt_can/app_dateien.h)
+        # dazu die eingebettete Heizungs-App (app/public -> components/weishaupt_can/app_dateien.h,
+        # verglichen wird der entpackte Inhalt, weil gzip-Bytes von der Python-Version abhaengen)
         run: |
           python3 werkzeuge/register_erzeugen.py
-          python3 werkzeuge/app_einbetten.py
           git diff --exit-code
+          python3 werkzeuge/app_einbetten.py --pruefen
 
   links:
     name: Links in den .md-Dateien
