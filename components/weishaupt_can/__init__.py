@@ -14,7 +14,11 @@ Einbinden (siehe INSTALL.md):
 Die Pakete unter pakete/ bringen diesen Block schon mit.
 """
 
+import gzip
 import hashlib
+import os
+import re
+import zlib
 
 import esphome.codegen as cg
 from esphome.components import canbus, time as time_
@@ -73,6 +77,29 @@ CONFIG_SCHEMA = cv.Schema(
 ).extend(cv.COMPONENT_SCHEMA)
 
 
+def experten_index() -> bytes | None:
+    """ESPHome-Oberflaeche (v3, eingebettet) fuer /experten: dieselbe Datei wie unter "/", nur dass sie
+    ihre Daten (/events, /sensor/...) nicht relativ zu ihrem eigenen Pfad sucht, sondern an der Wurzel.
+    Gelesen aus der installierten ESPHome-Version - bei einem ESPHome-Update passt sie sich mit an."""
+    from esphome.components import web_server
+
+    pfad = os.path.join(os.path.dirname(web_server.__file__), "server_index_v3.h")
+    try:
+        with open(pfad, encoding="utf-8") as f:
+            text = f.read()
+    except OSError:
+        return None
+    m = re.search(r"INDEX_GZ\[\] PROGMEM = \{(.*?)\};", text, re.S)
+    if not m:
+        return None
+    roh = bytes(int(x, 16) for x in re.findall(r"0x([0-9A-Fa-f]{2})", m.group(1)))
+    html = zlib.decompress(roh, 16 + 15).decode("utf-8")
+    alt = "let e=window.location.pathname;"
+    if alt not in html:
+        return None
+    return gzip.compress(html.replace(alt, 'let e="";', 1).encode("utf-8"), compresslevel=9, mtime=0)
+
+
 def schluessel(alte_id: str) -> int:
     """Name-Hash wie ESPHome-Globals (globals/__init__.py): md5 der id, erste 8 Hexziffern.
 
@@ -114,6 +141,16 @@ async def to_code(config):
     if CONF_APP in config:
         app = config[CONF_APP]
         cg.add_define("USE_WC_APP")
+        idx = experten_index()
+        if idx is not None:
+            cg.add_define("USE_WC_EXPERTEN")
+            cg.add_global(
+                cg.RawStatement(
+                    "extern const uint8_t WC_EXPERTEN_GZ[] = {"
+                    + ",".join(str(b) for b in idx)
+                    + "};\nextern const size_t WC_EXPERTEN_GZ_LEN = sizeof(WC_EXPERTEN_GZ);"
+                )
+            )
         # Log-Zeilen fuer die Einstellungsseite (ab v41): einen Platz in der Liste der Log-Empfaenger anfordern
         if "logger" in CORE.config:
             from esphome.components.logger import request_log_listener

@@ -28,6 +28,12 @@
 #include <esp_system.h>
 #include <esp_heap_caps.h>
 #include <lwip/sockets.h>
+
+#ifdef USE_WC_EXPERTEN
+// angepasste ESPHome-Oberflaeche, von __init__.py in main.cpp erzeugt
+extern const uint8_t WC_EXPERTEN_GZ[];
+extern const size_t WC_EXPERTEN_GZ_LEN;
+#endif
 #include <cstring>
 
 namespace esphome {
@@ -762,7 +768,17 @@ void AppServer::handleRequest(AsyncWebServerRequest *request) {
     // ESPHome-Oberflaeche: dieselbe Anmeldung wie dort (Benutzer admin, Admin-Passwort, Digest)
     if (this->experten == nullptr) this->antworten_(request, 404, "{\"error\":\"Expertenoberflaeche nicht eingebaut\"}");
     else if (!request->authenticate("admin", this->web_pw_)) request->requestAuthentication();
+#ifdef USE_WC_EXPERTEN
+    else {
+      // angepasste Kopie (__init__.py): sucht /events und /sensor/... an der Wurzel statt unter /experten
+      auto *res = request->beginResponse(200, "text/html", WC_EXPERTEN_GZ, WC_EXPERTEN_GZ_LEN);
+      res->addHeader("Content-Encoding", "gzip");
+      res->addHeader("Cache-Control", "no-cache");
+      request->send(res);
+    }
+#else
     else this->experten->handle_index_request(request);
+#endif
 #else
     this->antworten_(request, 404, "{\"error\":\"Expertenoberflaeche nicht eingebaut\"}");
 #endif

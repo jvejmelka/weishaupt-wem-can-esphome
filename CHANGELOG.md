@@ -3,6 +3,7 @@
 
 ## v42 (in Arbeit)
 - **App mit fester Layoutbreite 980 px** (`<meta viewport width=980>`): Am Handy sieht sie jetzt immer aus wie mit Chromes „Desktop-Website“ – schmale Spalte mittig, größere Schrift, ohne dass man etwas einstellen muss (Wunsch Betreiber). PC und Tablet ignorieren die Angabe.
+- **`/experten` zeigt die ESPHome-Oberfläche vollständig:** Sie suchte ihre Daten relativ zu ihrem Pfad (`/experten/events`). Das Bauteil erzeugt beim Bauen aus der installierten ESPHome-Version eine Kopie, die an der Wurzel sucht (`__init__.py`, `experten_index()`), und liefert sie unter `/experten` aus (+26 KB Flash).
 - **`/` ist die App**, die ESPHome-Weboberfläche liegt unter **`/experten`** (Digest, Benutzer `admin`, Admin-Passwort). Der App-Handler meldet sich dafür vor der ESPHome-Oberfläche beim Webserver an. `/events`, Entitätspfade und `/update` bleiben, wo sie sind.
 - **Login-Sperre hinter einem Reverse Proxy:** `X-Forwarded-For` zählt nur noch, wenn die Anfrage von der eingetragenen Proxy-Adresse kommt (`app_proxy` in `secrets.yaml`, leer = nie). Vorher hätte ein gefälschter Header die Sperre umgehen können (Hinweis vom Betreiber-Proxy).
 
