@@ -31,6 +31,7 @@
 #include "esphome/components/captive_portal/captive_portal.h"
 #endif
 #include <esp_system.h>
+#include <esp_netif.h>
 #ifdef USE_WIFI
 #include <esp_wifi.h>
 #endif
@@ -578,6 +579,12 @@ std::string AppServer::wem_json_() {
   d["bus_lebt"] = !this->wc_->bus.tot(millis());
   if (!w.werte[0].empty()) { d["ip"] = w.werte[0]; d["maske"] = w.werte[1]; d["gateway"] = w.werte[2]; }
   if (!w.fehler.empty()) d["fehler"] = w.fehler;
+  JsonObject ns = d["netzsuche"].to<JsonObject>();
+  ns["laeuft"] = this->netzsuche_.laeuft();
+  ns["fortschritt"] = this->netzsuche_.fortschritt();
+  ns["uebersprungen"] = this->netzsuche_.uebersprungen();
+  JsonArray g = ns["gefunden"].to<JsonArray>();
+  for (auto &ip : this->netzsuche_.gefunden()) g.add(ip);
   std::string out;
   serializeJson(d, out);
   return out;
@@ -1329,6 +1336,16 @@ void AppServer::handleRequest(AsyncWebServerRequest *request) {
       else {
         ESP_LOGI(TAG, "WEM-Adresse per CAN lesen (0x2B08-0x2B0A an Knoten 1)");
         this->wc_->spaeter([this]() { this->wc_->wem_netz.starten(millis()); });
+        this->antworten_(request, 200, "{\"ok\":true}");
+      }
+    } else if (url == "/api/admin/wem-netzsuche" && post) {
+      esp_netif_ip_info_t info = {};
+      esp_netif_t *nif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+      if (nif == nullptr || esp_netif_get_ip_info(nif, &info) != ESP_OK || info.ip.addr == 0) {
+        this->antworten_(request, 409, "{\"error\":\"Board hat keine Adresse im WLAN\"}");
+      } else if (!this->netzsuche_.starten(info.ip.addr, info.netmask.addr)) {
+        this->antworten_(request, 409, "{\"error\":\"Suche laeuft schon\"}");
+      } else {
         this->antworten_(request, 200, "{\"ok\":true}");
       }
     } else if (url == "/api/admin/wem-adresse" && post) {

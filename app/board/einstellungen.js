@@ -540,3 +540,23 @@ $('wemUebernehmen').addEventListener('click', async () => {
   } catch (e) { m.textContent = e.message; m.className = 'meldung fehler'; }
 });
 if (lies(TOKEN_KEY)) wemLaden();
+
+// WEM im Netz suchen (ohne CAN-Kabel): je Adresse eine Anfrage an Port 80, etwa 10 s
+async function wemNetzSuchen(meldung, feld) {
+  melde2(meldung, 'suche im Netz … (etwa 30 s)', true);
+  try {
+    await api('/api/admin/wem-netzsuche', { method: 'POST', body: '{}' });
+    for (let i = 0; i < 90; i++) {
+      await new Promise(r => setTimeout(r, 1000));
+      const d = await api('/api/admin/wem');
+      const n = d.netzsuche || {};
+      if (n.laeuft) { melde2(meldung, `suche im Netz … ${n.fortschritt || 0} von 254`, true); continue; }
+      const g = n.gefunden || [];
+      if (!g.length) melde2(meldung, 'kein WEM im Netz gefunden – Adresse von Hand eintragen');
+      else { $(feld).value = g[0]; melde2(meldung, `WEM gefunden: ${g.join(', ')} – mit ÜBERNEHMEN eintragen`, true); }
+      return;
+    }
+  } catch (e) { melde2(meldung, e.message); }
+}
+function melde2(el, text, ok) { $(el).textContent = text; $(el).className = 'meldung ' + (ok ? 'ok' : 'fehler'); }
+$('wemNetz').addEventListener('click', () => wemNetzSuchen('wemMeldung', 'wemIp'));

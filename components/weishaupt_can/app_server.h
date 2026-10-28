@@ -27,6 +27,7 @@
 #include "app_logik.h"
 #include "zugang.h"
 #include "oberflaeche.h"
+#include "netzsuche.h"
 #include <cstdio>
 #include "app_dateien.h"
 
@@ -157,7 +158,8 @@ class AppServer : public AsyncWebHandler {
 
   ob::Paket paket_;
   bool paket_aktiv_{false};
-  uint32_t wlan_suche_{0};         // millis() der letzten angestossenen WLAN-Suche (0 = nie)
+  uint32_t wlan_suche_{0};
+  Netzsuche netzsuche_;            // WEM im Netz suchen (Rueckfall ohne CAN)         // millis() der letzten angestossenen WLAN-Suche (0 = nie)
   FILE *upload_{nullptr};          // laufender Upload eines Pakets (nur Webserver-Faden)
   bool upload_erlaubt_{false};
   size_t upload_n_{0};

@@ -15,6 +15,7 @@
 #include "../components/weishaupt_can/zugang.h"
 #include "../components/weishaupt_can/oberflaeche.h"
 #include "../components/weishaupt_can/wem_netz.h"
+#include "../components/weishaupt_can/netzsuche.h"
 #include "../components/weishaupt_can/app_dateien.h"
 #include "referenz_v29/regellogik_v29.h"
 #include <cstdarg>

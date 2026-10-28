@@ -297,3 +297,9 @@ TEST(wem_netz_per_can) {
   PRUEFE(w.weiter(10000, d));
   PRUEFE(!w.weiter(12100, d) && !w.laeuft && !w.fehler.empty());
 }
+
+TEST(netzsuche_erkennt_wem) {
+  using esphome::weishaupt_can::ist_wem;
+  PRUEFE(ist_wem("HTTP/1.0 401 Unauthorized\r\nWWW-Authenticate: Basic realm=\"WEM-SG HTTP-Server\"\r\n"));
+  PRUEFE(!ist_wem("HTTP/1.1 200 OK\r\nServer: nginx\r\n"));
+}

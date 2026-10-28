@@ -122,7 +122,10 @@
       <div class="zeile"><span class="name">Eingetragene Adresse <span class="hinweis" id="wemEingetragen">–</span></span></div>
       <p class="hinweis" style="font-size:.75rem;color:var(--text2)">Das Board fragt den WEM am CAN-Bus nach seiner Netzwerkadresse
         (drei einzelne Leseanfragen, nur am WEM). Gebraucht wird sie für den JSON-Weg und die SD-Dateien.</p>
-      <button id="wemSuchen" class="knopf">PER CAN SUCHEN</button>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+        <button id="wemSuchen" class="knopf">PER CAN SUCHEN</button>
+        <button id="wemNetz" class="knopf">IM NETZ SUCHEN</button>
+      </div>
       <div id="wemErgebnis" class="hinweis" style="margin-top:.4rem"></div>
       <input id="wemIp" class="feld" type="text" inputmode="decimal" placeholder="Adresse von Hand, z. B. 192.168.1.20" autocomplete="off">
       <button id="wemUebernehmen" class="knopf" style="margin-top:.5rem">ÜBERNEHMEN</button>
