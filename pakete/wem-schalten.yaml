@@ -651,7 +651,7 @@ switch:
     name: "Schalten per CAN statt JSON (Heizkreis, Warmwasser)"
     id: can_schalten
     optimistic: true
-    restore_mode: RESTORE_DEFAULT_OFF
+    restore_mode: RESTORE_DEFAULT_ON    # ab v42 Empfehlung: CAN ist der Hauptweg (Rueckweg: aus = JSON)
     web_server: { sorting_group_id: g_can_schreiben, sorting_weight: 1 }
   - platform: template
     name: "Freies CAN-Schreiben (Experten)"
