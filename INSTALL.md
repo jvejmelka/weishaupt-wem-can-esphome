@@ -7,6 +7,22 @@ Rechne mit einer Stunde, die meiste Zeit geht aufs erste Kompilieren.
 > Die Firmware schreibt nie auf den Kessel und fragt den WEM nie von selbst ab – daran bitte
 > auch beim Anpassen nichts ändern.
 
+## Kurzweg ohne ESPHome: fertiges Release-Image (ab v42)
+
+Für jedes Versions-Tag baut die CI ein **Release-Image ohne Zugangsdaten** (`werkzeuge/release_bauen.py`):
+kein WLAN, keine Passwörter, kein MQTT, Update nur im Browser. Es liegt beim GitHub-Release
+(`weishaupt-wem-can.factory.bin` zur Erstinstallation, `weishaupt-wem-can.ota.bin` für Updates, `SHA256SUMS`)
+und – sobald GitHub Pages eingeschaltet ist – auf einer **Installationsseite** mit Knopf (ESP Web Tools, Chrome/Edge):
+
+1. Board per USB-C anschließen, auf der Installationsseite „Installieren“; danach das WLAN eintragen
+   (oder mit dem offenen Hotspot `Weishaupt-WEM-CAN` verbinden).
+2. `http://<board>/` öffnen: Benutzer, App- und Admin-Passwort festlegen, dann führt der Einrichtungs-Assistent
+   durch WLAN, CAN-Bus, WEM-Adresse und Schaltweg.
+3. Auf der Einstellungsseite ein Experten-Passwort setzen (nötig für Updates und `/experten`).
+
+Wer MQTT, Home Assistant oder eigene Pakete braucht, nimmt den langen Weg unten. Die CI baut das Release-Image
+auch bei jedem Push (Artefakt `firmware-release`) und prüft, dass keine Platzhalter-Zugangsdaten darin stehen.
+
 ## 1. Was du brauchst
 
 | | |

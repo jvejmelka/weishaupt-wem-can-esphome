@@ -47,10 +47,10 @@ jobs:
         run: python3 tests/links.py
 
   firmware:
-    name: Firmware kompilieren (ESPHome 2026.9.0)
+    name: Firmware kompilieren (ESPHome 2026.9.1)
     runs-on: ubuntu-24.04
     env:
-      ESPHOME_VERSION: "2026.9.0"
+      ESPHOME_VERSION: "2026.9.1"
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -74,3 +74,38 @@ jobs:
       - name: Bauteil wirklich gebaut?
         # ohne das Bauteil gaebe es id(wcan) nicht - trotzdem ausdruecklich pruefen
         run: test -n "$(find .esphome/build -path '*components/weishaupt_can/weishaupt_can.cpp.o*' -print -quit)"
+
+  release-image:
+    name: Release-Image ohne persoenliche Daten (ESPHome 2026.9.1)
+    runs-on: ubuntu-24.04
+    env:
+      ESPHOME_VERSION: "2026.9.1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Cache PlatformIO und ESPHome-Build
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.platformio
+            release/.esphome
+          key: release-${{ env.ESPHOME_VERSION }}-${{ hashFiles('weishaupt-wem-can.yaml', 'pakete/**', 'components/**', 'register.yaml', 'werkzeuge/release_bauen.py') }}
+          restore-keys: release-${{ env.ESPHOME_VERSION }}-
+      - name: ESPHome installieren
+        run: pip install "esphome==${ESPHOME_VERSION}"
+      - name: Release-Konfiguration erzeugen (kein WLAN, keine Passwoerter, kein MQTT)
+        run: python3 werkzeuge/release_bauen.py release
+      - name: Kompilieren
+        run: esphome compile release/weishaupt-wem-can-release.yaml
+      - name: Dateien, Pruefsummen und Manifest fuer die Installationsseite
+        run: python3 werkzeuge/release_paket.py release ausgabe
+      - name: Keine Platzhalter-Zugangsdaten im Image
+        # die Werte aus secrets.yaml.example duerfen nicht im Image stehen (ausser dem WEM-Werkspasswort)
+        run: python3 werkzeuge/release_paket.py --pruefen ausgabe/weishaupt-wem-can.factory.bin
+      - uses: actions/upload-artifact@v7
+        with:
+          name: firmware-release
+          path: ausgabe/
+          retention-days: 30

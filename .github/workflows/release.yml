@@ -1,0 +1,57 @@
+name: Release
+
+# Nur bei einem Versions-Tag (z. B. v42): Release-Image bauen, als GitHub-Release (Vorabversion) anhaengen
+# und die Installationsseite (installieren/) mit der Firmware auf GitHub Pages veroeffentlichen.
+# Voraussetzung einmalig: Repo -> Settings -> Pages -> Source "GitHub Actions".
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  bauen:
+    runs-on: ubuntu-24.04
+    env:
+      ESPHOME_VERSION: "2026.9.1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: ESPHome installieren
+        run: pip install "esphome==${ESPHOME_VERSION}"
+      - name: Release-Image bauen und pruefen
+        run: |
+          python3 werkzeuge/release_bauen.py release
+          esphome compile release/weishaupt-wem-can-release.yaml
+          python3 werkzeuge/release_paket.py release ausgabe
+          python3 werkzeuge/release_paket.py --pruefen ausgabe/weishaupt-wem-can.factory.bin
+      - name: GitHub-Release (Vorabversion) mit Firmware und Pruefsummen
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" --prerelease --title "${GITHUB_REF_NAME}" \
+            --notes "Firmware ohne Zugangsdaten. Installation: siehe Installationsseite und INSTALL.md. Pruefsummen in SHA256SUMS." \
+            ausgabe/weishaupt-wem-can.factory.bin ausgabe/weishaupt-wem-can.ota.bin ausgabe/SHA256SUMS
+      - name: Installationsseite zusammenstellen
+        run: |
+          mkdir -p seite
+          cp installieren/index.html seite/
+          cp ausgabe/* seite/
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: seite
+
+  seite:
+    needs: bauen
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+    steps:
+      - uses: actions/deploy-pages@v5

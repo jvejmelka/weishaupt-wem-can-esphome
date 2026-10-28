@@ -4,3 +4,5 @@ secrets.yaml
 *.elf
 __pycache__/
 tests/.deps/
+release/
+ausgabe/

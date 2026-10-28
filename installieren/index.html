@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Weishaupt WEM am CAN-Bus – installieren</title>
+  <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+  <style>
+    :root { --bg: #0f0f0f; --text: #e8e8e8; --text2: #9a9a9a; --amber: #f0a020; --border: #2a2a2a; }
+    @media (prefers-color-scheme: light) { :root { --bg: #f3f3f1; --text: #1a1a1a; --text2: #555; --amber: #b86e00; --border: #d0d0cc; } }
+    body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; max-width: 42rem; margin: 0 auto; padding: 1.5rem 1rem 3rem; line-height: 1.5; }
+    h1 { font-size: 1.4rem; letter-spacing: .04em; } h2 { font-size: 1.05rem; margin-top: 2rem; color: var(--amber); }
+    code { background: rgba(128,128,128,.15); padding: 0 .3em; border-radius: 3px; }
+    ol li { margin: .4rem 0; } .klein { color: var(--text2); font-size: .85rem; }
+    .kasten { border: 1px solid var(--border); border-radius: 4px; padding: 1rem; margin: 1rem 0; }
+    a { color: var(--amber); }
+  </style>
+</head>
+<body>
+  <h1>⬡ Weishaupt WEM am CAN-Bus</h1>
+  <p>Firmware für das <b>WeAct CAN485 DevBoard</b> (ESP32) am CAN-Bus einer Weishaupt-Therme mit WEM-Systemgerät.
+    Version <b id="version">…</b> · <a href="https://github.com/jvejmelka/weishaupt-wem-can-esphome">Projekt auf GitHub</a></p>
+
+  <div class="kasten">
+    <p><b>1. Board per USB-C an diesen Computer</b> (Chrome oder Edge; microSD-Karte vorher herausnehmen).</p>
+    <esp-web-install-button manifest="manifest.json">
+      <span slot="unsupported">Dieser Browser kann nicht flashen – bitte Chrome oder Edge am Computer nehmen.</span>
+      <span slot="not-allowed">Nur über HTTPS möglich.</span>
+    </esp-web-install-button>
+    <p class="klein">Nach dem Flashen fragt die Seite nach dem WLAN (Improv). Alternativ verbindet man sich mit dem offenen
+      Hotspot <code>Weishaupt-WEM-CAN</code> und trägt das WLAN auf der Anmeldeseite ein.</p>
+  </div>
+
+  <h2>2. Einrichten</h2>
+  <ol>
+    <li>Im Browser <code>http://&lt;Adresse des Boards&gt;/</code> öffnen (die Adresse zeigt der Router, oder
+      <code>http://weact-can485-weishaupt-xxxxxx.local/</code>).</li>
+    <li>Benutzer, App-Passwort und Admin-Passwort festlegen – danach führt der <b>Einrichtungs-Assistent</b> durch
+      WLAN, CAN-Bus, WEM-Adresse (per CAN oder Suche im Netz) und den Schaltweg.</li>
+    <li>Auf der Einstellungsseite ein <b>Experten-Passwort</b> setzen – erst dann gehen Firmware-Updates und die
+      ESPHome-Oberfläche.</li>
+  </ol>
+
+  <h2>3. Anschließen</h2>
+  <p>Zwei Drähte an <b>H</b> und <b>L</b> des CAN-Busses am WEM (dazu GND). Terminierung auf dem Board <b>aus</b>.
+    Details, Sicherheitsregeln und Hintergrund in der <a href="https://github.com/jvejmelka/weishaupt-wem-can-esphome#readme">README</a>.</p>
+
+  <h2>Updates</h2>
+  <p>Auf der Einstellungsseite unter „Firmware-Update“ die Datei <code>weishaupt-wem-can.ota.bin</code> wählen und die
+    SHA-256 aus <a href="SHA256SUMS">SHA256SUMS</a> eintragen – das Board prüft beides.</p>
+
+  <p class="klein">Dieses Image enthält keine Zugangsdaten und kein MQTT. Wer MQTT, Home Assistant oder eigene Pakete will,
+    baut selbst mit ESPHome (INSTALL.md). Ohne Gewähr – an der eigenen Heizung auf eigenes Risiko.</p>
+  <script>
+    fetch('manifest.json').then(r => r.json()).then(m => { document.getElementById('version').textContent = m.version; }).catch(() => {});
+  </script>
+</body>
+</html>
