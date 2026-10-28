@@ -164,6 +164,11 @@ async def to_code(config):
             from esphome.components.logger import request_log_listener
 
             request_log_listener()
+        # Einrichtungs-Assistent (ab v42): WLAN-Liste auch nach dem Verbinden behalten
+        if "wifi" in CORE.config:
+            from esphome.components.wifi import request_wifi_scan_results
+
+            request_wifi_scan_results()
         cg.add(
             var.app_einrichten(
                 app[CONF_BENUTZER],

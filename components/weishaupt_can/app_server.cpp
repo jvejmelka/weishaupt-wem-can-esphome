@@ -31,6 +31,10 @@
 #include "esphome/components/captive_portal/captive_portal.h"
 #endif
 #include <esp_system.h>
+#ifdef USE_WIFI
+#include <esp_wifi.h>
+#endif
+#include <algorithm>
 #include <esp_heap_caps.h>
 #include <esp_flash.h>
 #include <lwip/sockets.h>
@@ -614,6 +618,32 @@ std::string AppServer::einrichtung_json_() {
   }
 #endif
   if (this->wlan_ergebnis) w["ergebnis"] = this->wlan_ergebnis();
+#ifdef USE_WIFI
+  // empfangbare WLANs (letzte Suche): je Name das staerkste, sortiert nach Signal
+  if (wifi != nullptr && this->wlan_suche_ != 0) {
+    struct Netz { std::string ssid; int rssi; bool gesichert; };
+    std::vector<Netz> netze;
+    {
+      wifi::ScanResultsLock lock(wifi);
+      for (auto &r : wifi->get_scan_result()) {
+        if (r.get_is_hidden() || r.get_ssid().empty()) continue;
+        std::string s(r.get_ssid().c_str(), r.get_ssid().size());
+        bool neu = true;
+        for (auto &n : netze)
+          if (n.ssid == s) { if (r.get_rssi() > n.rssi) n.rssi = r.get_rssi(); neu = false; }
+        if (neu && netze.size() < 20) netze.push_back(Netz{s, r.get_rssi(), r.get_with_auth()});
+      }
+    }
+    std::sort(netze.begin(), netze.end(), [](const Netz &a, const Netz &b) { return a.rssi > b.rssi; });
+    w["zugangspunkte"] = (uint32_t) wifi->get_scan_result().size();   // vor dem Zusammenfassen nach Namen
+    JsonArray a = w["netze"].to<JsonArray>();
+    for (auto &n : netze) {
+      JsonObject o = a.add<JsonObject>();
+      o["ssid"] = n.ssid; o["rssi"] = n.rssi; o["gesichert"] = n.gesichert;
+    }
+    w["suche_vor_s"] = (millis() - this->wlan_suche_) / 1000;
+  }
+#endif
   d["bus_lebt"] = !this->wc_->bus.tot(jetzt);
   JsonArray k = d["knoten"].to<JsonArray>();
   for (int n = 1; n < 128; n++) {
@@ -1262,6 +1292,20 @@ void AppServer::handleRequest(AsyncWebServerRequest *request) {
       std::string s;
       { std::lock_guard<std::mutex> g(this->sperre_); s = this->einrichtung_stand_; }
       this->antworten_(request, 200, s.empty() ? "{}" : s);
+    } else if (url == "/api/admin/wlan-suchen" && post) {
+#ifdef USE_WIFI
+      // eine Suche nach WLANs anstossen (die Verbindung bleibt; ESPHome sammelt die Ergebnisse ein)
+      this->wc_->spaeter([this]() {
+        wifi_scan_config_t c = {};
+        c.show_hidden = false;
+        esp_err_t e = esp_wifi_scan_start(&c, false);
+        if (e == ESP_OK) this->wlan_suche_ = millis() | 1;
+        else ESP_LOGW(TAG, "WLAN-Suche: %s", esp_err_to_name(e));
+      });
+      this->antworten_(request, 200, "{\"ok\":true}");
+#else
+      this->antworten_(request, 404, "{\"error\":\"kein WLAN\"}");
+#endif
     } else if (url == "/api/admin/wlan" && post) {
       JsonDocument d;
       if (deserializeJson(d, this->body_) || !d["ssid"].is<const char *>() || !this->wlan_wechseln) {

@@ -39,6 +39,7 @@ function zeige(n) {
   document.querySelectorAll('.schritt').forEach(s => s.classList.toggle('hidden', Number(s.dataset.s) !== n));
   document.querySelectorAll('.schritte span').forEach(s => s.classList.toggle('aktiv', Number(s.dataset.s) === n));
   laden();
+  if (n === 1 && !gesucht) { gesucht = true; wlanSuchen(); }   // empfangbare WLANs gleich beim Oeffnen
   if (n === 2) heizungVorbereiten();
   if (n === 3) zusammenfassen();
 }
@@ -59,6 +60,7 @@ async function laden() {
   n.appendChild(h);
   $('netzStand').appendChild(n);
   if (w.ergebnis && $('wlanMeldung').dataset.laeuft) $('wlanMeldung').textContent = w.ergebnis;
+  if (w.netze) netzeZeigen(w.netze, w.ssid);
 
   const b = $('busStand');
   b.innerHTML = '';
@@ -80,6 +82,37 @@ async function laden() {
   }
 }
 setInterval(() => { if (lies(TOKEN_KEY) && !document.hidden) laden(); }, 3000);
+
+// ── Schritt 1: empfangbare WLANs
+function netzeZeigen(netze, aktuell) {
+  const l = $('wlanListe');
+  l.textContent = '';
+  if (!netze.length) { l.innerHTML = '<div class="zeile"><span class="name">keine gefunden</span></div>'; return; }
+  for (const n of netze) {
+    const z = document.createElement('div');
+    z.className = 'zeile';
+    z.style.cursor = 'pointer';
+    const t = document.createElement('span');
+    t.className = 'name';
+    t.textContent = (n.ssid === aktuell ? '✓ ' : '') + n.ssid + (n.gesichert ? ' 🔒' : '');
+    const s = document.createElement('span');
+    s.className = 'hinweis';
+    s.textContent = `${signal(n.rssi)} (${n.rssi} dBm)`;
+    z.append(t, s);
+    z.addEventListener('click', () => { $('wlanSsid').value = n.ssid; $('wlanPass').focus(); });
+    l.appendChild(z);
+  }
+}
+let gesucht = false;
+async function wlanSuchen() {
+  $('wlanListe').innerHTML = '<div class="zeile"><span class="name">suche empfangbare WLANs … (einige Sekunden)</span></div>';
+  try {
+    await api('/api/admin/wlan-suchen', { method: 'POST', body: '{}' });
+    await warte(5000);
+    await laden();
+  } catch (e) { melde('wlanMeldung', e.message); }
+}
+$('wlanSuchen').addEventListener('click', wlanSuchen);
 
 // ── Schritt 1: WLAN wechseln
 $('wlanBtn').addEventListener('click', async () => {

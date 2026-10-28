@@ -157,6 +157,7 @@ class AppServer : public AsyncWebHandler {
 
   ob::Paket paket_;
   bool paket_aktiv_{false};
+  uint32_t wlan_suche_{0};         // millis() der letzten angestossenen WLAN-Suche (0 = nie)
   FILE *upload_{nullptr};          // laufender Upload eines Pakets (nur Webserver-Faden)
   bool upload_erlaubt_{false};
   size_t upload_n_{0};

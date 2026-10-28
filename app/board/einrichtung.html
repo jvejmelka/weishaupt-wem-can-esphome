@@ -94,7 +94,9 @@
       <p class="hinweis" style="font-size:.75rem;color:var(--text2)">Das Board ist im WLAN. Ein anderes WLAN hier eintragen: Klappt die Verbindung
         binnen 30 s, wird es gespeichert, sonst bleibt das bisherige. Findet das Board gar kein WLAN, öffnet es nach einer Minute den
         Hotspot <b>Weishaupt-WEM-CAN</b> mit Anmeldeseite.</p>
-      <input id="wlanSsid" class="feld" type="text" placeholder="anderes WLAN: Name" autocomplete="off">
+      <button id="wlanSuchen" class="knopf">NOCHMAL SUCHEN</button>
+      <div id="wlanListe"></div>
+      <input id="wlanSsid" class="feld" type="text" placeholder="anderes WLAN: Name (oder oben antippen)" autocomplete="off">
       <input id="wlanPass" class="feld" type="password" placeholder="Passwort" autocomplete="new-password">
       <button id="wlanBtn" class="knopf" style="margin-top:.5rem">WLAN WECHSELN</button>
       <div id="wlanMeldung" class="meldung"></div>
