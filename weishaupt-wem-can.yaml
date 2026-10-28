@@ -94,7 +94,7 @@ logger:
 ota:
   - platform: esphome
     password: !secret ota_password
-  # Update im Browser (ab v40): Einstellungsseite oder Weboberflaeche, Benutzer admin + Admin-Passwort
+  # Update im Browser (ab v40): Einstellungsseite oder /experten, Benutzer admin + Experten-Passwort (Digest, ab v42)
   - platform: web_server
 
 wifi:
