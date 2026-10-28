@@ -660,6 +660,7 @@ void AppServer::handleBody(AsyncWebServerRequest *request, uint8_t *data, size_t
 // Die Antwort gehoert der Anfrage (wird mit ihr geloescht).
 static void status_setzen(AsyncWebServerRequest *r, int code) {
   if (code == 304) httpd_resp_set_status(*r, "304 Not Modified");
+  else if (code == 403) httpd_resp_set_status(*r, "403 Forbidden");
   else if (code == 409) httpd_resp_set_status(*r, "409 Conflict");
   else if (code == 429) httpd_resp_set_status(*r, "429 Too Many Requests");
   else if (code == 503) httpd_resp_set_status(*r, "503 Service Unavailable");
