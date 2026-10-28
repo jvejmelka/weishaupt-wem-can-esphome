@@ -26,6 +26,8 @@
 #include "sd_karte.h"
 #include "dateisystem.h"
 #include "wem_netz.h"
+#include "json_lesen.h"
+#include <functional>
 #ifdef USE_WC_APP
 #include "app_server.h"
 #endif
@@ -71,6 +73,8 @@ class WeishauptCan : public Component {
   wc::Anlass anlass;
   wc::Lesebefehl lesen;
   wn::WemNetz wem_netz;
+  std::function<int()> json_abrufen;          // ab v42, Paket json-lesen (nur Hauptschleife)
+  std::function<std::string()> json_stand;
   uint32_t knoten_gesehen[128] = {0};   // ab v42: millis() des letzten Lebenszeichens 0x700+n (0 = nie)      // ab v42: WEM-Adresse per CAN (Assistent, Einstellungsseite)
   wc::CanSchreiben schreiben;
   wc::Scan scan;

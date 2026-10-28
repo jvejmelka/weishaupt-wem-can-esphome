@@ -248,6 +248,12 @@ sie an der gemessenen Anlage fünfmal bis zum Stromlos-Machen lahmgelegt. Der Bu
 kein Problem: Der WEM fragt den Kessel dort dreimal pro Sekunde ab. **Lesen deshalb immer am Bus,
 den WEM nur zum Schalten ansprechen.**
 
+Ausnahme ab v42: **Abruf von Hand** (Paket `json-lesen`, Knopf „Aktualisieren“) für Boards ohne CAN-Kabel.
+Dabei am 28.10.2026 beobachtet:
+- Der WEM beantwortet **höchstens 7 Objekte je Anfrage**; das achte bekommt immer CM 05 – egal welches Objekt dort steht.
+- Sechs Abrufe in 7 Minuten (je mindestens 60 s Abstand) – danach kamen nur noch leere Antworten; nach 10 Minuten
+  Pause wieder alle Werte. Der Mindestabstand ist deshalb ab Werk 5 Minuten (mindestens 2), automatisch wird nie abgefragt.
+
 ### Was bleibt, wenn der WEM ausfällt
 
 | Ausfall | Folge |

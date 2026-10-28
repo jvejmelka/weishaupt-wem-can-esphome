@@ -112,6 +112,7 @@ class AppServer : public AsyncWebHandler {
   void datei_(AsyncWebServerRequest *r, const ap::Datei *d);
   void anzeige_(AsyncWebServerRequest *r);
   std::string wem_json_();           // Hauptschleife: Stand der WEM-Suche
+  void json_abruf_(AsyncWebServerRequest *r, bool post);
   std::string einrichtung_json_();   // Hauptschleife: Netz, Bus, Geraete am Bus (Assistent)
   void teilreset_(AsyncWebServerRequest *r);
   void login_(AsyncWebServerRequest *r);
@@ -146,7 +147,7 @@ class AppServer : public AsyncWebHandler {
 
   // nur unter sperre_: fertige Antworten fuer den Webserver-Faden
   mutable std::mutex sperre_;
-  std::string status_, energie_, einstellungen_stand_, info_, sicherung_, wem_stand_, einrichtung_stand_;
+  std::string status_, energie_, einstellungen_stand_, info_, sicherung_, wem_stand_, einrichtung_stand_, json_stand_;
   ap::Anmeldung anmeldung_;
   zg::Zugang2 zugang_;
   bool einrichtung_noetig_{false};

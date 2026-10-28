@@ -560,3 +560,17 @@ async function wemNetzSuchen(meldung, feld) {
 }
 function melde2(el, text, ok) { $(el).textContent = text; $(el).className = 'meldung ' + (ok ? 'ok' : 'fehler'); }
 $('wemNetz').addEventListener('click', () => wemNetzSuchen('wemMeldung', 'wemIp'));
+
+// Werte einmal per JSON abrufen (Paket json-lesen)
+async function jsonStand() {
+  try { const d = await api('/api/admin/json-abruf'); if (d.meldung) $('jsonStand').textContent = d.meldung + (d.warten_s ? ` · nächster in ${d.warten_s} s` : ''); }
+  catch { /* nicht eingebunden */ }
+}
+$('jsonAbruf').addEventListener('click', async () => {
+  try {
+    await api('/api/admin/json-abruf', { method: 'POST', body: '{}' });
+    $('jsonStand').textContent = 'frage den WEM …';
+    setTimeout(jsonStand, 5000);
+  } catch (e) { $('jsonStand').textContent = e.message; }
+});
+if (lies(TOKEN_KEY)) jsonStand();

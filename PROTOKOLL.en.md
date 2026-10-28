@@ -249,6 +249,12 @@ measured installation, each time until the system was power-cycled. The bus itse
 with it: the WEM polls the boiler there three times per second. **Therefore always read on the bus,
 and address the WEM only for switching.**
 
+Exception from v42: **manual refresh** (package `json-lesen`, button "Aktualisieren") for boards without a CAN cable.
+Observed on 28 Oct 2026:
+- The WEM answers **at most 7 objects per request**; the eighth always gets CM 05 – whichever object is there.
+- Six requests within 7 minutes (each at least 60 s apart) – after that only empty answers; after a 10-minute pause
+  all values again. The minimum interval is therefore 5 minutes by default (at least 2); nothing is ever polled automatically.
+
 ### What remains if the WEM fails
 
 | Failure | Consequence |

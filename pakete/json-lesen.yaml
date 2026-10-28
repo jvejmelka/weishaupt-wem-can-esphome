@@ -1,0 +1,144 @@
+# Paket JSON-LESEN (ab v42): Werte NUR VON HAND ueber die WEM-JSON-Schnittstelle abrufen - Knopf
+# "Werte per JSON abrufen" (Weboberflaeche, Einstellungsseite, in der App "Aktualisieren", wenn der Bus still ist).
+# Fuer Boards ohne CAN-Kabel oder bei Busausfall. EINE Anfrage mit 7 Objekten (mehr beantwortet der WEM nicht), nie automatisch, Mindestabstand
+# einstellbar (ab Werk 5 min, mindestens 2 min) - der WEM verkraftet kein Dauerabfragen. Braucht: wem-schalten, warmwasser.
+# Logik und Objekte: components/weishaupt_can/json_lesen.h
+
+globals:
+  - id: json_zuletzt                 # millis() des letzten Abrufs (0 = noch nie)
+    type: uint32_t
+    initial_value: '0'
+
+number:
+  - platform: template
+    name: "Mindestabstand JSON-Abruf (s)"
+    id: json_abstand
+    optimistic: true
+    restore_value: true
+    initial_value: 300        # 28.10.2026: sechs Abrufe in 7 min (je >= 60 s) -> WEM antwortete leer; nach 10 min Pause wieder ok
+    min_value: 120
+    max_value: 3600
+    step: 10
+    mode: box
+    web_server: { sorting_group_id: g_einst, sorting_weight: 30 }
+
+text_sensor:
+  - platform: template
+    name: "JSON-Abruf"
+    id: json_meldung
+    web_server: { sorting_group_id: g_einst, sorting_weight: 32 }
+
+esphome:
+  on_boot:
+    priority: -100
+    then:
+      - lambda: |-
+          // Pruefen und starten - gemeinsam fuer Knopf, Einstellungsseite und App (nur Hauptschleife).
+          // Rueckgabe: 0 gestartet, >0 Sekunden bis zum naechsten erlaubten Abruf, -1 WEM gerade belegt, -2 keine Adresse
+          id(wcan)->json_abrufen = []() -> int {
+            uint32_t ab = (uint32_t) id(json_abstand).state * 1000, z = id(json_zuletzt), j = millis();
+            if (z != 0 && j - z < ab) return (int) ((ab - (j - z)) / 1000) + 1;
+            if (id(wem_senden).is_running() || id(json_abruf).is_running()) return -1;
+            if (id(wem_ip).state.empty()) return -2;
+            id(json_abruf)->execute();
+            return 0;
+          };
+          id(wcan)->json_stand = []() {
+            uint32_t ab = (uint32_t) id(json_abstand).state * 1000, z = id(json_zuletzt), j = millis();
+            int w = (z != 0 && j - z < ab) ? (int) ((ab - (j - z)) / 1000) + 1 : 0;
+            std::string m = id(json_meldung).state;
+            std::string e;
+            for (char c : m) { if (c == '"' || c == '\\') e += '\\'; e += c; }
+            return "{\"meldung\":\"" + e + "\",\"warten_s\":" + std::to_string(w) + ",\"laeuft\":" +
+                   (id(json_abruf).is_running() ? "true" : "false") + "}";
+          };
+
+button:
+  - platform: template
+    name: "Werte per JSON abrufen"
+    id: json_knopf
+    web_server: { sorting_group_id: g_einst, sorting_weight: 31 }
+    on_press:
+      - lambda: |-
+          int r = id(wcan)->json_abrufen();
+          if (r > 0) id(json_meldung).publish_state("naechster Abruf in " + to_string(r) + " s (Mindestabstand)");
+          else if (r == -1) id(json_meldung).publish_state("WEM gerade belegt - spaeter nochmal");
+          else if (r == -2) id(json_meldung).publish_state("keine WEM-Adresse eingetragen");
+
+script:
+
+  - id: json_abruf
+    mode: single
+    then:
+      - lambda: |-
+          id(json_zuletzt) = millis() | 1;
+          id(json_meldung).publish_state(id(wcan)->zeit("%H:%M:%S ") + "frage den WEM per JSON ...");
+      - http_request.post:
+          url: !lambda 'return "http://" + id(wem_ip).state + "/ajax/CanApiJson.json";'
+          request_headers:
+            Authorization: !lambda |-
+              static std::string h;
+              std::string up = id(wem_user).state + ":" + id(wem_pass).state;
+              h = "Basic " + esphome::base64_encode((const uint8_t *) up.data(), up.size());
+              return h.c_str();
+            Referer: !lambda |-
+              static std::string r;
+              r = "http://" + id(wem_ip).state + "/";
+              return r.c_str();
+            Content-Type: "application/json"
+          body: !lambda 'return jl::rumpf(millis());'
+          capture_response: true
+          max_response_buffer_size: 2048
+          on_response:
+            then:
+              - lambda: |-
+                  std::string z = id(wcan)->zeit("%H:%M:%S ");
+                  ESP_LOGI("json", "HTTP %d, %u Byte", response->status_code, (unsigned) body.size());
+                  if (response->status_code != 200) {
+                    id(json_meldung).publish_state(z + "WEM antwortet mit HTTP " + to_string(response->status_code));
+                    return;
+                  }
+                  int n = 0;
+                  float v;
+                  uint32_t uhr = id(wcan)->unix_zeit();
+                  if (jl::wert(body, jl::OBJEKTE[jl::AUSSEN], v)) { id(wem_aussentemp).publish_state(v); n++; }
+                  if (jl::wert(body, jl::OBJEKTE[jl::KESSEL], v)) { id(wem_kessel).publish_state(v); n++; }
+                  if (jl::wert(body, jl::OBJEKTE[jl::WW_IST], v)) { id(wem_warmwasser).publish_state(v); n++; }
+                  if (jl::wert(body, jl::OBJEKTE[jl::WW_SOLL], v)) {
+                    id(ww_soll_akt).publish_state(v); bf::status().setze_f(bf::status().ww_soll_akt, v); n++;
+                  }
+                  if (jl::wert(body, jl::OBJEKTE[jl::BRENNERPHASE], v)) {
+                    // nur anzeigen - der Startzaehler bleibt beim Bus (ein seltener Abruf saehe keine Flanken)
+                    int ph = (int) v;
+                    id(wem_brennerphase).publish_state((float) ph);
+                    id(wem_brenner).publish_state((ph == 2 || ph == 3) ? 1.0f : 0.0f);
+                    id(wem_brenner_text).publish_state(wc::brenner_text(ph));
+                    n++;
+                  }
+                  if (jl::wert(body, jl::OBJEKTE[jl::HK_BETRIEBSART], v)) {
+                    uint8_t b = (uint8_t) v;
+                    id(hk_betriebsart_code).publish_state((float) b);
+                    id(hk_betriebsart).publish_state(wc::hk_name(b, "unbekannt"));
+                    bf::status().hk_gelesen(b, uhr);
+                    n++;
+                  }
+                  if (jl::wert(body, jl::OBJEKTE[jl::WW_BETRIEBSART], v)) {
+                    uint8_t b = (uint8_t) v;
+                    id(ww_betriebsart_code).publish_state((float) b);
+                    id(ww_betriebsart).publish_state(wc::ww_name(b, "unbekannt"));
+                    bf::status().ww_gelesen(b, uhr);
+                    n++;
+                  }
+                  std::string fehlt;
+                  for (int i = 0; i < jl::ANZAHL; i++)
+                    if (!jl::wert(body, jl::OBJEKTE[i], v)) fehlt += (fehlt.empty() ? "" : ", ") + std::string(jl::OBJEKTE[i].name);
+                  char t[64];
+                  snprintf(t, sizeof(t), "%d von %d Werten per JSON gelesen", n, (int) jl::ANZAHL);
+                  id(json_meldung).publish_state(z + t + (fehlt.empty() ? "" : " (ohne " + fehlt + ")"));
+                  ESP_LOGI("json", "%s%s", t, fehlt.empty() ? "" : (" - ohne " + fehlt).c_str());
+                  // Antwort in Stuecken ins Log (die Einstellungsseite zeigt je Zeile 200 Zeichen)
+                  if (!fehlt.empty())
+                    for (size_t i = 0; i < body.size() && i < 1200; i += 150) ESP_LOGI("json", "Antwort %u: %s", (unsigned) (i / 150), body.substr(i, 150).c_str());
+          on_error:
+            then:
+              - lambda: 'id(json_meldung).publish_state(id(wcan)->zeit("%H:%M:%S ") + "WEM nicht erreichbar");'

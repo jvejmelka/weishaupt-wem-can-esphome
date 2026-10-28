@@ -332,6 +332,22 @@ function zeigeZusatz(liste) {
   }));
 }
 
+// Aktualisieren per JSON (nur Board, nie automatisch; das Board haelt den Mindestabstand ein)
+document.getElementById('jsonBtn').addEventListener('click', async () => {
+  const b = document.getElementById('jsonBtn');
+  b.disabled = true;
+  try {
+    const res = await apiFetch('/api/json-abruf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) { b.title = d.error || 'nicht möglich'; alert(d.error || 'nicht möglich'); return; }
+    b.title = 'frage den WEM …';
+    setTimeout(async () => {
+      try { const r = await apiFetch('/api/json-abruf'); const j = await r.json(); b.title = j.meldung || ''; } catch { /* */ }
+      refreshStatus();
+    }, 5000);
+  } catch { /* abgemeldet */ } finally { setTimeout(() => { b.disabled = false; }, 5000); }
+});
+
 async function refreshStatus() {
   try {
     const res = await apiFetch('/api/status');
@@ -373,6 +389,10 @@ async function refreshStatus() {
     document.getElementById('brennerZeile').title = data.heizungWartet ? 'Kessel lädt Warmwasser, der Heizkreis fordert gleichzeitig Wärme an' : '';
 
     zeigeZusatz(data.zusatz);
+
+    // Board ohne Bus (Kabel fehlt oder ausgefallen): "Aktualisieren" holt die Werte einmal per JSON vom WEM
+    const busStill = data.source === 'board' && (data.busAlterS == null || data.busAlterS > 120);
+    document.getElementById('jsonBtn').classList.toggle('hidden', !busStill);
 
     letzteDaten = data;
     zeigeWuensche(data);

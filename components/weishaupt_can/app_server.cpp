@@ -79,6 +79,7 @@ static const char *const EINSTELLUNGEN[][3] = {
     {"Schalten", "Schalten per CAN statt JSON (Heizkreis, Warmwasser)", ""},
     {"Schalten", "Abstand zwischen Befehlen per CAN (s)", "10"},
     {"Schalten", "Abstand zwischen Befehlen per JSON (s)", "60"},
+    {"Schalten", "Mindestabstand JSON-Abruf (s)", "300"},
     {"Lesen", "Eigene CAN-Anfragen", ""},
     {"Lesen", "Lange Lesebefehle auch am Kessel", ""},
     {"Lesen", "SD-Dateien abrufen", ""},
@@ -313,6 +314,7 @@ void AppServer::zusammenstellen_() {
   std::string in = this->info_json_(), si = this->sicherung_json_(), wj = this->wem_json_(), ej = this->einrichtung_json_();
   std::lock_guard<std::mutex> g(this->sperre_);
   this->einrichtung_stand_.swap(ej);
+  if (this->wc_->json_stand) { std::string js = this->wc_->json_stand(); this->json_stand_.swap(js); }
   this->wem_stand_.swap(wj);
   this->status_.swap(s);
   this->energie_.swap(e);
@@ -569,6 +571,26 @@ void AppServer::paket_hochladen_(AsyncWebServerRequest *r) {
   { std::lock_guard<std::mutex> g(this->sperre_); this->paket_ = p; this->paket_aktiv_ = true; }
   ESP_LOGI(TAG, "Oberflaechen-Paket %s aktiv (%u Dateien)", p.version.c_str(), (unsigned) p.dateien.size());
   this->antworten_(r, 200, "{\"ok\":true,\"version\":\"" + p.version + "\"}");
+}
+
+// Werte per JSON von Hand abrufen (Paket json-lesen): GET = Stand, POST = abrufen (Mindestabstand im Paket)
+void AppServer::json_abruf_(AsyncWebServerRequest *r, bool post) {
+  if (!this->wc_->json_abrufen) { this->antworten_(r, 404, "{\"error\":\"Paket json-lesen nicht eingebunden\"}"); return; }
+  std::string s;
+  { std::lock_guard<std::mutex> g(this->sperre_); s = this->json_stand_; }
+  if (!post) { this->antworten_(r, 200, s.empty() ? "{}" : s); return; }
+  JsonDocument d;
+  int warten = 0;
+  if (!deserializeJson(d, s)) warten = d["warten_s"] | 0;
+  if (warten > 0) {
+    this->antworten_(r, 429, "{\"error\":\"naechster Abruf in " + std::to_string(warten) + " s\",\"warten_s\":" + std::to_string(warten) + "}");
+    return;
+  }
+  this->wc_->spaeter([this]() {
+    int e = this->wc_->json_abrufen();
+    if (e != 0) ESP_LOGI(TAG, "JSON-Abruf nicht gestartet (%d)", e);
+  });
+  this->antworten_(r, 200, "{\"ok\":true}");
 }
 
 std::string AppServer::wem_json_() {
@@ -1327,6 +1349,8 @@ void AppServer::handleRequest(AsyncWebServerRequest *request) {
           this->antworten_(request, 200, "{\"ok\":true}");
         }
       }
+    } else if (url == "/api/admin/json-abruf") {
+      this->json_abruf_(request, post);
     } else if (url == "/api/admin/wem" && !post) {
       std::string s;
       { std::lock_guard<std::mutex> g(this->sperre_); s = this->wem_stand_; }
@@ -1382,6 +1406,8 @@ void AppServer::handleRequest(AsyncWebServerRequest *request) {
   } else if (!this->angemeldet_(request)) {
     if (post) ESP_LOGW(TAG, "POST %s ohne gueltiges Token", url.c_str());
     this->antworten_(request, 401, "{\"error\":\"Nicht autorisiert\"}");
+  } else if (url == "/api/json-abruf") {
+    this->json_abruf_(request, post);
   } else if (url == "/api/status" && !post) {
     std::string s;
     { std::lock_guard<std::mutex> g(this->sperre_); s = this->status_; }

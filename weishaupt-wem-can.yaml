@@ -18,6 +18,7 @@
 #                                    vermuten laesst (R1-R5 einzeln, eigene Regeln experimentell; braucht warmwasser)
 #   pakete/zusatz.yaml               Zusatzanzeigen fuer die Handy-App (Liste fremder MQTT-Topics, braucht mqtt)
 #   pakete/app.yaml                  Heizungs-App direkt auf dem Board (http://<board>/app, ab v38)
+#   pakete/json-lesen.yaml           Werte von Hand per WEM-JSON abrufen (ohne CAN-Kabel, ab v42; braucht wem-schalten)
 #   pakete/feste-ip.yaml             feste IP statt DHCP (Empfehlung: DHCP + Router-Reservierung)
 #
 substitutions:
@@ -64,6 +65,7 @@ packages:
   verdacht: !include pakete/verdacht.yaml
   zusatz: !include pakete/zusatz.yaml
   app: !include pakete/app.yaml
+  json_lesen: !include pakete/json-lesen.yaml
   # feste_ip: !include pakete/feste-ip.yaml
 
 esphome:

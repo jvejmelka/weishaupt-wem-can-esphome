@@ -303,3 +303,27 @@ TEST(netzsuche_erkennt_wem) {
   PRUEFE(ist_wem("HTTP/1.0 401 Unauthorized\r\nWWW-Authenticate: Basic realm=\"WEM-SG HTTP-Server\"\r\n"));
   PRUEFE(!ist_wem("HTTP/1.1 200 OK\r\nServer: nginx\r\n"));
 }
+
+TEST(json_lesen_abruf) {
+  // Anfrage: 8 Objekte, Lese-VG mit Nullbytes
+  std::string r = jl::rumpf(123);
+  PRUEFE(r.find("\"NN\":7") != std::string::npos && r.find("\"VG\":\"010100") != std::string::npos);
+  PRUEFE(jl::vg_lesen(jl::OBJEKTE[jl::AUSSEN]) == "01010026B10200020000");
+  PRUEFE(jl::vg_lesen(jl::OBJEKTE[jl::HK_BETRIEBSART]) == "010200253302000100");
+  // Antwort in anderer Reihenfolge, Kleinbuchstaben, ein Objekt abgelehnt, eins "kein Wert"
+  std::string a = "{\"ID\":\"00000123\",\"CAPI\":{\"NN\":4,"
+                  "\"N01\":{\"VG\":\"020700253200000200f0\"},"        // Kessel 24,0
+                  "\"N02\":{\"VG\":\"02010026b1020002ffec\"},"         // Aussen -2,0
+                  "\"N03\":{\"VG\":\"050300252902000200\"},"           // WW ist abgelehnt
+                  "\"N04\":{\"VG\":\"0203002520020001\"},"             // zu kurz
+                  "\"N05\":{\"VG\":\"02030025200200010002\"},"         // falsche Laenge? vs=1 -> 00
+                  "\"N06\":{\"VG\":\"020300252C0200028000\"}}}";       // WW-Soll kein Wert
+  float v = 0;
+  PRUEFE(jl::wert(a, jl::OBJEKTE[jl::KESSEL], v) && v > 23.9f && v < 24.1f);
+  PRUEFE(jl::wert(a, jl::OBJEKTE[jl::AUSSEN], v) && v > -2.1f && v < -1.9f);
+  PRUEFE(!jl::wert(a, jl::OBJEKTE[jl::WW_IST], v));
+  PRUEFE(!jl::wert(a, jl::OBJEKTE[jl::WW_SOLL], v));
+  PRUEFE(!jl::wert(a, jl::OBJEKTE[jl::BRENNERPHASE], v));
+  std::string b = "{\"CAPI\":{\"N01\":{\"VG\":\"02020025330200010B\"}}}";
+  PRUEFE(jl::wert(b, jl::OBJEKTE[jl::HK_BETRIEBSART], v) && v == 11.0f);
+}
