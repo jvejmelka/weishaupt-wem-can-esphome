@@ -25,6 +25,7 @@
 #include "kern.h"
 #include "sd_karte.h"
 #include "dateisystem.h"
+#include "wem_netz.h"
 #ifdef USE_WC_APP
 #include "app_server.h"
 #endif
@@ -69,6 +70,7 @@ class WeishauptCan : public Component {
   wc::Bus bus;
   wc::Anlass anlass;
   wc::Lesebefehl lesen;
+  wn::WemNetz wem_netz;      // ab v42: WEM-Adresse per CAN (Assistent, Einstellungsseite)
   wc::CanSchreiben schreiben;
   wc::Scan scan;
   wc::Brenner brenner;

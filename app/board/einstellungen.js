@@ -53,7 +53,7 @@ async function login() {
     schreib(TOKEN_KEY, data.token);
     $('loginPass').value = '';
     $('loginOverlay').classList.add('hidden');
-    laden(); infoLaden(); logLaden();
+    laden(); infoLaden(); logLaden(); wemLaden();
   } catch { err.textContent = 'Verbindungsfehler'; err.classList.remove('hidden'); }
 }
 $('loginBtn').addEventListener('click', login);
@@ -505,3 +505,38 @@ $('obZurueckBtn').addEventListener('click', async () => {
     infoLaden();
   } catch (e) { m.textContent = e.message; m.className = 'meldung fehler'; }
 });
+
+// ── Heizung (WEM): Adresse per CAN
+async function wemLaden() {
+  try {
+    const d = await api('/api/admin/wem');
+    $('wemEingetragen').textContent = d.eingetragen || '–';
+    $('wemZustand').textContent = d.bus_lebt === false ? 'CAN-Bus still' : '';
+    const e = $('wemErgebnis');
+    if (d.laeuft) e.textContent = 'frage den WEM …';
+    else if (d.ip) {
+      e.textContent = `WEM meldet: ${d.ip}` + (d.maske ? ` · Maske ${d.maske}` : '') + (d.gateway ? ` · Gateway ${d.gateway}` : '') +
+        (d.ip === d.eingetragen ? ' – stimmt mit der eingetragenen überein ✓' : ' – weicht ab');
+      if (!$('wemIp').value) $('wemIp').value = d.ip;
+    } else if (d.fehler) e.textContent = d.fehler;
+    return d;
+  } catch { return {}; }
+}
+$('wemSuchen').addEventListener('click', async () => {
+  const m = $('wemMeldung');
+  m.textContent = '';
+  try {
+    await api('/api/admin/wem-suchen', { method: 'POST', body: '{}' });
+    $('wemIp').value = '';
+    for (let i = 0; i < 12; i++) { await new Promise(r => setTimeout(r, 1000)); const d = await wemLaden(); if (!d.laeuft && (d.ip || d.fehler)) break; }
+  } catch (e) { m.textContent = e.message; m.className = 'meldung fehler'; }
+});
+$('wemUebernehmen').addEventListener('click', async () => {
+  const m = $('wemMeldung');
+  try {
+    await api('/api/admin/wem-adresse', { method: 'POST', body: JSON.stringify({ ip: $('wemIp').value.trim() }) });
+    m.textContent = 'übernommen'; m.className = 'meldung ok';
+    setTimeout(wemLaden, 1500);
+  } catch (e) { m.textContent = e.message; m.className = 'meldung fehler'; }
+});
+if (lies(TOKEN_KEY)) wemLaden();

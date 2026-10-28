@@ -117,6 +117,18 @@
 
     <div id="gruppen"></div>
 
+    <section class="block">
+      <div class="block-head"><span class="block-title">HEIZUNG (WEM)</span><span class="block-zustand" id="wemZustand"></span></div>
+      <div class="zeile"><span class="name">Eingetragene Adresse <span class="hinweis" id="wemEingetragen">–</span></span></div>
+      <p class="hinweis" style="font-size:.75rem;color:var(--text2)">Das Board fragt den WEM am CAN-Bus nach seiner Netzwerkadresse
+        (drei einzelne Leseanfragen, nur am WEM). Gebraucht wird sie für den JSON-Weg und die SD-Dateien.</p>
+      <button id="wemSuchen" class="knopf">PER CAN SUCHEN</button>
+      <div id="wemErgebnis" class="hinweis" style="margin-top:.4rem"></div>
+      <input id="wemIp" class="feld" type="text" inputmode="decimal" placeholder="Adresse von Hand, z. B. 192.168.1.20" autocomplete="off">
+      <button id="wemUebernehmen" class="knopf" style="margin-top:.5rem">ÜBERNEHMEN</button>
+      <div id="wemMeldung" class="meldung"></div>
+    </section>
+
     <section class="block" id="anzeigeBlock">
       <div class="block-head"><span class="block-title">ZUSATZANZEIGEN</span><span class="block-zustand" id="anzeigeZustand"></span></div>
       <p class="hinweis" style="font-size:.75rem;color:var(--text2)">Bis zu 6 Werte aus MQTT, die die App unter den Heizungswerten zeigt

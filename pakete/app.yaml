@@ -33,6 +33,9 @@ esphome:
           id(wcan)->app->lesen = []() { id(status_lesen)->execute(); };
           id(wcan)->app->werksreset = []() { id(app_werksreset).press(); };
           id(wcan)->app->experten = id(experten_oberflaeche);
+          // WEM-Adresse (ab v42): eingetragene lesen, gefundene uebernehmen
+          id(wcan)->app->wem_ip_lesen = []() { return id(wem_ip).state; };
+          id(wcan)->app->wem_ip_setzen = [](const std::string &ip) { id(wem_ip).make_call().set_value(ip).perform(); };
 
 # Werksreset (ab v41): loescht alle gespeicherten Einstellungen, Zaehler und Zugangsdaten und startet neu.
 # Ausgeloest nur ueber die Einstellungsseite (mit Bestaetigung) - kein Knopf in der Weboberflaeche.

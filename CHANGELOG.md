@@ -2,6 +2,7 @@
 
 
 ## v42 (in Arbeit)
+- **WEM-Adresse per CAN:** Einstellungsseite „Heizung (WEM)“ → „Per CAN suchen“: drei einzelne Leseanfragen an den WEM (Knoten 1: `0x2B08` IP, `0x2B09` Maske, `0x2B0A` Gateway, Abstand 0,5 s, nie am Kessel). Zeigt, ob die gemeldete Adresse zur eingetragenen passt, und übernimmt sie auf Knopfdruck (oder von Hand). An der WTC-GW 15-B: Adresse, Maske und Gateway gelesen, stimmt mit der eingetragenen überein.
 - Versionstext auf dem Board: „v42-dev vom 28.10.2026“; README (DE/EN) beschreibt Zugangsstufen, Dateisystem, Oberflächen-Paket, SD-Karte, Zusatzanzeigen-Editor, Teil-Reset und den Betrieb hinter einem Proxy.
 - **Admin darf nicht mehr an den Bus:** Die Einstellungen der Gruppen „Lesen“ (eigene CAN-Anfragen, lange Lesebefehle am Kessel, SD-Dateien) und „Experten“ (freies CAN-Schreiben, Rohmitschnitt, Wächter) ändern sich nur noch mit Experten-Passwort (🔒 auf der Einstellungsseite); eine Sicherung ohne Experten-Passwort lässt sie unverändert. Admin behält: Schalten (CAN/JSON, Abstände), Regeln, Darstellung, Zusatzanzeigen, App-/Admin-Passwort, Info, Log, Sicherung, Neustart. Firmware-Update, Oberflächen-Paket, Rücksetzen und `/experten` waren schon Experte.
 - „Schalten per CAN“ ist jetzt Vorgabe und Empfehlung (`RESTORE_DEFAULT_ON`).

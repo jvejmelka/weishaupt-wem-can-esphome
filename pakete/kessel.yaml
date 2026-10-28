@@ -182,6 +182,7 @@ canbus:
               id(wcan)->frame(millis());
               std::string t;
               bool fertig = id(wcan)->lesen.antwort(can_id, x, t, millis());
+              id(wcan)->wem_netz.antwort(can_id, x, millis());   // WEM-Adresse per CAN (ab v42)
               // Teilstuecke/Block: naechste Leseanfrage (nach der Pause), Block-Ende quittieren
               uint32_t fid = 0; std::vector<uint8_t> fd;
               if (id(wcan)->lesen.weiter(fid, fd, millis())) id(wcan)->senden(fid, fd);

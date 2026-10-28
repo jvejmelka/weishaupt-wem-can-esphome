@@ -221,6 +221,9 @@ void AppServer::setup() {
 
 void AppServer::loop() {
   uint32_t jetzt = millis();
+  // WEM-Adresse per CAN: Anfragen im Abstand von 0,5 s (nicht an die Sekunde unten gebunden)
+  std::vector<uint8_t> wd;
+  if (this->wc_->wem_netz.weiter(jetzt, wd)) this->wc_->senden(0x601, wd);
   if (jetzt - this->zuletzt_ < 1000 && this->zuletzt_ != 0) return;
   this->zuletzt_ = jetzt | 1;
   // App-Token nach TOKEN_TAGE erneuern (alle Geraete melden sich neu an); ohne Uhrzeit nichts tun
@@ -299,8 +302,9 @@ void AppServer::zusammenstellen_() {
     l.zusatz.push_back(z);
   }
   std::string s = ap::status_antwort(l), e = ap::energie_antwort(l), st = this->einstellungen_json_();
-  std::string in = this->info_json_(), si = this->sicherung_json_();
+  std::string in = this->info_json_(), si = this->sicherung_json_(), wj = this->wem_json_();
   std::lock_guard<std::mutex> g(this->sperre_);
+  this->wem_stand_.swap(wj);
   this->status_.swap(s);
   this->energie_.swap(e);
   this->einstellungen_stand_.swap(st);
@@ -556,6 +560,25 @@ void AppServer::paket_hochladen_(AsyncWebServerRequest *r) {
   { std::lock_guard<std::mutex> g(this->sperre_); this->paket_ = p; this->paket_aktiv_ = true; }
   ESP_LOGI(TAG, "Oberflaechen-Paket %s aktiv (%u Dateien)", p.version.c_str(), (unsigned) p.dateien.size());
   this->antworten_(r, 200, "{\"ok\":true,\"version\":\"" + p.version + "\"}");
+}
+
+std::string AppServer::wem_json_() {
+  JsonDocument d;
+  auto &w = this->wc_->wem_netz;
+  d["eingetragen"] = this->wem_ip_lesen ? this->wem_ip_lesen() : "";
+  d["laeuft"] = w.laeuft;
+  d["bus_lebt"] = !this->wc_->bus.tot(millis());
+  if (!w.werte[0].empty()) { d["ip"] = w.werte[0]; d["maske"] = w.werte[1]; d["gateway"] = w.werte[2]; }
+  if (!w.fehler.empty()) d["fehler"] = w.fehler;
+  std::string out;
+  serializeJson(d, out);
+  return out;
+}
+
+static bool ipv4_ok(const std::string &s) {
+  unsigned a, b, c, e;
+  char rest;
+  return sscanf(s.c_str(), "%u.%u.%u.%u%c", &a, &b, &c, &e, &rest) == 4 && a < 256 && b < 256 && c < 256 && e < 256 && a != 0;
 }
 
 // Zusatzanzeigen der App aendern: {"eintraege":[...]} wie cmd/zusatz (gleiches Skript zs_datei in der YAML)
@@ -1175,6 +1198,27 @@ void AppServer::handleRequest(AsyncWebServerRequest *request) {
       ESP_LOGW(TAG, "Neustart ueber die Einstellungsseite");
       this->wc_->spaeter([]() { App.safe_reboot(); });
       this->antworten_(request, 200, "{\"ok\":true}");
+    } else if (url == "/api/admin/wem" && !post) {
+      std::string s;
+      { std::lock_guard<std::mutex> g(this->sperre_); s = this->wem_stand_; }
+      this->antworten_(request, 200, s.empty() ? "{}" : s);
+    } else if (url == "/api/admin/wem-suchen" && post) {
+      if (this->wc_->bus.tot(millis())) this->antworten_(request, 409, "{\"error\":\"CAN-Bus still - Kabel an H/L pruefen\"}");
+      else {
+        ESP_LOGI(TAG, "WEM-Adresse per CAN lesen (0x2B08-0x2B0A an Knoten 1)");
+        this->wc_->spaeter([this]() { this->wc_->wem_netz.starten(millis()); });
+        this->antworten_(request, 200, "{\"ok\":true}");
+      }
+    } else if (url == "/api/admin/wem-adresse" && post) {
+      JsonDocument d;
+      std::string ip;
+      if (!deserializeJson(d, this->body_) && d["ip"].is<const char *>()) ip = d["ip"].as<std::string>();
+      if (!ipv4_ok(ip) || !this->wem_ip_setzen) this->antworten_(request, 400, "{\"error\":\"keine gueltige IPv4-Adresse\"}");
+      else {
+        ESP_LOGI(TAG, "WEM-Adresse = %s (Einstellungsseite)", ip.c_str());
+        this->wc_->spaeter([this, ip]() { this->wem_ip_setzen(ip); });
+        this->antworten_(request, 200, "{\"ok\":true}");
+      }
     } else if (url == "/api/admin/anzeige" && post) {
       this->anzeige_(request);
     } else if (url == "/api/admin/teilreset" && post) {

@@ -277,3 +277,23 @@ TEST(oberflaeche_paket) {
   kaputt[k.dateien[1].start + 5] ^= 1;
   PRUEFE(ob::sha256_hex(kaputt.substr(k.dateien[1].start, k.dateien[1].laenge)) != k.dateien[1].sha256);
 }
+
+TEST(wem_netz_per_can) {
+  wn::WemNetz w;
+  std::vector<uint8_t> d;
+  w.starten(1000);
+  PRUEFE(w.weiter(1000, d) && d[0] == 0x40 && d[1] == 0x08 && d[2] == 0x2B && d[3] == 0);
+  PRUEFE(!w.weiter(1100, d));                                         // wartet auf Antwort
+  PRUEFE(!w.antwort(0x582, {0x43, 0x08, 0x2B, 0, 0x14, 2, 0, 0xC0}, 1150));     // Kessel-Kanal: nicht unseres
+  PRUEFE(w.antwort(0x581, {0x43, 0x08, 0x2B, 0, 0x14, 2, 0, 0xC0}, 1150));      // Bytes 4-7 = letztes..erstes Oktett
+  PRUEFE(w.werte[0] == "192.0.2.20");
+  PRUEFE(!w.weiter(1200, d) && w.weiter(1650, d) && d[1] == 0x09);   // 0,5 s Abstand
+  PRUEFE(w.antwort(0x581, {0x43, 0x09, 0x2B, 0, 0, 0xFF, 0xFF, 0xFF}, 1700) && w.werte[1] == "255.255.255.0");
+  PRUEFE(w.weiter(2200, d) && d[1] == 0x0A);
+  PRUEFE(!w.weiter(4300, d) || true);                                 // Gateway antwortet nicht -> weiter
+  PRUEFE(!w.laeuft && w.werte[2].empty() && w.fehler.empty());
+  // WEM antwortet gar nicht
+  w.starten(10000);
+  PRUEFE(w.weiter(10000, d));
+  PRUEFE(!w.weiter(12100, d) && !w.laeuft && !w.fehler.empty());
+}
