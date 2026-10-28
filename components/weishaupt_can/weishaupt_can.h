@@ -70,7 +70,8 @@ class WeishauptCan : public Component {
   wc::Bus bus;
   wc::Anlass anlass;
   wc::Lesebefehl lesen;
-  wn::WemNetz wem_netz;      // ab v42: WEM-Adresse per CAN (Assistent, Einstellungsseite)
+  wn::WemNetz wem_netz;
+  uint32_t knoten_gesehen[128] = {0};   // ab v42: millis() des letzten Lebenszeichens 0x700+n (0 = nie)      // ab v42: WEM-Adresse per CAN (Assistent, Einstellungsseite)
   wc::CanSchreiben schreiben;
   wc::Scan scan;
   wc::Brenner brenner;

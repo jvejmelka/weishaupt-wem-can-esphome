@@ -183,6 +183,7 @@ canbus:
               std::string t;
               bool fertig = id(wcan)->lesen.antwort(can_id, x, t, millis());
               id(wcan)->wem_netz.antwort(can_id, x, millis());   // WEM-Adresse per CAN (ab v42)
+              if ((can_id & 0x780) == 0x700 && (can_id & 0x7F) != 0) id(wcan)->knoten_gesehen[can_id & 0x7F] = millis() | 1;
               // Teilstuecke/Block: naechste Leseanfrage (nach der Pause), Block-Ende quittieren
               uint32_t fid = 0; std::vector<uint8_t> fd;
               if (id(wcan)->lesen.weiter(fid, fd, millis())) id(wcan)->senden(fid, fd);
@@ -427,6 +428,7 @@ button:
   # Letzter Rueckweg ist der Notfall-Hotspot (ap) mit Captive Portal.
   - platform: template
     name: "WLAN uebernehmen"
+    id: wlan_uebernehmen
     web_server: { sorting_group_id: g_einst, sorting_weight: 22 }
     on_press:
       - if:

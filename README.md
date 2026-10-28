@@ -281,6 +281,9 @@ Dieselbe App, ohne Server: das Board liefert sie selbst aus (gzip, zusammen etwa
 
   App- und Admin-Passwort speichert das Board nur als Hash (PBKDF2-HMAC-SHA256). Das Experten-Passwort bleibt lesbar,
   weil die Digest-Anmeldung von ESPHome es braucht; ohne Experten-Passwort ist die Stufe gesperrt. Das App-Token läuft nach 90 Tagen ab.
+- **Einrichtungs-Assistent** (ab v42, `/einrichtung`): nach der Ersteinrichtung der Passwörter automatisch, sonst über die
+  Einstellungsseite. Netz (WLAN, Adresse, Signal, anderes WLAN), Heizung (CAN-Bus, Geräte am Bus, WEM-Adresse per CAN,
+  Schaltweg CAN oder JSON), Zusammenfassung. Ein neues Board ohne WLAN öffnet den Hotspot `Weishaupt-WEM-CAN` mit Anmeldeseite.
 - **Zusatzanzeigen bearbeiten** (ab v42): auf der Einstellungsseite bis zu 6 Einträge anlegen, ändern, löschen – wirkt sofort.
 - **Teilweise zurücksetzen** (ab v42, Experte, nur im Heimnetz): Einstellungen auf die Empfehlung, Zusatzanzeigen leeren,
   eingebaute Oberfläche, Zugang wie bei Auslieferung. Der große Werksreset bleibt daneben.

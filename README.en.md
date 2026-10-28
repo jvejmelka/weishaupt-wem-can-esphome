@@ -294,6 +294,9 @@ The same app without a server: the board serves it itself (gzip, about 16 KB of 
 
   App and admin passwords are stored only as a hash (PBKDF2-HMAC-SHA256). The expert password stays readable because
   ESPHome's digest login needs it; without an expert password that level is locked. The app token expires after 90 days.
+- **Setup assistant** (from v42, `/einrichtung`): opens automatically after the first-run password setup, otherwise from
+  the settings page. Network (WLAN, address, signal, other WLAN), heating (CAN bus, devices on the bus, WEM address via CAN,
+  switching path CAN or JSON), summary. A new board without WLAN opens the hotspot `Weishaupt-WEM-CAN` with a login page.
 - **Edit extra values** (from v42): up to 6 entries on the settings page – add, change, delete, effective immediately.
 - **Partial reset** (from v42, expert, home network only): settings to recommended values, clear extra values,
   built-in UI, credentials as delivered. The full factory reset stays available.

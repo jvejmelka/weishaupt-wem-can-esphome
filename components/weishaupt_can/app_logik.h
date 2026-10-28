@@ -359,7 +359,7 @@ inline bool einrichtung_lesen(const std::string &body, Einrichtung &e, std::stri
 // eigener Login-Sperre). Alles andere gehoert zur Expertenstufe (ESPHome-Oberflaeche, Werte, /update).
 inline bool extern_erlaubt(const std::string &url) {
   static const char *const PFADE[] = {"/", "/app", "/app.js", "/style.css", "/manifest.json", "/icon.svg", "/sw.js",
-                                      "/einstellungen", "/einstellungen.js"};
+                                      "/einstellungen", "/einstellungen.js", "/einrichtung", "/einrichtung.js"};
   for (auto *p : PFADE)
     if (url == p) return true;
   if (url.compare(0, 5, "/api/") != 0) return false;

@@ -36,6 +36,13 @@ esphome:
           // WEM-Adresse (ab v42): eingetragene lesen, gefundene uebernehmen
           id(wcan)->app->wem_ip_lesen = []() { return id(wem_ip).state; };
           id(wcan)->app->wem_ip_setzen = [](const std::string &ip) { id(wem_ip).make_call().set_value(ip).perform(); };
+          // Einrichtungs-Assistent (ab v42): WLAN wechseln wie mit dem Knopf "WLAN uebernehmen" (30 s, sonst bleibt das alte)
+          id(wcan)->app->wlan_wechseln = [](const std::string &ssid, const std::string &pw) {
+            id(wlan_neu_ssid).make_call().set_value(ssid).perform();
+            id(wlan_neu_pass).make_call().set_value(pw).perform();
+            id(wlan_uebernehmen).press();
+          };
+          id(wcan)->app->wlan_ergebnis = []() { return id(wlan_ergebnis).state; };
 
 # Werksreset (ab v41): loescht alle gespeicherten Einstellungen, Zaehler und Zugangsdaten und startet neu.
 # Ausgeloest nur ueber die Einstellungsseite (mit Bestaetigung) - kein Knopf in der Weboberflaeche.

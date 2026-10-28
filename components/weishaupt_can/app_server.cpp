@@ -27,6 +27,9 @@
 #ifdef USE_WIFI
 #include "esphome/components/wifi/wifi_component.h"
 #endif
+#ifdef USE_CAPTIVE_PORTAL
+#include "esphome/components/captive_portal/captive_portal.h"
+#endif
 #include <esp_system.h>
 #include <esp_heap_caps.h>
 #include <esp_flash.h>
@@ -302,8 +305,9 @@ void AppServer::zusammenstellen_() {
     l.zusatz.push_back(z);
   }
   std::string s = ap::status_antwort(l), e = ap::energie_antwort(l), st = this->einstellungen_json_();
-  std::string in = this->info_json_(), si = this->sicherung_json_(), wj = this->wem_json_();
+  std::string in = this->info_json_(), si = this->sicherung_json_(), wj = this->wem_json_(), ej = this->einrichtung_json_();
   std::lock_guard<std::mutex> g(this->sperre_);
+  this->einrichtung_stand_.swap(ej);
   this->wem_stand_.swap(wj);
   this->status_.swap(s);
   this->energie_.swap(e);
@@ -575,6 +579,56 @@ std::string AppServer::wem_json_() {
   return out;
 }
 
+// Geraete am Bus: Knotennummer -> Name (Modulregel von geronet1: Knoten n sendet 0x700+n)
+static const char *knoten_name(int n) {
+  switch (n) {
+    case 1: return "WEM (Systemregler)";
+    case 2: return "Kessel (WTC)";
+    case 3: return "EM-HK (Heizkreis-Erweiterung)";
+    case 4: return "EM-Sol (Solar)";
+    default: return "Modul";
+  }
+}
+
+std::string AppServer::einrichtung_json_() {
+  JsonDocument d;
+  uint32_t jetzt = millis();
+  JsonObject w = d["wlan"].to<JsonObject>();
+#ifdef USE_WIFI
+  auto *wifi = wifi::global_wifi_component;
+  if (wifi != nullptr) {
+    w["verbunden"] = wifi->is_connected();
+    w["hotspot"] = wifi->is_ap_active();
+    if (wifi->is_connected()) {
+      char ssid[wifi::SSID_BUFFER_SIZE];
+      w["ssid"] = wifi->wifi_ssid_to(ssid);
+      w["rssi"] = wifi->wifi_rssi();
+      for (auto &ip : wifi->get_ip_addresses()) {
+        if (!ip.is_ip4()) continue;
+        char b[network::IP_ADDRESS_BUFFER_SIZE];
+        ip.str_to(b);
+        w["ip"] = b;
+        break;
+      }
+    }
+  }
+#endif
+  if (this->wlan_ergebnis) w["ergebnis"] = this->wlan_ergebnis();
+  d["bus_lebt"] = !this->wc_->bus.tot(jetzt);
+  JsonArray k = d["knoten"].to<JsonArray>();
+  for (int n = 1; n < 128; n++) {
+    uint32_t t = this->wc_->knoten_gesehen[n];
+    if (t == 0 || jetzt - t > 10UL * 60 * 1000) continue;
+    JsonObject o = k.add<JsonObject>();
+    o["nr"] = n;
+    o["name"] = knoten_name(n);
+    o["vor_s"] = (jetzt - t) / 1000;
+  }
+  std::string out;
+  serializeJson(d, out);
+  return out;
+}
+
 static bool ipv4_ok(const std::string &s) {
   unsigned a, b, c, e;
   char rest;
@@ -654,6 +708,12 @@ static bool beginnt(const char *s, const char *p) { return std::strncmp(s, p, st
 bool AppServer::canHandle(AsyncWebServerRequest *request) const {
   char buf[AsyncWebServerRequest::URL_BUF_SIZE];
   StringRef u = request->url_to(buf);
+#ifdef USE_CAPTIVE_PORTAL
+  // Notfall-Hotspot mit WLAN-Anmeldeseite aktiv (neues Board, WLAN fehlt): ESPHome uebernimmt alle GET-Anfragen
+  if (captive_portal::global_captive_portal != nullptr && captive_portal::global_captive_portal->is_active() &&
+      request->method() == HTTP_GET)
+    return false;
+#endif
   if (u == "/" || u == "/experten" || beginnt(u.c_str(), "/api/") || ap::datei(u.c_str(), u.size()) != nullptr) return true;
   // ueber den Reverse Proxy: alles Uebrige (ESPHome-Oberflaeche, Werte, /update) selbst mit 403 abweisen
   return this->ueber_proxy_(request) && !this->extern_frei_();
@@ -914,7 +974,7 @@ void AppServer::einrichtung_(AsyncWebServerRequest *r) {
     global_preferences->sync();
     this->web_passwort_setzen_();
   });
-  this->antworten_(r, 200, "{\"token\":\"" + token + "\"}");
+  this->antworten_(r, 200, "{\"token\":\"" + token + "\",\"admin_token\":\"" + admin + "\"}");
 }
 
 // eine Einstellung pruefen und (in der Hauptschleife) setzen; false + fehler, wenn ungueltig
@@ -1198,6 +1258,24 @@ void AppServer::handleRequest(AsyncWebServerRequest *request) {
       ESP_LOGW(TAG, "Neustart ueber die Einstellungsseite");
       this->wc_->spaeter([]() { App.safe_reboot(); });
       this->antworten_(request, 200, "{\"ok\":true}");
+    } else if (url == "/api/admin/einrichtung" && !post) {
+      std::string s;
+      { std::lock_guard<std::mutex> g(this->sperre_); s = this->einrichtung_stand_; }
+      this->antworten_(request, 200, s.empty() ? "{}" : s);
+    } else if (url == "/api/admin/wlan" && post) {
+      JsonDocument d;
+      if (deserializeJson(d, this->body_) || !d["ssid"].is<const char *>() || !this->wlan_wechseln) {
+        this->antworten_(request, 400, "{\"error\":\"WLAN-Name fehlt\"}");
+      } else {
+        std::string ssid = d["ssid"].as<std::string>(), pw = d["passwort"] | "";
+        if (ssid.empty() || ssid.size() > 32 || pw.size() > 64 || (!pw.empty() && pw.size() < 8)) {
+          this->antworten_(request, 400, "{\"error\":\"Name 1-32 Zeichen, Passwort leer oder 8-64 Zeichen\"}");
+        } else {
+          ESP_LOGW(TAG, "WLAN wechseln auf '%s' (Assistent) - klappt es nicht binnen 30 s, bleibt das bisherige", ssid.c_str());
+          this->wc_->spaeter([this, ssid, pw]() { this->wlan_wechseln(ssid, pw); });
+          this->antworten_(request, 200, "{\"ok\":true}");
+        }
+      }
     } else if (url == "/api/admin/wem" && !post) {
       std::string s;
       { std::lock_guard<std::mutex> g(this->sperre_); s = this->wem_stand_; }

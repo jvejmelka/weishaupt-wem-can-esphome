@@ -59,7 +59,9 @@ class AppServer : public AsyncWebHandler {
   std::function<void()> werksreset;   // ab v41: Knopf factory_reset der YAML
   std::function<void(const std::string &)> zusatz_datei;
   std::function<std::string()> wem_ip_lesen;                   // ab v42: Text "Heizung: IP-Adresse"
-  std::function<void(const std::string &)> wem_ip_setzen;   // ab v42: Zusatzanzeigen-Datei (Skript zs_datei)
+  std::function<void(const std::string &)> wem_ip_setzen;
+  std::function<void(const std::string &, const std::string &)> wlan_wechseln;   // ab v42: Assistent
+  std::function<std::string()> wlan_ergebnis;   // ab v42: Zusatzanzeigen-Datei (Skript zs_datei)
 
   // Log-Zeile vom Logger (beliebiger Faden) - die letzten Zeilen fuer die Einstellungsseite
   void log_zeile(uint8_t stufe, const char *text, size_t laenge);
@@ -109,6 +111,7 @@ class AppServer : public AsyncWebHandler {
   void datei_(AsyncWebServerRequest *r, const ap::Datei *d);
   void anzeige_(AsyncWebServerRequest *r);
   std::string wem_json_();           // Hauptschleife: Stand der WEM-Suche
+  std::string einrichtung_json_();   // Hauptschleife: Netz, Bus, Geraete am Bus (Assistent)
   void teilreset_(AsyncWebServerRequest *r);
   void login_(AsyncWebServerRequest *r);
   void schalten_(AsyncWebServerRequest *r, int ziel);
@@ -142,7 +145,7 @@ class AppServer : public AsyncWebHandler {
 
   // nur unter sperre_: fertige Antworten fuer den Webserver-Faden
   mutable std::mutex sperre_;
-  std::string status_, energie_, einstellungen_stand_, info_, sicherung_, wem_stand_;
+  std::string status_, energie_, einstellungen_stand_, info_, sicherung_, wem_stand_, einrichtung_stand_;
   ap::Anmeldung anmeldung_;
   zg::Zugang2 zugang_;
   bool einrichtung_noetig_{false};

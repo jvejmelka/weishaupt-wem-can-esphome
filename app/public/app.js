@@ -659,6 +659,12 @@ document.getElementById('setupBtn').addEventListener('click', async () => {
     const data = await res.json();
     if (!res.ok) return fehler(data.error || 'Fehler');
     saveToken(data.token);
+    // Board ab v42: weiter mit dem Einrichtungs-Assistenten (Netz, Heizung)
+    if (data.admin_token) {
+      try { localStorage.setItem('wem_admin_token', data.admin_token); } catch { /* privat */ }
+      location.href = '/einrichtung';
+      return;
+    }
     document.getElementById('setupOverlay').classList.add('hidden');
     init();
   } catch { fehler('Verbindungsfehler'); }

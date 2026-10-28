@@ -36,6 +36,8 @@ DATEIEN = [
     ("public/sw.js", "/sw.js", "application/javascript; charset=utf-8"),
     ("board/einstellungen.html", "/einstellungen", "text/html; charset=utf-8"),
     ("board/einstellungen.js", "/einstellungen.js", "application/javascript; charset=utf-8"),
+    ("board/einrichtung.html", "/einrichtung", "text/html; charset=utf-8"),
+    ("board/einrichtung.js", "/einrichtung.js", "application/javascript; charset=utf-8"),
 ]
 
 
