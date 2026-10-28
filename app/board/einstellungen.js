@@ -61,11 +61,31 @@ $('loginPass').addEventListener('keydown', e => { if (e.key === 'Enter') login()
 $('logoutBtn').addEventListener('click', () => { schreib(TOKEN_KEY, null); zeigeLogin(); });
 
 // ── Einstellungen anzeigen
+// Experten-Passwort verdeckt abfragen (prompt() zeigt Klartext); null = abgebrochen
+function expertePasswort(frage) {
+  return new Promise(fertig => {
+    const o = $('exOverlay'), f = $('exFeld');
+    $('exFrage').textContent = frage;
+    f.value = '';
+    o.classList.remove('hidden');
+    f.focus();
+    const ende = wert => {
+      o.classList.add('hidden');
+      $('exOk').onclick = null; $('exAbbruch').onclick = null; f.onkeydown = null;
+      f.value = '';
+      fertig(wert);
+    };
+    $('exOk').onclick = () => ende(f.value);
+    $('exAbbruch').onclick = e => { e.preventDefault(); ende(null); };
+    f.onkeydown = e => { if (e.key === 'Enter') ende(f.value); if (e.key === 'Escape') ende(null); };
+  });
+}
+
 async function setzen(id, wert, meldungEl, experte) {
   try {
     let headers = {};
     if (experte) {
-      const pw = prompt('Diese Einstellung betrifft den Bus – Experten-Passwort:');
+      const pw = await expertePasswort('Diese Einstellung betrifft den Bus');
       if (!pw) { laden(); return; }
       headers = { 'x-experte': pw };
     }
@@ -410,7 +430,7 @@ $('einspielenBtn').addEventListener('click', async () => {
   const m = $('sicherungMeldung');
   try {
     const text = await $('sicherungDatei').files[0].text();
-    const pw = prompt('Experten-Passwort (leer = Einstellungen der Gruppen Lesen und Experten bleiben unverändert):') || '';
+    const pw = await expertePasswort('Leer lassen = Einstellungen der Gruppen Lesen und Experten bleiben unverändert') || '';
     const d = await api('/api/admin/sicherung', { method: 'POST', body: text, headers: pw ? { 'x-experte': pw } : {} });
     m.textContent = `${d.gesetzt} Einstellungen übernommen` + (d.fehler && d.fehler.length ? ` · übersprungen: ${d.fehler.join(', ')}` : '');
     m.className = 'meldung ok';
