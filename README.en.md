@@ -267,7 +267,7 @@ reason (after startup, on changed status bits, after switch commands).
 The same app without a server: the board serves it itself (gzip, about 16 KB of flash in total).
 
 - Open **`http://<board>/`** (or `/app`). From v42 the ESPHome web interface lives at **`/experten`**
-  (user `admin`, admin password).
+  (user `admin`, expert password).
 - Log in with `app_benutzer` and `app_passwort` from `secrets.yaml`. 5 failed attempts per address within
   15 min lock that address for 15 min. The session token is kept in flash and survives updates.
 - Switching commands go through the same queue, one-minute lock and bus check as via MQTT.
@@ -278,13 +278,36 @@ The same app without a server: the board serves it itself (gzip, about 16 KB of 
   again (mode after about 1 min, status bits on the next change).
 - **Settings** (from v39): ⚙ in the app opens `http://<board>/einstellungen` – in the app's design, with
   its own admin password. Switches and numbers of the board, change app and admin password, default for
-  light/dark/auto. The full web interface stays at `/` (user `admin`, admin password).
+  light/dark/auto. Each setting shows its recommended value (◆) and flags deviations (from v42).
 - **First-run setup** (from v39): the board stores the credentials. Without defaults in `secrets.yaml`,
   `/app` first asks for user, app password and admin password (at least 8 characters) – nothing can be
   operated before that, not even the web interface. With defaults they are taken over on the first start;
   later changes to `secrets.yaml` then have no effect (change the password on the settings page).
 - **Light / dark / auto:** button at the top of the app, chosen per device; auto follows the device.
-- From outside **only through a reverse proxy with TLS** – the board only speaks HTTP.
+- **Three access levels** (from v42), all three passwords different:
+
+  | Level | may |
+  |---|---|
+  | App | switch heating circuit and hot water, view values |
+  | Admin (settings page) | switching via CAN/JSON and intervals, rules, theme, extra values, app/admin password, info, log, backup, restart |
+  | Expert | 🔒 bus reads (own CAN requests, boiler, SD files), free CAN write, raw capture, watchdog, firmware update, UI package, resets, `/experten` |
+
+  App and admin passwords are stored only as a hash (PBKDF2-HMAC-SHA256). The expert password stays readable because
+  ESPHome's digest login needs it; without an expert password that level is locked. The app token expires after 90 days.
+- **Edit extra values** (from v42): up to 6 entries on the settings page – add, change, delete, effective immediately.
+- **Partial reset** (from v42, expert, home network only): settings to recommended values, clear extra values,
+  built-in UI, credentials as delivered. The full factory reset stays available.
+- **File system** (from v42, option `dateisystem`): the WeAct board has 8 MB of flash, the firmware uses 4 MB. The upper
+  4 MB are mounted as LittleFS without a new partition table (so via OTA). It holds e.g. a **UI package**:
+  `werkzeuge/app_einbetten.py --paket ui.wui` bundles app and settings page; upload it on the settings page
+  (expert password). The board checks the API version and the SHA-256 of every file, otherwise the built-in UI stays.
+- **microSD** (from v42, option `sd_karte`): a card in the slot is detected and mounted (never formatted); the info
+  page shows size and free space. Remove the card when flashing via USB (WeAct's advice).
+- From outside **only through a reverse proxy with TLS** – the board only speaks HTTP. With `app_proxy` in `secrets.yaml`
+  (the proxy's IP) the board trusts its `X-Forwarded-For` and itself rejects via the proxy: `/experten`, `/update`,
+  `/events`, entity paths, resets and UI package (403; can be opened temporarily at your own risk).
+  App and settings page work from outside. The proxy should pass on only the headers needed (no cookies) –
+  the ESP32 web server accepts at most 1024 bytes per header line.
 - The files come from `app/public/` (plus `app/board/` for the settings page); `werkzeuge/app_einbetten.py` embeds them
   (`components/weishaupt_can/app_dateien.h`; CI checks that the file is up to date).
 
@@ -385,8 +408,8 @@ Overview of all objects the firmware evaluates (details and evidence in
 
 ## Security
 
-- The web interface uses Basic Auth over **unencrypted HTTP** – run it on the LAN only;
-  from outside at most behind a reverse proxy with TLS and its own authentication.
+- The board speaks **unencrypted HTTP** (from v42 digest login for `/experten` and `/update`) – run it on the LAN only,
+  from outside at most behind a reverse proxy with TLS (see mobile app, "On the board").
 - **Anyone allowed to write to `<gerät>/cmd/...` can switch the heating.** Set access rules (ACLs)
   on the broker: write access to `cmd/#` only for accounts that are supposed to switch.
 - The WEM credentials are Weishaupt's factory defaults and, according to the manual, cannot be changed.

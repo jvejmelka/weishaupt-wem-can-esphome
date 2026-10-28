@@ -254,7 +254,7 @@ Anlass (nach dem Start, bei geänderten Statusbits, nach Schaltbefehlen).
 Dieselbe App, ohne Server: das Board liefert sie selbst aus (gzip, zusammen etwa 16 KB im Flash).
 
 - Aufruf: **`http://<board>/`** (oder `/app`). Die ESPHome-Weboberfläche liegt ab v42 unter **`/experten`**
-  (Benutzer `admin`, Admin-Passwort).
+  (Benutzer `admin`, Experten-Passwort).
 - Login mit `app_benutzer` und `app_passwort` aus `secrets.yaml`. 5 Fehlversuche je Adresse in 15 min
   sperren diese Adresse für 15 min. Das Sitzungs-Token liegt im Flash und übersteht Updates.
 - Schaltbefehle laufen wie per MQTT durch Warteschlange, Sperrminute und Kontrolle am Bus.
@@ -265,13 +265,36 @@ Dieselbe App, ohne Server: das Board liefert sie selbst aus (gzip, zusammen etwa
   gesehen hat (Betriebsart nach etwa 1 min, Statusbits bei der nächsten Änderung).
 - **Einstellungen** (ab v39): ⚙ in der App öffnet `http://<board>/einstellungen` – im Design der App,
   mit eigenem Admin-Passwort. Schalter und Zahlen des Boards, App- und Admin-Passwort ändern,
-  Vorgabe für Hell/Dunkel/Auto. Die volle Weboberfläche bleibt unter `/` (Benutzer `admin`, Admin-Passwort).
+  Vorgabe für Hell/Dunkel/Auto. Jede Einstellung zeigt ihre Empfehlung (◆) und markiert Abweichungen (ab v42).
 - **Ersteinrichtung** (ab v39): Das Board speichert die Zugangsdaten. Ohne Vorgaben in `secrets.yaml`
   verlangt `/app` beim ersten Aufruf Benutzer, App- und Admin-Passwort (mindestens 8 Zeichen) – vorher
   ist nichts bedienbar, auch die Weboberfläche nicht. Mit Vorgaben werden diese beim ersten Start übernommen;
   spätere Änderungen an `secrets.yaml` wirken dann nicht mehr (Passwort auf der Einstellungsseite ändern).
 - **Hell / Dunkel / Auto:** Knopf oben in der App, Wahl je Gerät; Auto folgt der Einstellung des Geräts.
-- Von außen **nur über einen Reverse Proxy mit TLS** – das Board spricht nur HTTP.
+- **Drei Zugangsstufen** (ab v42), alle drei Passwörter verschieden:
+
+  | Stufe | darf |
+  |---|---|
+  | App | Heizkreis und Warmwasser schalten, Werte ansehen |
+  | Admin (Einstellungsseite) | Schalten per CAN/JSON und Abstände, Regeln, Darstellung, Zusatzanzeigen, App-/Admin-Passwort, Info, Log, Sicherung, Neustart |
+  | Experte | 🔒 Lesen am Bus (eigene CAN-Anfragen, Kessel, SD-Dateien), freies CAN-Schreiben, Rohmitschnitt, Wächter, Firmware-Update, Oberflächen-Paket, Rücksetzen, `/experten` |
+
+  App- und Admin-Passwort speichert das Board nur als Hash (PBKDF2-HMAC-SHA256). Das Experten-Passwort bleibt lesbar,
+  weil die Digest-Anmeldung von ESPHome es braucht; ohne Experten-Passwort ist die Stufe gesperrt. Das App-Token läuft nach 90 Tagen ab.
+- **Zusatzanzeigen bearbeiten** (ab v42): auf der Einstellungsseite bis zu 6 Einträge anlegen, ändern, löschen – wirkt sofort.
+- **Teilweise zurücksetzen** (ab v42, Experte, nur im Heimnetz): Einstellungen auf die Empfehlung, Zusatzanzeigen leeren,
+  eingebaute Oberfläche, Zugang wie bei Auslieferung. Der große Werksreset bleibt daneben.
+- **Dateisystem** (ab v42, Option `dateisystem`): Das WeAct-Board hat 8 MB Flash, die Firmware nutzt 4 MB. Die oberen 4 MB
+  werden ohne neue Partitionstabelle (also per OTA) als LittleFS eingebunden. Darin liegt z. B. ein **Oberflächen-Paket**:
+  `werkzeuge/app_einbetten.py --paket ui.wui` packt App und Einstellungsseite; auf der Einstellungsseite einspielen
+  (Experten-Passwort). Das Board prüft API-Version und SHA-256 jeder Datei, sonst bleibt die eingebaute Oberfläche.
+- **microSD** (ab v42, Option `sd_karte`): Eine Karte im Steckplatz wird erkannt und eingebunden (nie formatiert);
+  die Infoseite zeigt Größe und freien Platz. Beim Flashen per USB die Karte herausnehmen (Hinweis von WeAct).
+- Von außen **nur über einen Reverse Proxy mit TLS** – das Board spricht nur HTTP. Mit `app_proxy` in `secrets.yaml`
+  (IP des Proxys) glaubt das Board dessen `X-Forwarded-For` und weist über den Proxy selbst ab: `/experten`, `/update`,
+  `/events`, die Wertepfade, Rücksetzen und Oberflächen-Paket (403, auf eigenes Risiko zeitweise freischaltbar).
+  App und Einstellungsseite gehen von außen. Der Proxy sollte nur die nötigen Kopfzeilen weiterreichen
+  (keine Cookies) – der Webserver des ESP32 verträgt höchstens 1024 Byte je Kopfzeile.
 - Die Dateien kommen aus `app/public/` (dazu `app/board/` für die Einstellungsseite); `werkzeuge/app_einbetten.py` bettet sie ein
   (`components/weishaupt_can/app_dateien.h`, die CI prüft, dass die Datei aktuell ist).
 
@@ -368,8 +391,8 @@ Kurzübersicht aller Objekte, die die Firmware auswertet (Einzelheiten und Beleg
 
 ## Sicherheit
 
-- Die Weboberfläche nutzt Basic Auth über **unverschlüsseltes HTTP** – nur im LAN betreiben,
-  von außen höchstens hinter einem Reverse Proxy mit TLS und eigener Anmeldung.
+- Das Board spricht **unverschlüsseltes HTTP** (ab v42 Digest-Anmeldung für `/experten` und `/update`) – nur im LAN
+  betreiben, von außen höchstens hinter einem Reverse Proxy mit TLS (siehe Handy-App, „Auf dem Board“).
 - **Wer auf `<gerät>/cmd/...` schreiben darf, kann die Heizung schalten.** Am Broker Zugriffsregeln
   (ACL) setzen: Schreibrecht auf `cmd/#` nur für Konten, die schalten sollen.
 - Die WEM-Zugangsdaten sind die Werkseinstellung von Weishaupt und laut Anleitung nicht änderbar.

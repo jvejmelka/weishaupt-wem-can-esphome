@@ -2,6 +2,7 @@
 
 
 ## v42 (in Arbeit)
+- Versionstext auf dem Board: „v42-dev vom 28.10.2026“; README (DE/EN) beschreibt Zugangsstufen, Dateisystem, Oberflächen-Paket, SD-Karte, Zusatzanzeigen-Editor, Teil-Reset und den Betrieb hinter einem Proxy.
 - **Admin darf nicht mehr an den Bus:** Die Einstellungen der Gruppen „Lesen“ (eigene CAN-Anfragen, lange Lesebefehle am Kessel, SD-Dateien) und „Experten“ (freies CAN-Schreiben, Rohmitschnitt, Wächter) ändern sich nur noch mit Experten-Passwort (🔒 auf der Einstellungsseite); eine Sicherung ohne Experten-Passwort lässt sie unverändert. Admin behält: Schalten (CAN/JSON, Abstände), Regeln, Darstellung, Zusatzanzeigen, App-/Admin-Passwort, Info, Log, Sicherung, Neustart. Firmware-Update, Oberflächen-Paket, Rücksetzen und `/experten` waren schon Experte.
 - „Schalten per CAN“ ist jetzt Vorgabe und Empfehlung (`RESTORE_DEFAULT_ON`).
 - **Zusatzanzeigen auf der Einstellungsseite bearbeiten:** bis zu 6 Einträge (Name, Topic, Feld, Einheit, „läuft ab Schwelle“) anlegen, ändern, entfernen, speichern – gleiche Prüfung und Speicherung wie `cmd/zusatz` (Skript `zs_datei`), wirkt sofort ohne Neustart.
