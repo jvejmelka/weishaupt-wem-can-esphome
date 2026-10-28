@@ -81,6 +81,7 @@ class AppServer : public AsyncWebHandler {
     void *obj;          // switch_::Switch* oder number::Number*
     bool zahl;
     float vorgabe;      // empfohlene Vorgabe (Schalter 0/1), NAN = keine
+    bool experte;       // aendern nur mit Experten-Passwort (Busverkehr, Schreiben, Waechter)
   };
   struct Abo {
     std::string topic;
@@ -121,7 +122,8 @@ class AppServer : public AsyncWebHandler {
   std::string info_json_();          // Hauptschleife
   std::string sicherung_json_();     // Hauptschleife
   void sicherung_einspielen_(AsyncWebServerRequest *r);
-  bool einstellung_setzen_(const std::string &id, JsonVariant wert, std::string &fehler);
+  // experte = Experten-Passwort wurde mitgeschickt (Gruppen Lesen und Experten brauchen es)
+  bool einstellung_setzen_(const std::string &id, JsonVariant wert, std::string &fehler, bool experte);
 
   WeishauptCan *wc_;
   std::string benutzer_, passwort_, admin_, experte_, firmware_, proxy_;

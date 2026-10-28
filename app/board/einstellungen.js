@@ -61,13 +61,20 @@ $('loginPass').addEventListener('keydown', e => { if (e.key === 'Enter') login()
 $('logoutBtn').addEventListener('click', () => { schreib(TOKEN_KEY, null); zeigeLogin(); });
 
 // ── Einstellungen anzeigen
-async function setzen(id, wert, meldungEl) {
+async function setzen(id, wert, meldungEl, experte) {
   try {
-    await api('/api/admin/einstellungen', { method: 'POST', body: JSON.stringify({ id, wert }) });
+    let headers = {};
+    if (experte) {
+      const pw = prompt('Diese Einstellung betrifft den Bus – Experten-Passwort:');
+      if (!pw) { laden(); return; }
+      headers = { 'x-experte': pw };
+    }
+    await api('/api/admin/einstellungen', { method: 'POST', body: JSON.stringify({ id, wert }), headers });
     if (meldungEl) { meldungEl.textContent = 'gespeichert'; meldungEl.className = 'meldung ok'; }
     setTimeout(laden, 1500);   // das Board uebernimmt den Wert in der Hauptschleife
   } catch (e) {
     if (meldungEl) { meldungEl.textContent = e.message; meldungEl.className = 'meldung fehler'; }
+    else { alert(e.message); laden(); }
   }
 }
 
@@ -159,6 +166,12 @@ function zeile(e) {
   const n = document.createElement('span');
   n.className = 'name';
   n.textContent = e.name;
+  if (e.experte) {
+    const x = document.createElement('span');
+    x.className = 'hinweis';
+    x.textContent = '🔒 nur mit Experten-Passwort';
+    n.appendChild(x);
+  }
   if (e.vorgabe !== undefined) {
     const abw = e.art === 'schalter' ? e.wert !== e.vorgabe : e.wert !== e.vorgabe;
     const v = document.createElement('span');
@@ -172,7 +185,7 @@ function zeile(e) {
     const s = document.createElement('button');
     s.className = 'schalter' + (e.wert ? ' an' : '');
     s.setAttribute('aria-label', e.name);
-    s.addEventListener('click', () => { s.classList.toggle('an'); setzen(e.id, s.classList.contains('an')); });
+    s.addEventListener('click', () => { s.classList.toggle('an'); setzen(e.id, s.classList.contains('an'), null, e.experte); });
     z.appendChild(s);
   } else {
     const f = document.createElement('input');
@@ -187,7 +200,7 @@ function zeile(e) {
       const v = Number(f.value);
       if (!Number.isFinite(v) || v < e.min || v > e.max) { m.textContent = `erlaubt ${e.min} – ${e.max}`; m.style.color = 'var(--red)'; return; }
       m.style.color = ''; m.textContent = `${e.min} – ${e.max}`;
-      setzen(e.id, v);
+      setzen(e.id, v, null, e.experte);
     });
     z.appendChild(f);
   }
@@ -397,7 +410,8 @@ $('einspielenBtn').addEventListener('click', async () => {
   const m = $('sicherungMeldung');
   try {
     const text = await $('sicherungDatei').files[0].text();
-    const d = await api('/api/admin/sicherung', { method: 'POST', body: text });
+    const pw = prompt('Experten-Passwort (leer = Einstellungen der Gruppen Lesen und Experten bleiben unverändert):') || '';
+    const d = await api('/api/admin/sicherung', { method: 'POST', body: text, headers: pw ? { 'x-experte': pw } : {} });
     m.textContent = `${d.gesetzt} Einstellungen übernommen` + (d.fehler && d.fehler.length ? ` · übersprungen: ${d.fehler.join(', ')}` : '');
     m.className = 'meldung ok';
     setTimeout(laden, 1500);

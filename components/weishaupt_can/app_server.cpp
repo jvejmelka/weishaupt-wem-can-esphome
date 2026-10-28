@@ -308,6 +308,9 @@ void AppServer::zusammenstellen_() {
   this->sicherung_.swap(si);
 }
 
+// Gruppen, die Busverkehr, Schreiben auf den Bus oder den Waechter betreffen: nur mit Experten-Passwort
+static bool nur_experte(const char *gruppe) { return strcmp(gruppe, "Lesen") == 0 || strcmp(gruppe, "Experten") == 0; }
+
 void AppServer::einstellungen_sammeln_() {
   char buf[OBJECT_ID_MAX_LEN];
   for (auto &e : EINSTELLUNGEN) {
@@ -315,14 +318,14 @@ void AppServer::einstellungen_sammeln_() {
     for (auto *s : App.get_switches()) {
       if (s->get_name() != e[1]) continue;
       bool an = (s->restore_mode & switch_::RESTORE_MODE_ON_MASK) != 0;
-      this->einstellungen_.push_back(Einstellung{s->get_object_id_to(buf).str(), e[1], e[0], s, false, an ? 1.0f : 0.0f});
+      this->einstellungen_.push_back(Einstellung{s->get_object_id_to(buf).str(), e[1], e[0], s, false, an ? 1.0f : 0.0f, nur_experte(e[0])});
     }
 #endif
 #ifdef USE_NUMBER
     for (auto *n : App.get_numbers()) {
       if (n->get_name() != e[1]) continue;
       float v = e[2][0] ? strtof(e[2], nullptr) : NAN;
-      this->einstellungen_.push_back(Einstellung{n->get_object_id_to(buf).str(), e[1], e[0], n, true, v});
+      this->einstellungen_.push_back(Einstellung{n->get_object_id_to(buf).str(), e[1], e[0], n, true, v, nur_experte(e[0])});
     }
 #endif
   }
@@ -354,6 +357,7 @@ std::string AppServer::einstellungen_json_() {
     x["id"] = e.id;
     x["name"] = e.name;
     x["gruppe"] = e.gruppe;
+    if (e.experte) x["experte"] = true;
 #ifdef USE_NUMBER
     if (e.zahl) {
       auto *n = static_cast<number::Number *>(e.obj);
@@ -587,7 +591,7 @@ void AppServer::teilreset_(AsyncWebServerRequest *r) {
       std::string f;
       JsonDocument w;
       if (e.zahl) w.set(e.vorgabe); else w.set(e.vorgabe != 0);
-      if (this->einstellung_setzen_(e.id, w.as<JsonVariant>(), f)) n++;
+      if (this->einstellung_setzen_(e.id, w.as<JsonVariant>(), f, true)) n++;
     }
     ESP_LOGW(TAG, "Teil-Werksreset: %d Einstellungen auf die Vorgabe", n);
   } else if (b == "anzeige") {
@@ -890,7 +894,7 @@ void AppServer::einrichtung_(AsyncWebServerRequest *r) {
 }
 
 // eine Einstellung pruefen und (in der Hauptschleife) setzen; false + fehler, wenn ungueltig
-bool AppServer::einstellung_setzen_(const std::string &id, JsonVariant wert, std::string &fehler) {
+bool AppServer::einstellung_setzen_(const std::string &id, JsonVariant wert, std::string &fehler, bool experte) {
   if (id == "darstellung") {
     std::string t = wert.is<const char *>() ? wert.as<std::string>() : "";
     if (!ap::theme_ok(t)) { fehler = "auto, hell oder dunkel"; return false; }
@@ -900,6 +904,7 @@ bool AppServer::einstellung_setzen_(const std::string &id, JsonVariant wert, std
   }
   for (auto &e : this->einstellungen_) {
     if (e.id != id) continue;
+    if (e.experte && !experte) { fehler = "nur mit Experten-Passwort"; return false; }
 #ifdef USE_NUMBER
     if (e.zahl) {
       if (!wert.is<float>()) { fehler = "Zahl erwartet"; return false; }
@@ -932,7 +937,7 @@ void AppServer::einstellen_(AsyncWebServerRequest *r) {
     return;
   }
   std::string f;
-  if (this->einstellung_setzen_(d["id"].as<std::string>(), d["wert"], f)) { this->antworten_(r, 200, "{\"ok\":true}"); return; }
+  if (this->einstellung_setzen_(d["id"].as<std::string>(), d["wert"], f, this->experte_ok_(r))) { this->antworten_(r, 200, "{\"ok\":true}"); return; }
   JsonDocument e;
   e["error"] = f;
   std::string out;
@@ -948,11 +953,12 @@ void AppServer::sicherung_einspielen_(AsyncWebServerRequest *r) {
     return;
   }
   int ok = 0;
+  bool ex = this->experte_ok_(r);   // ohne Experten-Passwort bleiben Lesen/Experten unveraendert
   JsonDocument a;
   JsonArray fehler = a["fehler"].to<JsonArray>();
   for (JsonPair p : d["einstellungen"].as<JsonObject>()) {
     std::string f, id = p.key().c_str();
-    if (this->einstellung_setzen_(id, p.value(), f)) ok++;
+    if (this->einstellung_setzen_(id, p.value(), f, ex)) ok++;
     else fehler.add(id + ": " + f);
   }
   a["ok"] = true;
