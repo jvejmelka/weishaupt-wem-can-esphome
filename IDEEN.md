@@ -17,6 +17,7 @@ am selben Speicher, PV mit Hauskraftwerk.
 | [Anlage prüfen: ist alles richtig eingestellt?](#6-anlage-prüfen-ist-alles-richtig-eingestellt) | gering | keins | lohnt sich zuerst |
 | [Eigene Lese-Regeln in Home Assistant oder Node-RED](#7-eigene-lese-regeln-in-home-assistant-oder-node-red) | gering | gering | geht heute schon |
 | [Speichertemperatur oben](#8-speichertemperatur-oben) | gering bis mittel | gering | nur Näherungen, ohne Eingriff in den Speicher |
+| [Wandgerät für rund 75 € – Ziel: RG-kompatibel](#9-wandgerät-für-rund-75---ziel-rg-kompatibel) | mittel (Anzeige) bis hoch (RG-Nachbau) | gering (Anzeige) bis hoch (RG-Nachbau) | Anzeige und Bedienung machbar, RG-Nachbau erst nach Mitschnitt |
 
 Zuerst aber, womit das alles steht und fällt: den Messdaten.
 
@@ -178,7 +179,9 @@ verwirren. Deshalb nur als Experiment, mit Rückweg (Kabel oder Gerät abziehen)
 
 ### Gesucht: jemand mit Weishaupt-Raumgerät am Bus
 
-Wir haben **kein** Raumgerät und können deshalb nicht sehen, was es auf dem Bus sendet. Genau das
+> **Stand November 2026:** Ein WEM-RG2 2.1 ist inzwischen unterwegs zu uns; ein eigener Mitschnitt folgt. Weitere Mitschnitte (RG1, RF, andere Stände) bleiben willkommen.
+
+Wir hatten bisher **kein** Raumgerät und können deshalb nicht sehen, was es auf dem Bus sendet. Genau das
 wäre aber die Grundlage für diese Idee – und nebenbei für eine Raumaufschaltung aus eigenen Sensoren
 (Idee 3). Wer ein Weishaupt-Raumgerät am CAN-Bus seines WEM hat (Bedieneinheit mit Raumfühler) und
 dieses Board betreibt, könnte mit wenigen Mitschnitten helfen:
@@ -258,3 +261,50 @@ zu öffnen:
 
 Für die meisten Fragen reicht die Temperatur unten zusammen mit „Wärmepumpe läuft“: unten kalt heißt,
 dass viel gezapft wurde – und genau dann springt das Gas an.
+
+## 9. Wandgerät für rund 75 € – Ziel: RG-kompatibel
+
+Ein Weishaupt-Raumgerät kostet neu rund 300 €. Die Idee: Das **CAN-Board am Kessel** (dieses Projekt)
+übernimmt die Busseite, im Raum hängt nur ein **WLAN-Touchpanel** – kein zweites CAN-Board, kein
+Buskabel, keine 24 V im Zimmer.
+
+```
+Raum                                   Heizraum
+┌──────────────────────┐   WLAN/MQTT   ┌───────────────────────┐   CAN   ┌─────┐
+│ Touchpanel (ESP32-S3)│ ◄───────────► │ CAN-Board (dieses      │ ◄─────► │ WEM │
+│ + Funk-Raumfühler    │               │ Projekt) am Kesselbus  │         └─────┘
+└──────────────────────┘               └───────────────────────┘
+```
+
+| Teil | Wo | ca. Preis |
+|---|---|---|
+| CAN-Board (z. B. WeAct CAN485) | einmal am Kessel | 10–15 € |
+| 4"-Touchpanel ESP32-S3, 480×480, „86-Box“-Format (z. B. Guition ESP32-4848S040) | je Raum | ~25 € |
+| Bluetooth-Raumfühler (z. B. Shelly BLU H&T) – das Panel empfängt ihn selbst per BLE | je Raum | 15–20 € |
+| USB-Netzteile | Kessel + je Panel | je 5–8 € |
+| **erster Raum** | | **~60–75 €** |
+
+Preise sind grobe Richtwerte (Stand 11/2026), nicht geprüft.
+
+**Stufe 1 – Anzeige und Bedienung (machbar mit dem heutigen Stand):** Raumtemperatur und -feuchte,
+Kessel-, Vorlauf- und Warmwasserstatus, Taupunkt/Schimmelwarnung; Betriebsart und Warmwasser
+umschalten über den vorhandenen Weg der Firmware (CAN-Schalten mit Mindestabstand, s. README).
+Display nachts aus, an bei Berührung.
+
+**Stufe 2 – RG-kompatibel (Ziel, noch nicht belegt):** Das CAN-Board spielt gegenüber dem WEM ein
+Raumgerät und liefert den Raumwert des Panels bzw. Fühlers – echte Raumaufschaltung ohne Weishaupt-Gerät.
+Voraussetzungen und Haken:
+
+- erst ein **Mitschnitt eines echten Raumgeräts** (Anmeldung, Kennung, zyklische Werte, Antworten auf
+  Anfragen des WEM), s. Idee 4;
+- ein nachgebautes Raumgerät **sendet dauernd** – das widerspricht dem Grundsatz dieser Firmware
+  (keine Schreibserien, nichts aus Regeln heraus). Deshalb nur als eigener, ab Werk **ausgeschalteter**
+  Modus, nie an Knoten 2, mit Rückweg (Schalter aus = Bus wie vorher);
+- **WLAN-Ausfall** muss sauber enden: Das Board darf keinen veralteten Raumwert weiterschicken, sondern
+  verhält sich wie „Raumgerät fehlt“, damit der WEM witterungsgeführt weiterregelt;
+- der Fühler gehört **nicht** in das Panelgehäuse (Eigenwärme von Display und Chip, typ. +1–3 K).
+
+Beim Panel auf **ESP32-S3** achten (WLAN + BLE eingebaut); Varianten mit **ESP32-P4** haben kein eigenes
+Funkmodul. Mit „ohne Bodenschale“ ist nur das Panel gemeint (Strom über USB-C); die Variante mit
+Unterteil für 230 V gehört in die Hände einer Elektrofachkraft.
+
