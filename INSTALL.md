@@ -23,6 +23,38 @@ und – sobald GitHub Pages eingeschaltet ist – auf einer **Installationsseite
 Wer MQTT, Home Assistant oder eigene Pakete braucht, nimmt den langen Weg unten. Die CI baut das Release-Image
 auch bei jedem Push (Artefakt `firmware-release`) und prüft, dass keine Platzhalter-Zugangsdaten darin stehen.
 
+### Ohne Installationsseite: mit web.esphome.io (erprobt 11/2026 mit einem neuen WeAct-Board)
+
+So hat es mit einem Board frisch aus der Packung in wenigen Minuten geklappt:
+
+1. `weishaupt-wem-can.factory.bin` herunterladen (Release bzw. CI-Artefakt `firmware-release`) und mit
+   `SHA256SUMS` prüfen.
+2. Board per USB-C an den PC – das Kabel muss **Daten** können, nicht nur laden. Unter Windows meldet sich
+   der USB-Wandler als **„USB-Enhanced-SERIAL CH343 (COMx)“**; kommt nichts, fehlt der CH343-Treiber von WCH
+   oder das Kabel lädt nur. Prüfen in PowerShell (vorher/nachher):
+   ```powershell
+   $vorher = Get-PnpDevice -PresentOnly | Select-Object -ExpandProperty InstanceId
+   # Board einstecken, dann:
+   Get-PnpDevice -PresentOnly | Where-Object { $vorher -notcontains $_.InstanceId } | Format-Table Status, Class, FriendlyName
+   ```
+3. In Chrome oder Edge **https://web.esphome.io** öffnen, „Connect“. Chrome nennt den Port
+   **„USB Single Serial (COMx)“** – den nehmen, nicht Bluetooth-/COM1-Einträge.
+4. **Nicht** auf „Ersteinrichtung durchführen“ klicken – das installiert eine allgemeine ESPHome-Grundversion.
+   Stattdessen das Symbol **⬆ (Installieren aus Datei)**, die `.bin` wählen, „Gerät vorher löschen“ anhaken.
+   Hängt die Verbindung: **GPIO0** halten, **NRST** kurz drücken, GPIO0 loslassen, nochmal versuchen.
+5. Nach dem Flashen fragt die Seite per Improv gleich nach dem **WLAN** (Netz wählen, Passwort, „Connect“),
+   danach „Visit Device“. Den Hotspot `Weishaupt-WEM-CAN` braucht man dann nicht.
+6. In der App Benutzer, App- und Admin-Passwort festlegen, Assistent durchklicken, Experten-Passwort setzen.
+
+**Zweites Board in derselben Anlage** (z. B. zum Testen oder für ein Raumgerät): Der Assistent findet den WEM
+per Netzsuche – die gefundene Adresse **nicht übernehmen**. Es soll nur **ein** Board je Anlage den WEM über
+JSON ansprechen; der WEM verträgt keine zusätzlichen Abfragen und kann sich sonst bis zum Stromlos-Machen
+aufhängen. „Schalten über“ auf **CAN** lassen.
+
+Schalter auf dem WeAct-Board (rechts, links = OFF, rechts = ON): oben **120 Ω CAN** (ab Werk ON – am Heizungsbus
+mitten in der Leitung auf **OFF**, nur am Ende eines eigenen kurzen Busses ON), Mitte PUPD und unten 120 Ω RS485
+(werden nicht gebraucht). Versorgung wahlweise USB-C oder Klemme **VIN/GND 5–36 V**.
+
 ## 1. Was du brauchst
 
 | | |
