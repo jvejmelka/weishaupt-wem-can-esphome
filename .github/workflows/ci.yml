@@ -54,16 +54,19 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
+        id: py
         with:
           python-version: "3.12"
+      # Python-Patchversion im Cache-Schluessel: sonst zeigt der zwischengespeicherte CMake-Cache auf ein
+      # nicht mehr vorhandenes ninja (/opt/hostedtoolcache/Python/3.12.x) und der Build bricht ab (03.11.2026).
       - name: Cache PlatformIO und ESPHome-Build
         uses: actions/cache@v6
         with:
           path: |
             ~/.platformio
             .esphome
-          key: esphome-${{ env.ESPHOME_VERSION }}-${{ hashFiles('weishaupt-wem-can.yaml', 'pakete/**', 'components/**', 'register.yaml') }}
-          restore-keys: esphome-${{ env.ESPHOME_VERSION }}-
+          key: esphome-${{ env.ESPHOME_VERSION }}-py${{ steps.py.outputs.python-version }}-${{ hashFiles('weishaupt-wem-can.yaml', 'pakete/**', 'components/**', 'register.yaml') }}
+          restore-keys: esphome-${{ env.ESPHOME_VERSION }}-py${{ steps.py.outputs.python-version }}-
       - name: ESPHome installieren
         run: pip install "esphome==${ESPHOME_VERSION}"
       - name: Dummy-secrets.yaml aus der Vorlage
@@ -83,16 +86,19 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
+        id: py
         with:
           python-version: "3.12"
+      # Python-Patchversion im Cache-Schluessel: sonst zeigt der zwischengespeicherte CMake-Cache auf ein
+      # nicht mehr vorhandenes ninja (/opt/hostedtoolcache/Python/3.12.x) und der Build bricht ab (03.11.2026).
       - name: Cache PlatformIO und ESPHome-Build
         uses: actions/cache@v6
         with:
           path: |
             ~/.platformio
             release/.esphome
-          key: release-${{ env.ESPHOME_VERSION }}-${{ hashFiles('weishaupt-wem-can.yaml', 'pakete/**', 'components/**', 'register.yaml', 'werkzeuge/release_bauen.py') }}
-          restore-keys: release-${{ env.ESPHOME_VERSION }}-
+          key: release-${{ env.ESPHOME_VERSION }}-py${{ steps.py.outputs.python-version }}-${{ hashFiles('weishaupt-wem-can.yaml', 'pakete/**', 'components/**', 'register.yaml', 'werkzeuge/release_bauen.py') }}
+          restore-keys: release-${{ env.ESPHOME_VERSION }}-py${{ steps.py.outputs.python-version }}-
       - name: ESPHome installieren
         run: pip install "esphome==${ESPHOME_VERSION}"
       - name: Release-Konfiguration erzeugen (kein WLAN, keine Passwoerter, kein MQTT)
