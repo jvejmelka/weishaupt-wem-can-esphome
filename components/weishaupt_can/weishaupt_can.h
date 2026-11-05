@@ -23,6 +23,7 @@
 #include "esphome/components/time/real_time_clock.h"
 #endif
 #include "kern.h"
+#include "bruecke.h"
 #include "sd_karte.h"
 #include "dateisystem.h"
 #include "wem_netz.h"

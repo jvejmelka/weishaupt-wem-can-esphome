@@ -1,0 +1,53 @@
+# CAN-Bruecke ueber WLAN (Board an der Therme <-> Board mit Raumgeraet). Schalter ab Werk aus, nach jedem Neustart aus.
+# Nur fuer Versuche: siehe components/weishaupt_can/bruecke.h
+# ${bruecke_ziel} = IP der Gegenstelle, ${bruecke_log} = IP fuer den Mitschnitt ("" = keiner), ${bruecke_name} = Kuerzel im Mitschnitt
+switch:
+  - platform: template
+    name: "CAN-Bruecke (Experten)"
+    id: bruecke_an
+    optimistic: true
+    restore_mode: ALWAYS_OFF
+    on_turn_on:
+      - lambda: |-
+          bruecke::schnell().start();
+          bruecke::kanal("${bruecke_ziel}")->neu();
+          ESP_LOGW("bruecke", "EIN (${bruecke_name})");
+    on_turn_off:
+      - lambda: |-
+          bruecke::schnell().stop();
+          ESP_LOGW("bruecke", "AUS");
+
+canbus:
+  - id: !extend my_can_bus
+    rx_queue_len: 64
+    tx_queue_len: 32
+    on_frame:
+      - can_id: 0x000
+        can_id_mask: 0x000
+        then:
+          - lambda: |-
+              if (!id(bruecke_an).state || !bruecke::gueltig(can_id)) return;
+              bruecke::kanal("${bruecke_ziel}")->senden(can_id, remote_transmission_request, x);
+              bruecke::zaehler().vom_bus++;
+              bruecke::mitschnitt("${bruecke_log}", "${bruecke_name}")->frame('R', can_id, remote_transmission_request, x, millis());
+
+interval:
+  - interval: 1ms
+    then:
+      - lambda: |-
+          if (!id(bruecke_an).state) return;
+          auto *k = bruecke::kanal("${bruecke_ziel}");
+          auto *m = bruecke::mitschnitt("${bruecke_log}", "${bruecke_name}");
+          uint32_t cid; bool rtr; std::vector<uint8_t> d;
+          while (k->holen(cid, rtr, d)) {
+            if (!bruecke::gueltig(cid)) continue;
+            bool ok = id(my_can_bus)->send_data(cid, false, rtr, d) == canbus::ERROR_OK;
+            if (ok) bruecke::zaehler().zum_bus++; else bruecke::zaehler().can_fehler++;
+            m->frame(ok ? 'T' : 'X', cid, rtr, d, millis());
+          }
+          m->takt(millis());
+  - interval: 10s
+    then:
+      - lambda: |-
+          if (!id(bruecke_an).state) return;
+          bruecke::statistik(bruecke::mitschnitt("${bruecke_log}", "${bruecke_name}"), millis());
