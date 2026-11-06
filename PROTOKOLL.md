@@ -891,6 +891,75 @@ Warmwasser Ein auf 50 °C, bei Aus auf 23 °C. „Warmwasser aktiv“ (Kesselsta
 
 Wie das Objekt `0x2A20`/2 gefunden wurde, steht in [Abschnitt 7](#7-neue-objekte-finden-scan-und-differenz).
 
+## 10a. Raumgerät WEM-RG2 am Bus (Mitschnitt, November 2026)
+
+Mitgeschnitten an einer Anlage mit WTC-GW 15-B und einem gebrauchten WEM-RG2 2.1 (Software
+453.210), nur lesend am Bus. Das Board hat dabei nichts gesendet. **Offen:** Das RG2 hat im
+Mitschnitt nur gelesen. Wie es einen geänderten Wert schreibt, ist noch nicht beobachtet.
+
+### Aufnahme in die Anlage
+
+Das RG2 meldete sich als Knoten 4 (`0x704`, SDO `0x604`/`0x584`, Kanal zum WEM `0x6C4`/`0x684`).
+Es braucht DC-Versorgung (Anleitung 15–30 V, Aufdruck am Sockel 12–26 V, höchstens 0,7 W) und zeigt ohne
+Bus „Waiting for commissioning ready“. Die Aufnahme lief **erst nach einem Kaltstart von Therme und RG2
+gemeinsam**: Der WEM fragt `0x1018/1`, startet nach „System hat neue Geräte erkannt“ den Assistenten, und danach steht
+Knoten 4 mit seinen Modulen (`TERMINAL1`, `GROUND2`) in der `systable.csv`.
+
+Läuft das RG2 bei einem Neustart des WEM einfach weiter, antwortete es bei uns nicht auf diese Abfrage und
+verlor seine Knotenadresse (LSS-Abfrage danach: `FF`). Das war ein einzelner Versuch über eine WLAN-Brücke;
+die Ursache ist nicht bewiesen.
+
+Nach der Aufnahme überträgt der WEM ein **Menü-Paket von rund 1,6 MB** per SDO-Block auf `0x20F4/0`
+(`604: C6 F4 20 00 00 10 00 00`, Blöcke zu 4096 Byte) mit Texten in vielen Sprachen und Parametertabellen. Das
+dauerte rund 25 Minuten bei bis zu 16.000 Telegrammen pro Minute. Der Inhalt gehört Weishaupt und steht deshalb nicht hier.
+
+### Lesen über 0x5E00
+
+Das RG2 bestellt Werte mit einem geteilten SDO-Schreiben auf `0x5E00/4`, der WEM liefert sie mit einem geteilten
+SDO-Schreiben auf `0x5E00/1`:
+
+```
+6C4 → WEM   Bestellung   01 MI MX OXlo OXhi OS 04 <Zähler> 00
+604 → RG2   Lieferung    02 MI MX OXlo OXhi OS 00 xx xx <Wert>
+```
+
+Der Wert ist 1, 2 oder 4 Byte (little endian) oder eine Zeichenkette. **Dieselbe Objektnummer bedeutet je MI etwas anderes**:
+`0x253E` ist bei MI 2 das Zeitprogramm 1, bei MI 9 die Statistik.
+
+| MI | Objekt/Sub | Bedeutung | Skalierung | Geprüft gegen |
+|---|---|---|---|---|
+| 1 | `0x2562`/2, 3 | Uhrzeit Stunde, Minute | 1 | RG2 |
+| 1 | `0x2563`/2–5 | Jahr, Monat, Tag, Wochentag | 1 | RG2 |
+| 1 | `0x26B1`/2 | Außentemperatur | 0,1 °C | Portal |
+| 1 | `0x27B9`/2, `0x27BA`/2 | Außentemperatur Minimum, Maximum (ein Abgleich) | 0,1 °C | Portal |
+| 2 | `0x2507`/2 | Vorlauf Heizkreis | 0,1 °C | Portal |
+| 2 | `0x2533`/2 | Betriebsart (2 = Zeitprogramm 1) | 1 | RG2 |
+| 2 | `0x2539`, `0x253A`, `0x253B` | Raumsoll Absenk, Normal, Komfort; Sub 2 Wert, 3 Min, 4 Max | 0,1 °C | RG2, Portal |
+| 2 | `0x254B`/2–4 | Heizkurve Steilheit, Min, Max | 0,1 | Portal |
+| 2 | `0x25AD`/2–4 | Heizkurve Parallelverschiebung, Min, Max | 0,1 K | Portal |
+| 2 | `0x257B`/2–4 | So/Wi-Grenze, Min, Max | 0,1 °C | Portal |
+| 2 | `0x2582`/2 | So/Wi-Funktion | 0/1 | Portal |
+| 2 | `0x2104`/4, 3: `0x2105`/4 | Modulname (`\HZK0`, `\WW0`) | Text | RG2 |
+| 3 | `0x2529`/2 | Warmwasser | 0,1 °C | Portal |
+
+**Zeitprogramme (MI 2):** `0x253E`, `0x253F`, `0x2551` für Programm 1, 2, 3. Sub 2 = `0x0F`; je Tag ein Block von 16 Subs,
+Montag ab Sub 4 (Sub 3 Kennwert `01`), jeder weitere Tag 16 höher, bis zu 10 Einträge. Jeder Eintrag ist 4 Byte: das untere
+Wort ist `Niveau << 12 | Startminute` mit Niveau 1 Absenk, 2 Normal, 3 Komfort. Das obere Wort war bei uns immer `0x3188`,
+seine Bedeutung ist offen. Beispiel: `0x2168` = Normal ab 06:00 (360 min), `0x1537` = Absenk ab 22:15. Das RG2 holt im
+Betrieb den heutigen Tag.
+
+**Statistik (MI 9, `0x253E`):** 4 Byte, Einheit 0,01 kWh, „Energie gesamt“: Sub 26–37 Tage, Sub 38–49 Monate, Sub 50–54 Jahre, jeweils
+neueste zuerst. Die Tage waren kurz nach Mitternacht noch nicht weitergerückt. Summen passen auf 0,01 kWh: Monat = Summe der Tage,
+Jahr = Summe der Monate plus laufender Vortag. **Diese Wärmemengen lagen bei uns über mehrere Jahre 20–50 % über dem Gaszähler
+(Hs)**, also physikalisch zu hoch; sie taugen nur zum Vergleich untereinander. Nach einem Neustart der Therme ist der laufende Tag
+weitgehend verloren (These aus einem Fall).
+
+### PDO 0x184
+
+Vom RG2 alle paar Sekunden: Byte 0–1 Raumtemperatur (0,1 °C), Byte 2–3 Raumfeuchte (0,1 %), Byte 4–5 bisher `0000`. Die Feuchte
+stimmte mit der Anzeige überein. Die Temperatur lag am Tisch in Ruhe rund 2 K über einem Vergleichsfühler und steigt beim
+Bedienen um bis zu 3 K; die Grenzwerte und der Leuchtring laufen nicht über den Bus.
+
 ## 11. Quellen
 
 - [MenkeC/Weishaupt-C3supermini](https://github.com/MenkeC/Weishaupt-C3supermini) – 50 kbit/s,

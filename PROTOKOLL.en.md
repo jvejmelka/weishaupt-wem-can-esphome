@@ -924,6 +924,68 @@ DHW on, and at 23 °C with off. “Warmwasser aktiv” (DHW active; boiler statu
 
 How the object `0x2A20`/2 was found is described in [section 7](#7-finding-new-objects-scan-and-diff).
 
+## 10a. WEM-RG2 room unit on the bus (capture, November 2026)
+
+Captured on a WTC-GW 15-B with a used WEM-RG2 2.1 (software 453.210), listening only; the board
+sent nothing. **Open:** in the capture the RG2 only read. How it writes a changed value has not been observed yet.
+
+### Commissioning
+
+The RG2 appeared as node 4 (`0x704`, SDO `0x604`/`0x584`, channel to the WEM `0x6C4`/`0x684`). It needs a DC supply
+(manual 15–30 V, base label 12–26 V, at most 0.7 W) and shows “Waiting for commissioning ready” without a bus. Commissioning
+worked **only after a cold start of boiler and RG2 together**: the WEM queries `0x1018/1`, opens the assistant after “System has detected new
+devices”, and node 4 then appears in `systable.csv` with its modules (`TERMINAL1`, `GROUND2`).
+
+If the RG2 simply keeps running during a WEM restart, ours did not answer this query and lost its node address (LSS query afterwards:
+`FF`). This was a single attempt over a WLAN bridge; the cause is not proven.
+
+After commissioning the WEM transfers a **menu bundle of about 1.6 MB** by SDO block to `0x20F4/0`
+(`604: C6 F4 20 00 00 10 00 00`, blocks of 4096 bytes) with multi-language text and parameter tables. It took about 25 minutes at up to
+16,000 frames per minute. The content belongs to Weishaupt and is not reproduced here.
+
+### Reading through 0x5E00
+
+The RG2 orders values with a segmented SDO write to `0x5E00/4`; the WEM delivers them with a segmented SDO write to `0x5E00/1`:
+
+```
+6C4 → WEM   order      01 MI MX OXlo OXhi OS 04 <counter> 00
+604 → RG2   delivery   02 MI MX OXlo OXhi OS 00 xx xx <value>
+```
+
+The value is 1, 2 or 4 bytes (little endian) or a string. **The same object number means something else per MI**: `0x253E` is time
+program 1 on MI 2 and the statistics on MI 9.
+
+| MI | Object/sub | Meaning | Scale | Checked against |
+|---|---|---|---|---|
+| 1 | `0x2562`/2, 3 | time hour, minute | 1 | RG2 |
+| 1 | `0x2563`/2–5 | year, month, day, weekday | 1 | RG2 |
+| 1 | `0x26B1`/2 | outside temperature | 0.1 °C | portal |
+| 1 | `0x27B9`/2, `0x27BA`/2 | outside temperature minimum, maximum (one comparison) | 0.1 °C | portal |
+| 2 | `0x2507`/2 | heating circuit flow | 0.1 °C | portal |
+| 2 | `0x2533`/2 | operating mode (2 = time program 1) | 1 | RG2 |
+| 2 | `0x2539`, `0x253A`, `0x253B` | room setpoint setback, normal, comfort; sub 2 value, 3 min, 4 max | 0.1 °C | RG2, portal |
+| 2 | `0x254B`/2–4 | heating curve slope, min, max | 0.1 | portal |
+| 2 | `0x25AD`/2–4 | heating curve parallel shift, min, max | 0.1 K | portal |
+| 2 | `0x257B`/2–4 | summer/winter limit, min, max | 0.1 °C | portal |
+| 2 | `0x2582`/2 | summer/winter function | 0/1 | portal |
+| 2 | `0x2104`/4, 3: `0x2105`/4 | module name (`\HZK0`, `\WW0`) | text | RG2 |
+| 3 | `0x2529`/2 | hot water | 0.1 °C | portal |
+
+**Time programs (MI 2):** `0x253E`, `0x253F`, `0x2551` for programs 1, 2, 3. Sub 2 = `0x0F`; one block of 16 subs per day, Monday from sub 4
+(sub 3 marker `01`), each further day 16 higher, up to 10 entries. Each entry has 4 bytes: the lower word is `level << 12 | start minute`
+with level 1 setback, 2 normal, 3 comfort. The upper word was always `0x3188` here; its meaning is open. Example: `0x2168` = normal from
+06:00 (360 min), `0x1537` = setback from 22:15. In operation the RG2 fetches today’s block.
+
+**Statistics (MI 9, `0x253E`):** 4 bytes, unit 0.01 kWh, “energy total”: subs 26–37 days, 38–49 months, 50–54 years, newest first. Shortly
+after midnight the days had not moved on yet. Sums match to 0.01 kWh: month = sum of days, year = sum of months plus the running previous day. **Over several
+years these heat values were 20–50 % above our gas meter (gross calorific value)**, which is physically too high; use them for comparison only. After a
+boiler restart the running day is largely lost (hypothesis from one case).
+
+### PDO 0x184
+
+From the RG2 every few seconds: bytes 0–1 room temperature (0.1 °C), bytes 2–3 room humidity (0.1 %), bytes 4–5 `0000` so far. Humidity matched the
+display. At rest on a desk the temperature was about 2 K above a reference sensor and rises up to 3 K during operation; the limits and the light ring do not use the bus.
+
 ## 11. Sources
 
 - [MenkeC/Weishaupt-C3supermini](https://github.com/MenkeC/Weishaupt-C3supermini) – 50 kbit/s,
