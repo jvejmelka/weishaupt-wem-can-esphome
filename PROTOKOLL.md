@@ -956,7 +956,7 @@ weitgehend verloren (These aus einem Fall).
 
 ### PDO 0x184
 
-Vom RG2 alle paar Sekunden: Byte 0–1 Raumtemperatur (0,1 °C), Byte 2–3 Raumfeuchte (0,1 %), Byte 4–5 bisher `0000`. Die Feuchte
+Das RG2 sendet von sich aus, ohne Anfrage: bei einer Änderung, frühestens nach 1 s, sonst etwa einmal pro Minute. Byte 0–1 Raumtemperatur (0,1 °C), Byte 2–3 Raumfeuchte (0,1 %), Byte 4–5 bisher `0000`. Die Feuchte
 stimmte mit der Anzeige überein. Die Temperatur lag am Tisch in Ruhe rund 2 K über einem Vergleichsfühler und steigt beim
 Bedienen um bis zu 3 K; die Grenzwerte und der Leuchtring laufen nicht über den Bus.
 

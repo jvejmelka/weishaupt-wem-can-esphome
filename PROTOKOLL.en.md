@@ -983,7 +983,7 @@ boiler restart the running day is largely lost (hypothesis from one case).
 
 ### PDO 0x184
 
-From the RG2 every few seconds: bytes 0–1 room temperature (0.1 °C), bytes 2–3 room humidity (0.1 %), bytes 4–5 `0000` so far. Humidity matched the
+The RG2 sends this on its own, without a request: on a change, after 1 s at the earliest, otherwise about once a minute. Bytes 0–1 room temperature (0.1 °C), bytes 2–3 room humidity (0.1 %), bytes 4–5 `0000` so far. Humidity matched the
 display. At rest on a desk the temperature was about 2 K above a reference sensor and rises up to 3 K during operation; the limits and the light ring do not use the bus.
 
 ## 11. Sources
