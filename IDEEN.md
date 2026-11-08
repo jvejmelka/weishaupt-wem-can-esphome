@@ -179,7 +179,7 @@ verwirren. Deshalb nur als Experiment, mit Rückweg (Kabel oder Gerät abziehen)
 
 ### Gesucht: jemand mit Weishaupt-Raumgerät am Bus
 
-> **Stand November 2026:** Ein WEM-RG2 2.1 ist inzwischen unterwegs zu uns; ein eigener Mitschnitt folgt. Weitere Mitschnitte (RG1, RF, andere Stände) bleiben willkommen.
+> **Stand 08.11.2026:** Ein gebrauchtes WEM-RG2 2.1 läuft bei uns, auch über eine WLAN-Brücke vom Schreibtisch aus. Aufnahme, Lesen und Schreiben sind mitgeschnitten und entschlüsselt: [PROTOKOLL.md, 10a](PROTOKOLL.md#10a-raumgerät-wem-rg2-am-bus-mitschnitt-november-2026) und [10b](PROTOKOLL.md#10b-can-brücke-über-wlan-versuch-zweig-bruecke). Weitere Mitschnitte (RG1, WEM-RF, andere Stände, mehrere Raumgeräte, Raumfühler zugeordnet) bleiben willkommen.
 
 Wir hatten bisher **kein** Raumgerät und können deshalb nicht sehen, was es auf dem Bus sendet. Genau das
 wäre aber die Grundlage für diese Idee – und nebenbei für eine Raumaufschaltung aus eigenen Sensoren
@@ -295,8 +295,13 @@ Display nachts aus, an bei Berührung.
 Raumgerät und liefert den Raumwert des Panels bzw. Fühlers – echte Raumaufschaltung ohne Weishaupt-Gerät.
 Voraussetzungen und Haken:
 
-- erst ein **Mitschnitt eines echten Raumgeräts** (Anmeldung, Kennung, zyklische Werte, Antworten auf
-  Anfragen des WEM), s. Idee 4;
+- ~~erst ein Mitschnitt eines echten Raumgeräts~~ – liegt seit November 2026 vor
+  ([PROTOKOLL.md, 10a](PROTOKOLL.md#10a-raumgerät-wem-rg2-am-bus-mitschnitt-november-2026)). Ein **virtuelles RG2** müsste
+  nachbilden: Lebenszeichen `0x704`, Raumwert per PDO `0x184` (Temperatur und Feuchte), Bestellungen und Schreibaufträge
+  über `0x5E00`, die Antwort auf `0x1018/1` beim Start des WEM und die Quittung auf `0x20F0`. Der Raumwert käme dann aus
+  einem kalibrierten Fühler (z. B. Shelly BLU H&T) statt aus dem Gehäuse eines Geräts. Offen: wie der WEM ein Raumgerät
+  einem Heizkreis zuordnet, ob mehrere an einem Heizkreis gehen und was er mit dem Raumwert macht, sobald ein
+  Raumfühler zugeordnet ist;
 - ein nachgebautes Raumgerät **sendet dauernd** – das widerspricht dem Grundsatz dieser Firmware
   (keine Schreibserien, nichts aus Regeln heraus). Deshalb nur als eigener, ab Werk **ausgeschalteter**
   Modus, nie an Knoten 2, mit Rückweg (Schalter aus = Bus wie vorher);

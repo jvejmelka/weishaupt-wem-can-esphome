@@ -894,8 +894,9 @@ Wie das Objekt `0x2A20`/2 gefunden wurde, steht in [Abschnitt 7](#7-neue-objekte
 ## 10a. Raumgerät WEM-RG2 am Bus (Mitschnitt, November 2026)
 
 Mitgeschnitten an einer Anlage mit WTC-GW 15-B und einem gebrauchten WEM-RG2 2.1 (Software
-453.210), nur lesend am Bus. Das Board hat dabei nichts gesendet. **Offen:** Das RG2 hat im
-Mitschnitt nur gelesen. Wie es einen geänderten Wert schreibt, ist noch nicht beobachtet.
+453.210). Zuerst nur lesend am Bus; am 08.11.2026 lief das RG2 über die WLAN-Brücke (Abschnitt 10b), und am RG2
+wurden gezielt Werte verstellt und wieder zurückgestellt, um die Schreibseite zu sehen. Das Board selbst hat dabei
+nichts geschrieben, es hat nur die Frames des RG2 weitergereicht.
 
 ### Aufnahme in die Anlage
 
@@ -956,9 +957,115 @@ weitgehend verloren (These aus einem Fall).
 
 ### PDO 0x184
 
-Das RG2 sendet von sich aus, ohne Anfrage: bei einer Änderung, frühestens nach 1 s, sonst etwa einmal pro Minute. Byte 0–1 Raumtemperatur (0,1 °C), Byte 2–3 Raumfeuchte (0,1 %), Byte 4–5 bisher `0000`. Die Feuchte
-stimmte mit der Anzeige überein. Die Temperatur lag am Tisch in Ruhe rund 2 K über einem Vergleichsfühler und steigt beim
-Bedienen um bis zu 3 K; die Grenzwerte und der Leuchtring laufen nicht über den Bus.
+Das RG2 sendet von sich aus, ohne Anfrage: bei einer Änderung, frühestens nach 1 s, sonst etwa einmal pro Minute.
+Byte 0–1 Raumtemperatur (0,1 °C, mit Vorzeichen), Byte 2–3 Raumfeuchte (0,1 %), Byte 4–5 meist `0000`, zeitweise
+veränderlich (nach einem Start zum Beispiel von `0x0352` in Schritten von 50 fallend, sonst langsam steigend und fallend);
+die Bedeutung ist offen.
+
+Die **Korrektur Raumfühler** im RG2-Menü wirkt auf den gesendeten Wert (−0,5 K → Byte 0–1 um 5 kleiner), die Feuchte wird
+dabei auf die korrigierte Temperatur umgerechnet. Sie geht nicht über den Bus, ebenso wenig Helligkeit, Nachtmodus,
+Grenzwerte und Leuchtring. Ohne Korrektur lag die Temperatur des gebrauchten RG2 2–4 K über einem Vergleichsfühler im
+selben Raum; in einer geschlossenen Kunststoffbox zusammen mit Board und Spannungswandler stieg die Abweichung langsam
+(Eigenerwärmung vermutet). Ist im WEM kein Raumfühler zugeordnet, regelt er weiter nur nach der Außentemperatur – der
+Raumwert ändert dann das Vorlaufsoll nicht.
+
+### Schreiben über 0x5E00
+
+Ein geänderter Wert geht denselben Weg wie eine Bestellung, nur mit Kennbyte `03`; der WEM quittiert mit `04`:
+
+```
+6C4 → WEM   Auftrag     03 MI MX OXlo OXhi OS 04 <Zähler> 00 <Wert>
+604 → RG2   Quittung    04 MI MX OXlo OXhi OS 00 00 00
+```
+
+Kennbytes: `01` Lesen, `02` Lieferung, `03` Schreiben, `04` Schreiben bestätigt. Der Wert ist little endian, 1 oder 2 Byte
+je nach Objekt (Auftrag 10 oder 11 Byte). Beispiel Raumsoll Normal auf 20,5 °C:
+`03 02 00 3A 25 02 04 00 00 CD 00` → Quittung `04 02 00 3A 25 02 00 00 00`.
+
+Ein Bestätigen am RG2 ergibt **einen** Auftrag mit dem Endwert; Zwischenschritte beim Drehen werden nicht geschrieben.
+Party und Urlaub schreiben beim Bestätigen den ganzen Satz hintereinander; der Zähler zählt dabei bis `00` herunter, der
+letzte Auftrag ist die Funktion selbst.
+
+| MI | Objekt/Sub | Bedeutung | Werte |
+|---|---|---|---|
+| 2 | `0x2539`/2, `0x253A`/2, `0x253B`/2 | Raumsoll Absenk, Normal, Komfort | 0,1 °C; Grenzen verschachtelt (Sub 3/4 = Nachbarwert), Absenk ab −100,0, Komfort bis 300,0 |
+| 2 | `0x2533`/2 | Betriebsart Heizkreis | 1 Byte; 2 = Zeitprogramm 1, 3 = Zeitprogramm 2 |
+| 2 | `0x254B`/2 | Heizkurve Steilheit | 0,1; 100–250 |
+| 2 | `0x25AD`/2 | Heizkurve Parallelverschiebung | 0,1 K; −500…500. Das RG2 stellt in 0,5-K-Schritten, die Anzeige rundet auf ganze K (5 → „1 K“) |
+| 2 | `0x2587`/2 | Party/Heizpause Funktion | 0 Aus, 1 Ein |
+| 2 | `0x2589`/2 | Party Raumsoll-Stufe | 1 Absenk, 3 Komfort |
+| 2 | `0x2593`/2, /3 | Party Beginn Stunde, Minute | 1 |
+| 2 | `0x2588`/2, /3 | Party Ende Stunde, Minute | 1 |
+| 2 | `0x258A`/2 | Urlaub Funktion | 0 Aus, 1 Ein |
+| 2 | `0x2586`/2 | Urlaub Raumsoll | 0 Frost, 1 Absenk |
+| 2 | `0x2584`/2–4, `0x2585`/2–4 | Urlaub Beginn, Ende | Jahr − 2000, Monat, Tag |
+| 3 | `0x2539`/2 | Warmwasser-Soll Normal | 0,1 °C |
+| 3 | `0x2520`/2 | Betriebsart Warmwasser | 1 Ein, 2 Aus |
+| 3 | `0x2549`/2 | Warmwasser-Push | 1 = auslösen; ob der WEM den Wert zurücksetzt, ist offen |
+
+Jeder Wert wurde am RG2 verstellt, an der Quittung des WEM am Bus kontrolliert (Betriebsarten zusätzlich an der
+Anzeige der Firmware) und danach zurückgestellt. `0x2539` ist bei MI 2 das Raumsoll Absenk, bei MI 3 das Warmwasser-Soll. Das Party-Menü schlägt als
+Beginn die abgerundete Uhrzeit und als Ende drei Stunden später vor; im WEM kann anderes gespeichert sein.
+
+**Warmwasser-Programm (MI 3, `0x2580`):** gleicher Aufbau wie die Heiz-Zeitprogramme, das obere Wort war hier `0x3288`.
+Die Kennwerte vor jedem Tagesblock (Sub 3, 19, 35, …) waren `01` für die Gruppe Montag–Freitag und `02` für Samstag/Sonntag;
+das RG2 las nur den Montags- (Sub 4–13) und den Samstagsblock (Sub 84–93).
+
+### Geräteliste, Ausfall, Neustart
+
+- **Geräteliste** am Therme-Display öffnen: Der WEM schreibt jedes Mal `604: 23 F0 20 01 01 00 00 04` (`0x20F0`/1 =
+  `0x04000001`), das RG2 quittiert, und sein Leuchtring blinkt grün (Deutung: Gerät identifizieren). Dazu sendet der WEM
+  `011: 01 F0 20 00 00 00 00 04`.
+- **Start des RG2:** Es sendet `011: 01 F0 20 00 00 00 00 1C` und läuft `704:00` → `704:7F` → `704:05` in rund 20 s hoch.
+  Bei laufendem WEM behielt es seinen Knoten 4 ohne Eingriff – direkt am Bus wie über die Brücke.
+- **Ausfall des RG2:** 30 s nach dem letzten Lebenszeichen meldet der WEM `081: FF FF 01 02 05 DD 01 00` (`0x05DD` = 1501)
+  und löscht die Meldung, sobald das RG2 wieder da ist. In der Geräteliste steht es dann unter „Nicht aktive Geräte“.
+
+## 10b. CAN-Brücke über WLAN (Versuch, Zweig `bruecke`)
+
+Zwei Boards dieses Projekts verbinden zwei CAN-Busse über das WLAN: Board A hängt an der Therme am echten Bus, Board B
+steht mit dem Raumgerät am Schreibtisch und bildet mit ihm einen kleinen eigenen Bus. So lässt sich ein RG2 bedienen und
+mitschneiden, ohne ein Kabel in den Heizraum zu ziehen. Das RG2 braucht dort eine eigene Versorgung (DC 15–30 V, bei uns
+ein Aufwärtswandler auf 24 V).
+
+**Ablauf.** Jedes Board schickt jeden Frame, den es auf seinem eigenen Bus empfängt, per UDP (Port 47011) an die
+eingetragene Gegenstelle und sendet, was von dort kommt, auf seinen Bus. Angenommen werden nur Pakete von der Adresse der
+Gegenstelle. Ein Paket ist `'W' 'B' Folge id_lo id_hi(+0x80 = RTR) Länge d0…d7`; aus der Folgenummer zählt das Board
+verlorene Pakete. Alle 10 s entsteht eine Statuszeile (vom/zum Bus, verloren, Fehler, Bus-off), auf Wunsch geht ein
+Textmitschnitt per UDP (Port 47012) an einen Rechner. Der Rundlauf Bestellung → Lieferung lag bei 25–35 ms.
+
+**Schutz.** Die Brücke filtert nicht: Alles, was das RG2 sendet, kommt am WEM an, auch Schreibaufträge. Sie ist
+nur für Versuche gedacht. Board A sendet nur, wenn in den letzten 3 s etwas vom Bus kam – bei ausgeschalteter Therme
+stieg sonst der Fehlerzähler bis zum Bus-off. Board B nutzt diese Sperre nicht, damit Anfragen des WEM das stumme RG2
+erreichen. Beide versuchen alle 10 s einen Wiederanlauf, falls der CAN-Baustein im Bus-off steht.
+
+**Schalter** „CAN-Bruecke (Experten)“: Er schaltet sich nach jedem Neustart einmal selbst ein, sobald das WLAN steht. Von
+Hand ausgeschaltet bleibt er bis zum nächsten Neustart aus.
+
+**Einbinden** (Adressen sind Platzhalter):
+
+```yaml
+substitutions:
+  bruecke_ziel: "<ip-der-gegenstelle>"
+  bruecke_log: ""              # oder <ip-eines-rechners> für den Mitschnitt
+  bruecke_name: "B1"           # Kürzel im Mitschnitt
+  bruecke_nur_bei_bus: "true"  # Board an der Therme: true, Board am Raumgerät: false
+
+packages:
+  bruecke: !include pakete/bruecke.yaml
+```
+
+**Was geklappt hat:** Aufnahme des RG2, Lesen und Schreiben aller Werte aus Abschnitt 10a, Neustart des RG2 und Neustart
+von Board B jeweils ohne Eingriff.
+
+**Bekannte Probleme:**
+- Kaltstart der Therme bei laufender Brücke (05.11.2026, ältere Firmware): Das RG2 lief weiter, antwortete nicht auf
+  `0x1018/1` und verlor seine Knotenadresse (LSS: `FF`). Direkt am Bus, mit gemeinsamem Kaltstart, ging es. Mit dem
+  heutigen Stand noch nicht wiederholt.
+- Firmware-Update: Am Board an der Therme brach `esphome upload` (Port 3232) mehrfach mit „receiving chunk result:
+  Unknown error“ ab; das Log zeigte `canbus took a long time … (3–5 s)`. Das Hochladen im Browser (`/update`) klappte
+  jedes Mal. Ein Anhalten des CAN-Bausteins während des Updates (im Zweig) hat die Warnung nicht beseitigt; die Ursache
+  ist offen.
 
 ## 11. Quellen
 

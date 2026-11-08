@@ -202,7 +202,9 @@ Beispielanlage mit Wärmepumpe und PV (Sollwerte, Messungen, was man am Bus sieh
 Die Dokumente im Überblick:
 
 - [INSTALL.md](INSTALL.md) – Schritt für Schritt vom Board bis zur Handy-App
-- [PROTOKOLL.md](PROTOKOLL.md) – CAN-Bus, WEM-JSON, Abbildung und Fehlerbilder
+- [PROTOKOLL.md](PROTOKOLL.md) – CAN-Bus, WEM-JSON, Abbildung und Fehlerbilder; Raumgerät WEM-RG2 lesen und
+  schreiben ([10a](PROTOKOLL.md#10a-raumgerät-wem-rg2-am-bus-mitschnitt-november-2026)), CAN-Brücke über WLAN
+  ([10b](PROTOKOLL.md#10b-can-brücke-über-wlan-versuch-zweig-bruecke), Versuch im Zweig `bruecke`)
 - [REGELN.md](REGELN.md) – die Regeln R1–R5 und eigene Regeln: wann das Board Betriebsarten nachliest
 - [ANLAGE.md](ANLAGE.md) – Beispielanlage mit Wärmepumpe und PV
 - [IDEEN.md](IDEEN.md) – was sich noch bauen ließe: Datenbank und Grafana, H2-Sperre,
@@ -518,7 +520,7 @@ Offene Punkte, die sich nur an anderen Anlagen oder zu anderer Jahreszeit kläre
 | Heizkreis-Codes 6–8 (Komfort, Normal, Absenk) wurden nie am Bus gesehen | Mitschnitt einer Umschaltung auf diese Betriebsarten |
 | Umschaltungen über WEM-Portal oder WEM-App wurden nie mitgeschnitten | Rohmitschnitt während einer Portal-Umschaltung (s. [PROTOKOLL.md](PROTOKOLL.md#passiv-erkennen-was-geht-und-was-nicht)) |
 | Rückrechnung der Raumsoll-Stufe nur für AT 12,9–15,2 °C geeicht | Winterdaten (AT 0–8 °C, je Betriebsart 10–15 min stationär) |
-| Was sendet ein Weishaupt-Raumgerät? | Mitschnitte, s. [IDEEN.md, Idee 4](IDEEN.md#gesucht-jemand-mit-weishaupt-raumgerät-am-bus) |
+| WEM-RG2: Lesen und Schreiben ist mitgeschnitten ([PROTOKOLL.md, 10a](PROTOKOLL.md#10a-raumgerät-wem-rg2-am-bus-mitschnitt-november-2026)); offen sind andere Raumgeräte (RG1, WEM-RF), mehrere Raumgeräte und die Raumaufschaltung | Mitschnitte, s. [IDEEN.md, Idee 4](IDEEN.md#gesucht-jemand-mit-weishaupt-raumgerät-am-bus) |
 
 Bitte als [GitHub-Issue](https://github.com/jvejmelka/weishaupt-wem-can-esphome/issues), mit
 Zusammenfassung statt Rohdateien (die können Seriennummern und Gerätekennungen enthalten).

@@ -215,7 +215,9 @@ Example installation with heat pump and PV (setpoints, measurements, what you se
 The documents at a glance:
 
 - [INSTALL.md](INSTALL.md) (German) – step by step from the board to the phone app
-- [PROTOKOLL.en.md](PROTOKOLL.en.md) – CAN bus, WEM JSON, mapping and failure patterns
+- [PROTOKOLL.en.md](PROTOKOLL.en.md) – CAN bus, WEM JSON, mapping and failure patterns; WEM-RG2 room unit reading and
+  writing ([10a](PROTOKOLL.en.md#10a-wem-rg2-room-unit-on-the-bus-capture-november-2026)), CAN bridge over WLAN
+  ([10b](PROTOKOLL.en.md#10b-can-bridge-over-wlan-experiment-branch-bruecke), experiment in branch `bruecke`)
 - [REGELN.md](REGELN.md) (German) – rules R1–R5 and custom rules: when the board re-reads operating modes
 - [ANLAGE.md](ANLAGE.md) (German) – example installation with heat pump and PV
 - [IDEEN.md](IDEEN.md) (German) – what could still be built: database and Grafana, H2 lockout,
@@ -537,7 +539,7 @@ Open questions that can only be resolved on other installations or in a differen
 | Heating circuit codes 6–8 (Comfort, Normal, Setback) have never been seen on the bus | a capture of a switch to these operating modes |
 | Switching via the WEM portal or WEM app has never been captured | a raw capture during a portal switch (see [PROTOKOLL.en.md](PROTOKOLL.en.md#detecting-passively-what-works-and-what-does-not)) |
 | Back-calculation of the room setpoint level only calibrated for outdoor temperatures of 12.9–15.2 °C | winter data (outdoor temperature 0–8 °C, 10–15 min steady state per operating mode) |
-| What does a Weishaupt room unit send? | captures, see [IDEEN.md, idea 4](IDEEN.md#gesucht-jemand-mit-weishaupt-raumgerät-am-bus) (German) |
+| WEM-RG2: reading and writing are captured ([PROTOKOLL.en.md, 10a](PROTOKOLL.en.md#10a-wem-rg2-room-unit-on-the-bus-capture-november-2026)); open are other room units (RG1, WEM-RF), several room units and room compensation | captures, see [IDEEN.md, idea 4](IDEEN.md#gesucht-jemand-mit-weishaupt-raumgerät-am-bus) (German) |
 
 Please open a [GitHub issue](https://github.com/jvejmelka/weishaupt-wem-can-esphome/issues), with a
 summary rather than raw files (those may contain serial numbers and device identifiers).
