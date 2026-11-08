@@ -42,7 +42,8 @@ def main() -> None:
     y = ersetzen(y, "  zusatz: !include pakete/zusatz.yaml\n", "  # zusatz: braucht MQTT\n")
     y = ersetzen(y, "  name: ${geraet}\n", "  name: ${geraet}\n  name_add_mac_suffix: true\n")
     y = ersetzen(y, "  level: DEBUG\n", "  level: INFO\n")
-    y = re.sub(r"ota:\n  - platform: esphome\n    password: !secret ota_password\n", "ota:\n", y)
+    # esphome-OTA samt eingerueckter Unterpunkte (z. B. on_begin/on_error im Zweig bruecke) entfernen
+    y = re.sub(r"ota:\n  - platform: esphome\n    password: !secret ota_password\n(?:    .*\n)*", "ota:\n", y)
     y = ersetzen(y, """wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
