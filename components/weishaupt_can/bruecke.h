@@ -1,6 +1,6 @@
 #pragma once
 // CAN-Bruecke ueber WLAN (UDP) zwischen zwei Boards: echtes Raumgeraet am Tisch, WEM an der Therme.
-// Beide Richtungen leiten alles weiter (Juergen 05.11.2026). Sicherung ist die Herkunft: nur Frames, die das Board
+// Beide Richtungen leiten alles weiter (Entscheidung 05.11.2026). Sicherung ist die Herkunft: nur Frames, die das Board
 // auf seinem eigenen Bus empfangen hat, nur von der eingetragenen Gegenstelle. Dazu Zaehler und Mitschnitt.
 #include <cstdint>
 #include <cstdio>
@@ -40,8 +40,18 @@ struct Zaehler {
   uint32_t udp_verloren{0};  // Luecken in der Folgenummer
   uint32_t udp_fehler{0};    // sendto fehlgeschlagen
   uint32_t can_fehler{0};    // CAN-Senden abgelehnt
+  uint32_t gesperrt{0};      // nicht gesendet, weil der Bus still war
+  uint32_t bus_off{0};       // Bus-off erkannt und Wiederanlauf versucht
+  uint32_t letzter_empfang{0};
+  bool hat_empfang{false};
 };
 inline Zaehler &zaehler() { static Zaehler z; return z; }
+
+constexpr uint32_t BUS_AKTIV_MS = 3000;
+inline bool bus_aktiv(uint32_t jetzt) {
+  Zaehler &z = zaehler();
+  return z.hat_empfang && (uint32_t) (jetzt - z.letzter_empfang) < BUS_AKTIV_MS;
+}
 
 #ifndef BRUECKE_NUR_FILTER
 inline esphome::HighFrequencyLoopRequester &schnell() { static esphome::HighFrequencyLoopRequester h; return h; }
@@ -121,7 +131,7 @@ class Mitschnitt {
     memcpy(buf_ + len_, t, n); len_ += n; buf_[len_++] = '\n';
     if (!laeuft_) { laeuft_ = true; seit_ = ms; }
   }
-  void zeile(const char *t, uint32_t ms) { char b[260]; snprintf(b, sizeof(b), "%s %s", name_, t); text(b, ms); }
+  void zeile(const char *t, uint32_t ms) { char b[300]; snprintf(b, sizeof(b), "%s %s", name_, t); text(b, ms); }
   void takt(uint32_t ms) { if (laeuft_ && ms - seit_ >= 20) leeren(); }
   void leeren() {
     if (fd_ >= 0 && len_) ::lwip_sendto(fd_, buf_, len_, 0, (sockaddr *) &ziel_, sizeof(ziel_));
@@ -142,15 +152,31 @@ inline Mitschnitt *mitschnitt(const char *ziel, const char *name) {
   return &m;
 }
 
+// Firmware-Update laeuft: CAN-Baustein ist absichtlich gestoppt (sonst blockiert canbus beim Flash-Schreiben
+// die Hauptschleife > 5 s und das ESPHome-OTA bricht ab, 08.11.2026). Nicht wieder anwerfen.
+// Versuch: die Warnung "canbus took a long time" blieb danach (3-4 s); Wirkung unbelegt, Upload im Browser (/update) klappt.
+inline bool &ota_pause() { static bool p = false; return p; }
+inline void ota_beginn() { ota_pause() = true; twai_stop(); }
+inline void ota_fehler() { ota_pause() = false; twai_start(); }
+
+// Bus-off: der CAN-Baustein hat sich abgeschaltet und ist taub. Wiederanlauf statt auf den Neustart zu warten.
+inline void bus_off_beheben(uint32_t ms) {
+  if (ota_pause()) return;
+  twai_status_info_t st{};
+  if (twai_get_status_info(&st) != ESP_OK) return;
+  if (st.state == TWAI_STATE_BUS_OFF) { zaehler().bus_off++; twai_initiate_recovery(); }
+  else if (st.state == TWAI_STATE_STOPPED) { twai_start(); }
+}
+
 inline void statistik(Mitschnitt *m, uint32_t ms) {
   twai_status_info_t st{};
   bool ok = twai_get_status_info(&st) == ESP_OK;
   Zaehler &z = zaehler();
-  char t[220];
-  snprintf(t, sizeof(t), "STAT %lu vom_bus=%lu zum_bus=%lu udp_verloren=%lu udp_fehler=%lu can_fehler=%lu rx_verpasst=%ld rx_ueberlauf=%ld tx_fehler=%ld busfehler=%ld",
+  char t[260];
+  snprintf(t, sizeof(t), "STAT %lu vom_bus=%lu zum_bus=%lu udp_verloren=%lu udp_fehler=%lu can_fehler=%lu rx_verpasst=%ld rx_ueberlauf=%ld tx_fehler=%ld busfehler=%ld gesperrt=%lu bus_off=%lu",
            (unsigned long) ms, (unsigned long) z.vom_bus, (unsigned long) z.zum_bus, (unsigned long) z.udp_verloren,
            (unsigned long) z.udp_fehler, (unsigned long) z.can_fehler, ok ? (long) st.rx_missed_count : -1L,
-           ok ? (long) st.rx_overrun_count : -1L, ok ? (long) st.tx_failed_count : -1L, ok ? (long) st.bus_error_count : -1L);
+           ok ? (long) st.rx_overrun_count : -1L, ok ? (long) st.tx_failed_count : -1L, ok ? (long) st.bus_error_count : -1L, (unsigned long) z.gesperrt, (unsigned long) z.bus_off);
   m->zeile(t, ms); m->leeren();
 }
 #endif

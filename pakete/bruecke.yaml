@@ -1,6 +1,15 @@
-# CAN-Bruecke ueber WLAN (Board an der Therme <-> Board mit Raumgeraet). Schalter ab Werk aus, nach jedem Neustart aus.
+# CAN-Bruecke ueber WLAN (Board an der Therme <-> Board mit Raumgeraet).
+# Seit 08.11.2026: nach jedem Neustart schaltet sich die Bruecke
+# einmal selbst ein, sobald das WLAN steht. Von Hand ausschalten bleibt bis zum naechsten Neustart aus.
 # Nur fuer Versuche: siehe components/weishaupt_can/bruecke.h
-# ${bruecke_ziel} = IP der Gegenstelle, ${bruecke_log} = IP fuer den Mitschnitt ("" = keiner), ${bruecke_name} = Kuerzel im Mitschnitt
+# ${bruecke_ziel} = IP der Gegenstelle, ${bruecke_log} = IP fuer den Mitschnitt ("" = keiner), ${bruecke_name} = Kuerzel im Mitschnitt,
+# ${bruecke_nur_bei_bus} = true: nur senden, wenn kurz zuvor etwas vom Bus kam (Board an der Therme)
+globals:
+  - id: bruecke_auto_erledigt
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
 switch:
   - platform: template
     name: "CAN-Bruecke (Experten)"
@@ -26,12 +35,24 @@ canbus:
         can_id_mask: 0x000
         then:
           - lambda: |-
+              bruecke::zaehler().letzter_empfang = millis();
+              bruecke::zaehler().hat_empfang = true;
               if (!id(bruecke_an).state || !bruecke::gueltig(can_id)) return;
               bruecke::kanal("${bruecke_ziel}")->senden(can_id, remote_transmission_request, x);
               bruecke::zaehler().vom_bus++;
               bruecke::mitschnitt("${bruecke_log}", "${bruecke_name}")->frame('R', can_id, remote_transmission_request, x, millis());
 
 interval:
+  - interval: 5s  # Bruecke nach Neustart einmal selbst einschalten
+    then:
+      - if:
+          condition:
+            and:
+              - wifi.connected:
+              - lambda: 'return !id(bruecke_auto_erledigt);'
+          then:
+            - lambda: 'id(bruecke_auto_erledigt) = true;'
+            - switch.turn_on: bruecke_an
   - interval: 1ms
     then:
       - lambda: |-
@@ -41,6 +62,8 @@ interval:
           uint32_t cid; bool rtr; std::vector<uint8_t> d;
           while (k->holen(cid, rtr, d)) {
             if (!bruecke::gueltig(cid)) continue;
+            // Therme aus/Bus still: nicht senden, sonst Fehlerzaehler bis Bus-off (05.11.2026)
+            if (${bruecke_nur_bei_bus} && !bruecke::bus_aktiv(millis())) { bruecke::zaehler().gesperrt++; continue; }
             bool ok = id(my_can_bus)->send_data(cid, false, rtr, d) == canbus::ERROR_OK;
             if (ok) bruecke::zaehler().zum_bus++; else bruecke::zaehler().can_fehler++;
             m->frame(ok ? 'T' : 'X', cid, rtr, d, millis());
@@ -49,5 +72,6 @@ interval:
   - interval: 10s
     then:
       - lambda: |-
+          bruecke::bus_off_beheben(millis());
           if (!id(bruecke_an).state) return;
           bruecke::statistik(bruecke::mitschnitt("${bruecke_log}", "${bruecke_name}"), millis());

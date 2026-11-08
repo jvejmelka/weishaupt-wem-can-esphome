@@ -96,8 +96,20 @@ logger:
 ota:
   - platform: esphome
     password: !secret ota_password
+    on_begin:
+      then:
+        - lambda: 'bruecke::ota_beginn();'
+    on_error:
+      then:
+        - lambda: 'bruecke::ota_fehler();'
   # Update im Browser (ab v40): Einstellungsseite oder /experten, Benutzer admin + Experten-Passwort (Digest, ab v42)
   - platform: web_server
+    on_begin:
+      then:
+        - lambda: 'bruecke::ota_beginn();'
+    on_error:
+      then:
+        - lambda: 'bruecke::ota_fehler();'
 
 wifi:
   ssid: !secret wifi_ssid
