@@ -37,8 +37,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "${GITHUB_REF_NAME}" --prerelease --title "${GITHUB_REF_NAME}" \
-            --notes "Firmware ohne Zugangsdaten. Installation: siehe Installationsseite und INSTALL.md. Pruefsummen in SHA256SUMS." \
-            ausgabe/weishaupt-wem-can.factory.bin ausgabe/weishaupt-wem-can.ota.bin ausgabe/SHA256SUMS
+            --notes "Firmware ohne Zugangsdaten. Installation: siehe Installationsseite und INSTALL.md. Pruefsummen in SHA256SUMS. Lizenz: Quelltext MIT (LICENSE.txt); die Firmware-Dateien enthalten ESPHome und stehen als Ganzes unter der GPL-3.0, Quelltext ist dieses Repository an diesem Tag (LIZENZEN-DRITTER.md)." \
+            ausgabe/weishaupt-wem-can.factory.bin ausgabe/weishaupt-wem-can.ota.bin ausgabe/SHA256SUMS ausgabe/LICENSE.txt ausgabe/LIZENZEN-DRITTER.md
       - name: Installationsseite zusammenstellen
         run: |
           mkdir -p seite

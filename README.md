@@ -543,4 +543,8 @@ Registerwissen stammt außerdem aus den unter „Quellen“ genannten Projekten.
 
 ## Lizenz
 
-[MIT](LICENSE) – © 2026 Juergen Vejmelka. Verwendung auf eigene Gefahr; keine Verbindung zu Weishaupt.
+[MIT](LICENSE) – © 2026 Juergen Vejmelka.
+Verwendung auf eigene Gefahr; keine Verbindung zu Weishaupt.
+
+Was von anderen stammt, steht in [LIZENZEN-DRITTER.md](LIZENZEN-DRITTER.md). Die fertigen Firmware-Dateien (`*.bin`)
+enthalten ESPHome und werden deshalb als Ganzes unter der GPL-3.0 weitergegeben; der Quelltext dazu ist dieses Repository.

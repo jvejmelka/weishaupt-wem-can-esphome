@@ -562,4 +562,8 @@ Further register knowledge comes from the projects listed under "Sources".
 
 ## License
 
-[MIT](LICENSE) – © 2026 Juergen Vejmelka. Use at your own risk; no affiliation with Weishaupt.
+[MIT](LICENSE) – © 2026 Juergen Vejmelka.
+Use at your own risk; no affiliation with Weishaupt.
+
+Third-party parts are listed in [LIZENZEN-DRITTER.md](LIZENZEN-DRITTER.md) (German). The prebuilt firmware files (`*.bin`)
+contain ESPHome and are therefore distributed as a whole under the GPL-3.0; the corresponding source is this repository.
