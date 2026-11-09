@@ -1018,7 +1018,7 @@ das RG2 las nur den Montags- (Sub 4–13) und den Samstagsblock (Sub 84–93).
   `011: 01 F0 20 00 00 00 00 04`.
 - **Start des RG2:** Es sendet `011: 01 F0 20 00 00 00 00 1C` und läuft `704:00` → `704:7F` → `704:05` in rund 20 s hoch.
   Bei laufendem WEM behielt es seinen Knoten 4 ohne Eingriff – direkt am Bus wie über den CAN-Tunnel.
-- **Ausfall des RG2:** 30 s nach dem letzten Lebenszeichen meldet der WEM `081: FF FF 01 02 05 DD 01 00` (`0x05DD` = 1501)
+- **Ausfall des RG2:** 30 s nach dem letzten Lebenszeichen meldet der WEM `081: FF FF 01 02 05 DD 01 00` (`0x05DD` = **Warnung 1501**, Verbindung zu RG2 Nr. 1 unterbrochen, s. Abschnitt 10c)
   und löscht die Meldung, sobald das RG2 wieder da ist. In der Geräteliste steht es dann unter „Nicht aktive Geräte“.
 
 ## 10b. CAN-Tunnel über WLAN (Versuch, Zweig `can-tunnel`)
@@ -1069,6 +1069,59 @@ von Board B jeweils ohne Eingriff.
   Unknown error“ ab; das Log zeigte `canbus took a long time … (3–5 s)`. Das Hochladen im Browser (`/update`) klappte
   jedes Mal. Ein Anhalten des CAN-Bausteins während des Updates (im Zweig) hat die Warnung nicht beseitigt; die Ursache
   ist offen.
+
+## 10c. Störmeldungen am Bus und Fehlercodes
+
+Der WEM meldet Warnungen und Fehler **von sich aus** als CANopen-Notfalltelegramm (EMCY) auf `0x081`, der Kessel auf
+`0x082`. Die Firmware hört nur zu und zeigt die Meldung als „Meldung WEM“ bzw. „Meldung Kessel“ an, zum Beispiel
+„W 1501: Verbindung zum Raumgerät RG2 unterbrochen (Teilnehmer 1)“. Angefragt wird dafür nichts.
+
+```
+081: FF FF 01 02 05 DD 01 00   Meldung: Fehlercode FFFF, Register 01, Art 02 = Warnung, Nummer 0x05DD = 1501
+081: 00 00 01 00 00 00 01 00   erledigt (Fehlercode 0000)
+```
+
+Byte 0–1 Fehlercode (`0000` = keine Meldung), Byte 3 die Art, Byte 4–5 die Nummer (big endian). Belegt ist bisher nur
+die Warnung 1501 (RG2 abgezogen, mehrfach). Dass Art `01` ein Fehler ist, ist eine **Annahme** nach dem Fehlerblock
+`0x273F` (so liest ihn kraiz/hassio-weishaupt); einen echten Fehler haben wir am Bus noch nicht gesehen. Die
+Bedeutung von Byte 6 ist offen. Vom Kessel kamen bisher nur `082: 00 … 01` und `082: 00 … 88` ohne Fehlercode.
+
+**Kommunikationswarnungen:** Die Nummern 1101–1925 stehen für eine unterbrochene Verbindung zu einem Busteilnehmer, die
+letzten beiden Stellen sind seine Nummer: 1101–1112 Systemgerät, 1201–1212 Feuerungsautomat, 1302–1325 EM Heizkreis,
+1401 EM Solar, **1501–1532 Raumgerät RG2**, 1601–1632 Raumfühler RF, 1701–1732 Raumgerät RG1, 1800 EM Kaskade,
+1902–1925 EM Warmwasser. Ein WEM ist also auf bis zu 32 RG2 und 32 Raumfühler ausgelegt.
+
+**Texte und Urheberrecht.** Nummern und Bedeutung stammen aus Kapitel 10 der Montage- und Betriebsanleitung
+„Gas-Brennwertgerät WTC-GW 15 … 32-B“, die Weishaupt öffentlich bereitstellt:
+[Deutsch, 83307201](https://www.weishaupt.de/uploads/tx_weishaupt_documents/documents/83307201.pdf),
+[Englisch, 83307202](https://www.weishaupt.de/uploads/tx_weishaupt_documents/documents/83307202.pdf).
+Die Texte der Anleitung sind urheberrechtlich geschützt (Rechte bei Max Weishaupt SE). Deshalb enthält dieses Repo
+**keine Originaltexte**, sondern in [`fehlercodes.yaml`](fehlercodes.yaml) eigene Kurztexte auf Deutsch und Englisch,
+die nur die Ursache beschreiben. Was zu tun ist, steht in der Anleitung; die meisten Punkte darf nur eine Fachkraft
+beheben.
+
+**Originaltexte für die eigene Anlage:** Wer lieber den Wortlaut der Anleitung sieht, lädt sie selbst herunter und
+erzeugt damit lokale Dateien:
+
+```
+python3 werkzeuge/fehlertexte_aus_handbuch.py --header 83307201.pdf
+```
+
+Das Werkzeug (braucht `pdftotext` aus poppler-utils) liest die Tabellen „Warncode“ und „Fehlercode“ aus und schreibt
+`fehlertexte-original.json`, mit `--header` zusätzlich `components/weishaupt_can/fehlertexte_original.h`. Zwei Wege:
+
+- **Ohne eigenen Bau** (auch mit dem Release-Image): Einstellungsseite → „Störmeldungen“ → `fehlertexte-original.json`
+  mit Experten-Passwort einspielen (nur im Heimnetz). Das Board prüft die Datei, legt sie ins Dateisystem und nimmt sofort
+  die Originaltexte; „Zurück auf eigene Texte“ löscht sie wieder. Die Infoseite zeigt, welche Texte gelten.
+- **Beim Bau:** mit `--header` erzeugen und die Firmware bauen.
+
+Was in der Datei fehlt, zeigt das Board weiter mit den eigenen Texten. Englisch: in der Haupt-YAML `meldungen_englisch: "true"` setzen und die
+englische Anleitung nehmen. Die englische Ausgabe (2018) kennt sechs neuere Codes nicht (W 7, W 8, W 1101, W 1302,
+W 1800, W 1902); für sie bleibt der eigene englische Text. Beide Dateien stehen in `.gitignore` und gehören **nicht** in ein
+öffentliches Repo.
+
+Dank an [cg089](https://github.com/cg089/weishaupt-wem-can-esphome/tree/olimex-esp32-evb) für die erste Zuordnung der
+Kommunikationswarnungen und an [kraiz](https://github.com/kraiz/hassio-weishaupt) für den Aufbau des Fehlerblocks.
 
 ## 11. Quellen
 

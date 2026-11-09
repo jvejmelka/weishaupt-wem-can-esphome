@@ -253,6 +253,7 @@ TEST(zugang_geheim_und_extern) {
   PRUEFE(ap::extern_erlaubt("/") && ap::extern_erlaubt("/app") && ap::extern_erlaubt("/api/status"));
   PRUEFE(ap::extern_erlaubt("/einstellungen") && ap::extern_erlaubt("/api/admin/einstellungen"));
   PRUEFE(!ap::extern_erlaubt("/experten") && !ap::extern_erlaubt("/update") && !ap::extern_erlaubt("/events"));
+  PRUEFE(!ap::extern_erlaubt("/api/admin/fehlertexte") && !ap::extern_erlaubt("/api/admin/fehlertexte-zurueck"));
   PRUEFE(!ap::extern_erlaubt("/sensor/Laufzeit") && !ap::extern_erlaubt("/api/admin/werksreset"));
   PRUEFE(!ap::extern_erlaubt("/api/admin/teilreset") && ap::extern_erlaubt("/api/admin/anzeige"));
   PRUEFE(!ap::extern_erlaubt("/api/admin/oberflaeche") && !ap::extern_erlaubt("/api/admin/oberflaeche-zurueck") && ap::extern_erlaubt("/api/admin/info"));

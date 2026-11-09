@@ -6,3 +6,7 @@ __pycache__/
 tests/.deps/
 release/
 ausgabe/
+# Originaltexte der Weishaupt-Anleitung (werkzeuge/fehlertexte_aus_handbuch.py) - urheberrechtlich geschuetzt, nie ins Repo
+fehlertexte-original.json
+components/weishaupt_can/fehlertexte_original.h
+/8330*.pdf

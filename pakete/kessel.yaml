@@ -27,6 +27,8 @@ substitutions:
   # Startzustand des Schalters "Eigene CAN-Anfragen", wenn noch nichts gespeichert ist.
   # RESTORE_DEFAULT_OFF = nur mithoeren (Vorgabe), RESTORE_DEFAULT_ON = eigene Leseanfragen.
   can_anfragen_start: RESTORE_DEFAULT_OFF
+  # Sprache der Stoermeldungen: "false" = Deutsch (Vorgabe), "true" = Englisch
+  meldungen_englisch: "false"
 
 # Das Bauteil weishaupt_can (components/weishaupt_can) haelt Zustand und Logik: Bus-Waechter,
 # Anlass-Nachlesen, Lesebefehl, Scan, Brennerstarts, Regeln, Zusatzanzeigen, Schaltbefehle.
@@ -199,6 +201,22 @@ canbus:
                 ESP_LOGI("lesen", "%s | roh: %s", t.c_str(), id(wcan)->lesen.roh.c_str());
               }
 
+      # Stoermeldungen (EMCY) von WEM (0x081) und Kessel (0x082): rein mitgehoert, Texte aus fehlercodes.yaml
+      - can_id: 0x081
+        then:
+          - lambda: |-
+              auto m = fehlercodes::emcy(x, ${meldungen_englisch});
+              if (!m.gueltig) return;
+              id(meldung_wem).publish_state(m.text);
+              if (m.aktiv) ESP_LOGW("meldung", "WEM %s", m.text.c_str());
+      - can_id: 0x082
+        then:
+          - lambda: |-
+              auto m = fehlercodes::emcy(x, ${meldungen_englisch});
+              if (!m.gueltig) return;
+              id(meldung_kessel).publish_state(m.text);
+              if (m.aktiv) ESP_LOGW("meldung", "Kessel %s", m.text.c_str());
+
       # PDO 0x201: Aussentemperatur + Systembetriebsart (Kessel sendet von selbst)
       - can_id: 0x201
         then:
@@ -313,6 +331,14 @@ canbus:
               else if (reg::ist(reg::WM_GESAMT, idx, sub)) id(wem_wm_gesamt).publish_state(reg::wert(reg::WM_GESAMT, v));
 
 text_sensor:
+  - platform: template
+    name: "Meldung WEM"               # Warnung/Fehler aus EMCY 0x081, z. B. "W 1501: Verbindung zum Raumgeraet RG2 unterbrochen"
+    id: meldung_wem
+    web_server: { sorting_group_id: g_diag, sorting_weight: 1 }
+  - platform: template
+    name: "Meldung Kessel"            # aus EMCY 0x082
+    id: meldung_kessel
+    web_server: { sorting_group_id: g_diag, sorting_weight: 2 }
   - platform: template
     name: "Kesselstatus"
     id: wem_kesselstatus

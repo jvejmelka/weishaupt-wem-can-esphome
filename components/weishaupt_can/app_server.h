@@ -108,6 +108,8 @@ class AppServer : public AsyncWebHandler {
   // Oberflaechen-Paket im Dateisystem (ab v42)
   bool paket_laden_(const std::string &pfad, ob::Paket &p, std::string &f) const;
   void paket_hochladen_(AsyncWebServerRequest *r);
+  void fehlertexte_hochladen_(AsyncWebServerRequest *r);   // Originaltexte der Stoermeldungen (Experte, nur LAN)
+  void fehlertexte_laden_();                                // beim Start aus dem Dateisystem
   bool experte_ok_(AsyncWebServerRequest *r) const;   // Header x-experte = Experten-Passwort
   void datei_(AsyncWebServerRequest *r, const ap::Datei *d);
   void anzeige_(AsyncWebServerRequest *r);

@@ -18,6 +18,7 @@
 #include "../components/weishaupt_can/netzsuche.h"
 #include "../components/weishaupt_can/json_lesen.h"
 #include "../components/weishaupt_can/app_dateien.h"
+#include "../components/weishaupt_can/fehlercodes.h"
 #include "referenz_v29/regellogik_v29.h"
 #include <cstdarg>
 #include <random>
@@ -832,6 +833,53 @@ TEST(register_json_schreiben_wie_v27) {
 #include "test_aequivalenz.inc"
 #include "test_regelwerk.inc"
 #include "test_app.inc"
+
+// ---------------------------------------------------------------- Stoermeldungen (EMCY 0x081/0x082)
+TEST(fehlercodes_emcy) {
+  namespace fc = fehlercodes;
+  // RG2 nicht erreichbar: Warnung 1501 (Muster wie in PROTOKOLL.md, Abschnitt 10a)
+  auto m = fc::emcy({0xFF, 0xFF, 0x01, 0x02, 0x05, 0xDD, 0x01, 0x00});
+  PRUEFE(m.gueltig && m.aktiv && m.typ == 'W' && m.nr == 1501);
+  PRUEFE(m.text == "W 1501: Verbindung zum Raumgerät RG2 unterbrochen (Teilnehmer 1)");
+  // Teilnehmer 3 im selben Bereich, englisch
+  PRUEFE(fc::emcy({0xFF, 0xFF, 0x01, 0x02, 0x05, 0xDF, 0x01, 0x00}, true).text == "W 1503: Connection to room unit RG2 lost (device 3)");
+  // Meldung erledigt
+  m = fc::emcy({0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00});
+  PRUEFE(m.gueltig && !m.aktiv && m.text == "keine Meldung");
+  // Fehler mit mehreren Modulen unter einer Nummer
+  PRUEFE(fc::text_zu('F', 1) == "EM-HK: Keine Verbindung zum Erweiterungsmodul Heizkreis / EM-SOL: Kollektorfühler (T1) ausgefallen / KASKADE: Fühler T1 des Kaskadenreglers ausgefallen");
+  // WTC-Variante ohne Praefix, Solar mit
+  PRUEFE(fc::text_zu('F', 20) == "Flamme beim Zünden innerhalb der Sicherheitszeit verloren / EM-SOL: Kein Durchfluss im Solarkreis");
+  PRUEFE(fc::text_zu('W', 36) == "Wasserdruck der Anlage zu gering");
+  PRUEFE(fc::text_zu('W', 9999) == "unbekannte Nummer");
+  // Art unbekannt: beide Tabellen
+  PRUEFE(fc::emcy({0xFF, 0xFF, 0x01, 0x00, 0x00, 0x24, 0x01, 0x00}).text == "? 36: Wasserdruck der Anlage zu gering / Wasserdruck der Anlage zu hoch oder zu gering");
+  PRUEFE(!fc::emcy({0x00, 0x00}).gueltig);
+  PRUEFE(fc::ANZAHL == 119);
+}
+
+TEST(fehlercodes_hochladen) {
+  namespace fc = fehlercodes;
+  std::string f;
+  unsigned de = 0, en = 0;
+  // Ausgedachte Texte im Format von werkzeuge/fehlertexte_aus_handbuch.py (keine Originale)
+  PRUEFE(fc::laden(R"({"de":{"W 36":["Druck Test"],"W 1501-1532":["Raumgeraet Test"],"F 1":["Modul A","Modul B"]},"en":{"W 36":["Pressure test"]}})", f, de, en));
+  PRUEFE(de == 3 && en == 1 && fc::geladen(false) == 3);
+  PRUEFE(fc::text_zu('W', 36) == "Druck Test");
+  PRUEFE(fc::text_zu('W', 36, true) == "Pressure test");
+  PRUEFE(fc::text_zu('W', 1504) == "Raumgeraet Test (Teilnehmer 4)");
+  PRUEFE(fc::text_zu('F', 1) == "Modul A / Modul B");
+  PRUEFE(fc::text_zu('W', 48) == "Luft im Heizwasser");                 // nicht in der Datei: eigener Text
+  PRUEFE(fc::text_zu('W', 48, true) == "Air in the heating water");
+  // Kaputte Dateien aendern nichts
+  PRUEFE(!fc::laden("kein json", f, de, en) && fc::text_zu('W', 36) == "Druck Test");
+  PRUEFE(!fc::laden(R"({"fr":{}})", f, de, en));
+  PRUEFE(!fc::laden(R"({"de":{"X 1":["x"]}})", f, de, en));
+  PRUEFE(!fc::laden(R"({"de":{"W 1":[""]}})", f, de, en));
+  PRUEFE(!fc::laden(std::string(fc::DATEI_MAX + 1, ' '), f, de, en));
+  fc::leeren();
+  PRUEFE(fc::geladen(false) == 0 && fc::text_zu('W', 36) == "Wasserdruck der Anlage zu gering");
+}
 
 int main() {
   for (auto &t : tests()) {

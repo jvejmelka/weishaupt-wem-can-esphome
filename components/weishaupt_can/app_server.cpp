@@ -56,6 +56,8 @@ static std::string neues_token();
 static const char *const PAKET = "/fs/oberflaeche.wui";
 static const char *const PAKET_NEU = "/fs/oberflaeche.neu";
 static const size_t PAKET_MAX = 512 * 1024;
+static const char *const FEHLERTEXTE = "/fs/fehlertexte.json";       // Originaltexte der Stoermeldungen (eigene Anleitung)
+static const char *const FEHLERTEXTE_NEU = "/fs/fehlertexte.neu";
 
 // Werte des Boards, die /api/status und /api/energie brauchen (object_id wie im MQTT-Topic)
 static const char *const ZAHLEN[] = {
@@ -187,6 +189,7 @@ void AppServer::setup() {
     } else if (f != "keine Datei") {
       ESP_LOGW(TAG, "Oberflaechen-Paket unbrauchbar (%s) - eingebaute Oberflaeche", f.c_str());
     }
+    this->fehlertexte_laden_();
   }
 #endif
 #ifdef USE_LOGGER
@@ -442,6 +445,10 @@ std::string AppServer::info_json_() {
     std::lock_guard<std::mutex> g(this->sperre_);
     o["oberflaeche"] = this->paket_aktiv_ ? "Paket " + this->paket_.version : std::string("eingebaut");
   }
+  {
+    unsigned de = fehlercodes::geladen(false), en = fehlercodes::geladen(true);
+    o["fehlertexte"] = (de || en) ? "Original (DE " + std::to_string(de) + ", EN " + std::to_string(en) + ")" : std::string("eigene");
+  }
   o["laufzeit_s"] = millis() / 1000;
   o["neustart_grund"] = neustart_grund();
   o["speicher_frei"] = esp_get_free_heap_size();
@@ -571,6 +578,56 @@ void AppServer::paket_hochladen_(AsyncWebServerRequest *r) {
   { std::lock_guard<std::mutex> g(this->sperre_); this->paket_ = p; this->paket_aktiv_ = true; }
   ESP_LOGI(TAG, "Oberflaechen-Paket %s aktiv (%u Dateien)", p.version.c_str(), (unsigned) p.dateien.size());
   this->antworten_(r, 200, "{\"ok\":true,\"version\":\"" + p.version + "\"}");
+}
+
+static bool datei_lesen(const char *pfad, std::string &inhalt, size_t max) {
+  FILE *d = fopen(pfad, "rb");
+  if (d == nullptr) return false;
+  inhalt.assign(max + 1, '\0');
+  inhalt.resize(fread(&inhalt[0], 1, max + 1, d));
+  fclose(d);
+  return true;
+}
+
+// Originaltexte der Stoermeldungen laden (Datei von werkzeuge/fehlertexte_aus_handbuch.py)
+void AppServer::fehlertexte_laden_() {
+#ifdef USE_WC_DATEIEN
+  std::string j, f;
+  unsigned de = 0, en = 0;
+  if (!datei_lesen(FEHLERTEXTE, j, fehlercodes::DATEI_MAX)) return;
+  if (fehlercodes::laden(j, f, de, en)) ESP_LOGI(TAG, "Originaltexte der Stoermeldungen: DE %u, EN %u", de, en);
+  else ESP_LOGW(TAG, "Originaltexte unbrauchbar (%s) - eigene Texte", f.c_str());
+#endif
+}
+
+void AppServer::fehlertexte_hochladen_(AsyncWebServerRequest *r) {
+#ifdef USE_WC_DATEIEN
+  if (this->upload_ != nullptr) { fclose(this->upload_); this->upload_ = nullptr; }
+  if (!this->experte_ok_(r)) { remove(FEHLERTEXTE_NEU); this->antworten_(r, 400, "{\"error\":\"Experten-Passwort falsch oder nicht gesetzt\"}"); return; }
+  std::string j, f;
+  unsigned de = 0, en = 0;
+  if (!this->upload_erlaubt_) f = "Datei zu gross oder kein Dateisystem";
+  else if (!datei_lesen(FEHLERTEXTE_NEU, j, fehlercodes::DATEI_MAX)) f = "Datei nicht angekommen";
+  else if (!fehlercodes::laden(j, f, de, en)) {}
+  else {
+    remove(FEHLERTEXTE);
+    if (rename(FEHLERTEXTE_NEU, FEHLERTEXTE) != 0) f = std::string("Umbenennen fehlgeschlagen: ") + strerror(errno);
+  }
+  remove(FEHLERTEXTE_NEU);
+  JsonDocument e;
+  if (!f.empty()) {
+    e["error"] = f;
+    ESP_LOGW(TAG, "Originaltexte abgelehnt: %s", f.c_str());
+  } else {
+    e["ok"] = true; e["de"] = de; e["en"] = en;
+    ESP_LOGI(TAG, "Originaltexte der Stoermeldungen aktiv: DE %u, EN %u", de, en);
+  }
+  std::string out;
+  serializeJson(e, out);
+  this->antworten_(r, f.empty() ? 200 : 400, out);
+#else
+  this->antworten_(r, 404, "{\"error\":\"kein Dateisystem\"}");
+#endif
 }
 
 // Werte per JSON von Hand abrufen (Paket json-lesen): GET = Stand, POST = abrufen (Mindestabstand im Paket)
@@ -780,14 +837,17 @@ bool AppServer::canHandle(AsyncWebServerRequest *request) const {
 
 void AppServer::handleBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
   char buf[AsyncWebServerRequest::URL_BUF_SIZE];
-  if (request->url_to(buf) == "/api/admin/oberflaeche") {
+  std::string url = request->url_to(buf);
+  if (url == "/api/admin/oberflaeche" || url == "/api/admin/fehlertexte") {
 #ifdef USE_WC_DATEIEN
-    // gleich ins Dateisystem schreiben - nur mit gueltigem Admin-Token und bis PAKET_MAX
+    // gleich ins Dateisystem schreiben - nur mit gueltigem Admin-Token und bis zur Hoechstgroesse
+    bool paket = url == "/api/admin/oberflaeche";
     if (index == 0) {
       this->upload_n_ = 0;
-      this->upload_erlaubt_ = this->wc_->fs.bereit && this->admin_angemeldet_(request) && total <= PAKET_MAX;
+      this->upload_erlaubt_ = this->wc_->fs.bereit && this->admin_angemeldet_(request) &&
+                              total <= (paket ? PAKET_MAX : fehlercodes::DATEI_MAX);
       if (this->upload_ != nullptr) { fclose(this->upload_); this->upload_ = nullptr; }
-      if (this->upload_erlaubt_) this->upload_ = fopen(PAKET_NEU, "wb");
+      if (this->upload_erlaubt_) this->upload_ = fopen(paket ? PAKET_NEU : FEHLERTEXTE_NEU, "wb");
     }
     this->upload_n_ += len;
     if (this->upload_ != nullptr && fwrite(data, 1, len, this->upload_) != len) { fclose(this->upload_); this->upload_ = nullptr; }
@@ -1309,6 +1369,18 @@ void AppServer::handleRequest(AsyncWebServerRequest *request) {
         { std::lock_guard<std::mutex> g(this->sperre_); this->paket_aktiv_ = false; }
         remove(PAKET);
         ESP_LOGI(TAG, "Oberflaeche zurueck auf die eingebaute");
+        this->antworten_(request, 200, "{\"ok\":true}");
+      }
+    } else if (url == "/api/admin/fehlertexte" && post) {
+      this->fehlertexte_hochladen_(request);
+    } else if (url == "/api/admin/fehlertexte-zurueck" && post) {
+      if (!this->experte_ok_(request)) this->antworten_(request, 400, "{\"error\":\"Experten-Passwort falsch oder nicht gesetzt\"}");
+      else {
+        fehlercodes::leeren();
+#ifdef USE_WC_DATEIEN
+        remove(FEHLERTEXTE);
+#endif
+        ESP_LOGI(TAG, "Stoermeldungen wieder mit eigenen Texten");
         this->antworten_(request, 200, "{\"ok\":true}");
       }
     } else if (url == "/api/admin/experte-extern" && post) {

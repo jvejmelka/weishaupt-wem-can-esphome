@@ -1,0 +1,143 @@
+# Warn- und Fehlercodes Weishaupt WTC-GW 15 … 32-B mit WEM – EIGENE Kurztexte (DE/EN)
+#
+# Herkunft: Die Nummern und ihre Bedeutung stammen aus der Montage- und Betriebsanleitung
+# "Gas-Brennwertgerät WTC-GW 15 … 32-B", Kapitel 10 (Warncode 10.2, Fehlercode 10.3):
+#   Deutsch  83307201 (1/2025-01): https://www.weishaupt.de/uploads/tx_weishaupt_documents/documents/83307201.pdf
+#   Englisch 83307202 (2/2018-05): https://www.weishaupt.de/uploads/tx_weishaupt_documents/documents/83307202.pdf
+#
+# Urheberrecht: Die Texte der Anleitung sind geschützt (Rechte bei Max Weishaupt SE). Deshalb stehen hier
+# KEINE Originaltexte, sondern eigene, kurze Beschreibungen der Ursache. Was zu tun ist (Behebung), steht nur
+# in der Anleitung – bitte dort nachlesen; die meisten Punkte darf nur eine Fachkraft beheben.
+# Wer die Originalwortlaute angezeigt haben möchte: Anleitung selbst herunterladen und
+#   python3 werkzeuge/fehlertexte_aus_handbuch.py --header 83307201.pdf
+# ausführen (erzeugt lokale Dateien, die nicht ins Repo gehören; siehe PROTOKOLL.md, Abschnitt 10c).
+#
+# Aufbau: typ W = Warnung, F = Fehler (Störung); nr = Nummer; bis = letzte Nummer eines Bereichs
+# (Kommunikationswarnungen: die letzten beiden Stellen sind die Nummer des Teilnehmers);
+# modul = nur bei Nummern, die je nach Modul etwas anderes bedeuten (WTC = Brennwertgerät/Feuerungsautomat,
+# EM-HK = Erweiterungsmodul Heizkreis, EM-SOL = Solar, EM-WW = Warmwasser, KASKADE = Kaskadenregler).
+
+codes:
+  # ---- Warnungen ----
+  - {typ: W, nr: 1, de: "Raumluft feuchter als am Raumgerät eingestellt", en: "Room air more humid than set on the room unit"}
+  - {typ: W, nr: 2, de: "Raumluft trockener als am Raumgerät eingestellt", en: "Room air drier than set on the room unit"}
+  - {typ: W, nr: 3, de: "SD-Karte im Systemgerät fehlt oder sitzt nicht richtig", en: "SD card in the system unit missing or not seated"}
+  - {typ: W, nr: 7, modul: EM-WW, de: "Zirkulationsfühler liefert keinen Wert", en: "Circulation sensor delivers no value"}
+  - {typ: W, nr: 8, modul: EM-WW, de: "Fühler an der Wärmequelle ausgefallen", en: "Heat source sensor failed"}
+  - {typ: W, nr: 10, de: "Zu wenig Wasserdurchfluss durch das Gerät", en: "Too little water flowing through the unit"}
+  - {typ: W, nr: 11, de: "Not-Aus ausgelöst (Eingang H1 am EM Heizkreis)", en: "Emergency stop triggered (input H1 on EM heating circuit)"}
+  - {typ: W, nr: 12, de: "Sicherheits-Vorlauffühler (eSTB) misst über 95 °C", en: "Safety flow sensor (eSTB) reads above 95 °C"}
+  - {typ: W, nr: 14, de: "Vorlauf am Sicherheitsfühler (eSTB) steigt zu steil an", en: "Flow at safety sensor (eSTB) rising too steeply"}
+  - {typ: W, nr: 15, de: "Vorlauf (eSTB) und Abgas liegen zu weit auseinander", en: "Flow (eSTB) and flue gas too far apart"}
+  - {typ: W, nr: 16, de: "Abgas zu heiß", en: "Flue gas too hot"}
+  - {typ: W, nr: 17, de: "Vorlauf (VPT) und Rücklauf liegen zu weit auseinander", en: "Flow (VPT) and return too far apart"}
+  - {typ: W, nr: 18, de: "Die beiden Vorlaufmessungen (eSTB und VPT) weichen zu stark ab", en: "The two flow readings (eSTB and VPT) disagree too much"}
+  - {typ: W, nr: 19, de: "Vorlauf am Multifunktionssensor (VPT) steigt zu steil an – Schutz des Wärmetauschers", en: "Flow at multifunction sensor (VPT) rising too steeply – heat exchanger protection"}
+  - {typ: W, nr: 20, de: "Flamme beim Zünden innerhalb der Sicherheitszeit verloren", en: "Flame lost during ignition within the safety time"}
+  - {typ: W, nr: 21, de: "Brenner zündet beim Start nicht – neuer Startversuch folgt", en: "Burner does not ignite on start – a new attempt follows"}
+  - {typ: W, nr: 22, de: "Flamme im Betrieb verloren (vereinzelt z. B. durch Wind)", en: "Flame lost during operation (occasionally e.g. due to wind)"}
+  - {typ: W, nr: 25, de: "Flamme kurz nach dem Zünden verloren (vereinzelt z. B. durch Wind)", en: "Flame lost shortly after ignition (occasionally e.g. due to wind)"}
+  - {typ: W, nr: 27, de: "Gasdruck zu gering – nach 5 Abschaltungen in Folge rund 15 min Sperre (nur mit Gasdruckwächter)", en: "Gas pressure too low – about 15 min lockout after 5 shutdowns in a row (only with gas pressure switch)"}
+  - {typ: W, nr: 36, de: "Wasserdruck der Anlage zu gering", en: "System water pressure too low"}
+  - {typ: W, nr: 40, de: "Eingebaute Umwälzpumpe meldet eine Warnung", en: "Built-in circulation pump reports a warning"}
+  - {typ: W, nr: 42, de: "Rückmeldung der eingebauten Umwälzpumpe gestört", en: "Feedback from built-in circulation pump disturbed"}
+  - {typ: W, nr: 43, de: "Gebläse dreht außerhalb des erwarteten Bereichs", en: "Fan turning outside the expected range"}
+  - {typ: W, nr: 48, de: "Luft im Heizwasser", en: "Air in the heating water"}
+  - {typ: W, nr: 61, de: "Flammensignal (Ionisation) außerhalb des Normalbereichs", en: "Flame signal (ionisation) outside the normal range"}
+  - {typ: W, nr: 62, de: "Stellsignal für Gasventil oder Gebläse außerhalb des Normalbereichs", en: "Control signal for gas valve or fan outside the normal range"}
+  - {typ: W, nr: 63, de: "Störung der Verbrennungsregelung (SCOT)", en: "Combustion control (SCOT) disturbed"}
+  - {typ: W, nr: 66, de: "Kalibrierung fehlgeschlagen", en: "Calibration failed"}
+  - {typ: W, nr: 69, de: "Bei kleiner Leistung kein ruhiger Betrieb erreicht", en: "No steady operation reached at low output"}
+  # Kommunikationswarnungen: Verbindung zu einem Busteilnehmer unterbrochen (letzte zwei Stellen = Teilnehmer)
+  - {typ: W, nr: 1101, bis: 1112, de: "Verbindung zum Systemgerät (SG) unterbrochen", en: "Connection to system unit (SG) lost"}
+  - {typ: W, nr: 1201, bis: 1212, de: "Verbindung zum Feuerungsautomaten (WTC) unterbrochen", en: "Connection to burner control (WTC) lost"}
+  - {typ: W, nr: 1302, bis: 1325, de: "Verbindung zum Erweiterungsmodul Heizkreis unterbrochen", en: "Connection to heating circuit module lost"}
+  - {typ: W, nr: 1401, de: "Verbindung zum Erweiterungsmodul Solar unterbrochen", en: "Connection to solar module lost"}
+  - {typ: W, nr: 1501, bis: 1532, de: "Verbindung zum Raumgerät RG2 unterbrochen", en: "Connection to room unit RG2 lost"}
+  - {typ: W, nr: 1601, bis: 1632, de: "Verbindung zum Raumfühler (RF) unterbrochen", en: "Connection to room sensor (RF) lost"}
+  - {typ: W, nr: 1701, bis: 1732, de: "Verbindung zum Raumgerät RG1 unterbrochen", en: "Connection to room unit RG1 lost"}
+  - {typ: W, nr: 1800, de: "Verbindung zum Kaskadenmodul unterbrochen", en: "Connection to cascade module lost"}
+  - {typ: W, nr: 1902, bis: 1925, de: "Verbindung zum Erweiterungsmodul Warmwasser unterbrochen", en: "Connection to DHW module lost"}
+
+  # ---- Fehler ----
+  - {typ: F, nr: 1, modul: EM-HK, de: "Keine Verbindung zum Erweiterungsmodul Heizkreis", en: "No connection to heating circuit module"}
+  - {typ: F, nr: 1, modul: EM-SOL, de: "Kollektorfühler (T1) ausgefallen", en: "Collector sensor (T1) failed"}
+  - {typ: F, nr: 1, modul: KASKADE, de: "Fühler T1 des Kaskadenreglers ausgefallen", en: "Cascade controller sensor T1 failed"}
+  - {typ: F, nr: 2, modul: EM-HK, de: "Außenfühler (T1) am Heizkreismodul ausgefallen", en: "Outdoor sensor (T1) at heating circuit module failed"}
+  - {typ: F, nr: 2, modul: EM-SOL, de: "Unterer Speicherfühler (T2) ausgefallen", en: "Lower storage sensor (T2) failed"}
+  - {typ: F, nr: 2, modul: KASKADE, de: "Fühler T2 des Kaskadenreglers ausgefallen", en: "Cascade controller sensor T2 failed"}
+  - {typ: F, nr: 3, modul: EM-HK, de: "Vorlauffühler (B6) am Heizkreismodul ausgefallen", en: "Flow sensor (B6) at heating circuit module failed"}
+  - {typ: F, nr: 3, modul: EM-SOL, de: "Solar-Vorlauffühler (T3) ausgefallen", en: "Solar flow sensor (T3) failed"}
+  - {typ: F, nr: 4, modul: EM-SOL, de: "Solar-Rücklauffühler (T4) ausgefallen", en: "Solar return sensor (T4) failed"}
+  - {typ: F, nr: 5, de: "Oberer Pufferfühler (B10) ausgefallen", en: "Upper buffer sensor (B10) failed"}
+  - {typ: F, nr: 5, modul: EM-WW, de: "Zirkulationsfühler (T1) am Warmwassermodul ausgefallen", en: "Circulation sensor (T1) at DHW module failed"}
+  - {typ: F, nr: 6, de: "Unterer Pufferfühler (B11) ausgefallen", en: "Lower buffer sensor (B11) failed"}
+  - {typ: F, nr: 6, modul: EM-WW, de: "Warmwasserfühler (B6) am Warmwassermodul ausgefallen", en: "DHW sensor (B6) at DHW module failed"}
+  - {typ: F, nr: 10, modul: EM-SOL, de: "Keine Verbindung zum Erweiterungsmodul Solar", en: "No connection to solar module"}
+  - {typ: F, nr: 10, modul: KASKADE, de: "Verbindung des Kaskadenreglers gestört", en: "Cascade controller connection disturbed"}
+  - {typ: F, nr: 10, modul: EM-WW, de: "Keine Verbindung zum Erweiterungsmodul Warmwasser", en: "No connection to DHW module"}
+  - {typ: F, nr: 11, de: "Sicherheits-Vorlauffühler (eSTB) misst über 105 °C", en: "Safety flow sensor (eSTB) reads above 105 °C"}
+  - {typ: F, nr: 13, de: "Abgas zu heiß", en: "Flue gas too hot"}
+  - {typ: F, nr: 14, de: "Vorlauf am Sicherheitsfühler (eSTB) steigt zu steil an", en: "Flow at safety sensor (eSTB) rising too steeply"}
+  - {typ: F, nr: 15, de: "Vorlauf (eSTB) und Abgas liegen zu weit auseinander", en: "Flow (eSTB) and flue gas too far apart"}
+  - {typ: F, nr: 19, de: "Vorlauf am Multifunktionssensor (VPT) steigt zu steil an", en: "Flow at multifunction sensor (VPT) rising too steeply"}
+  - {typ: F, nr: 20, modul: WTC, de: "Flamme beim Zünden innerhalb der Sicherheitszeit verloren", en: "Flame lost during ignition within the safety time"}
+  - {typ: F, nr: 20, modul: EM-SOL, de: "Kein Durchfluss im Solarkreis", en: "No flow in the solar circuit"}
+  - {typ: F, nr: 21, modul: WTC, de: "Brenner zündet beim Start nicht", en: "Burner does not ignite on start"}
+  - {typ: F, nr: 21, modul: EM-SOL, de: "Störung der Temperaturdifferenz-Regelung", en: "Differential temperature control disturbed"}
+  - {typ: F, nr: 23, de: "Flamme erkannt, obwohl keine brennen dürfte", en: "Flame detected although none should be burning"}
+  - {typ: F, nr: 24, de: "Brenner von außen gesperrt (Eingang H1/H2 am WTC)", en: "Burner locked externally (input H1/H2 on the WTC)"}
+  - {typ: F, nr: 29, de: "Fühler am Warmwasserauslauf ausgefallen (nur Ausführung C)", en: "DHW outlet sensor failed (version C only)"}
+  - {typ: F, nr: 30, de: "Sicherheits-Vorlauffühler (eSTB) ausgefallen", en: "Safety flow sensor (eSTB) failed"}
+  - {typ: F, nr: 31, de: "Abgasfühler ausgefallen", en: "Flue gas sensor failed"}
+  - {typ: F, nr: 32, de: "Fühler an der hydraulischen Weiche (B2) ausgefallen", en: "Low loss header sensor (B2) failed"}
+  - {typ: F, nr: 33, de: "Außenfühler (B1) ausgefallen", en: "Outdoor sensor (B1) failed"}
+  - {typ: F, nr: 34, de: "Warmwasserfühler (B3) ausgefallen", en: "DHW sensor (B3) failed"}
+  - {typ: F, nr: 36, de: "Wasserdruck der Anlage zu hoch oder zu gering", en: "System water pressure too high or too low"}
+  - {typ: F, nr: 37, de: "Durchflusssensor ausgefallen (nur Ausführung C)", en: "Water flow sensor failed (version C only)"}
+  - {typ: F, nr: 38, de: "Fühler T1 am Zusatzmodul ausgefallen", en: "Sensor T1 at the additional module failed"}
+  - {typ: F, nr: 39, de: "Fühler T2 am Zusatzmodul ausgefallen", en: "Sensor T2 at the additional module failed"}
+  - {typ: F, nr: 40, de: "Eingebaute Umwälzpumpe meldet einen Elektronikschaden", en: "Built-in circulation pump reports an electronics failure"}
+  - {typ: F, nr: 41, de: "Prüfung des Gasventils fehlgeschlagen", en: "Gas valve check failed"}
+  - {typ: F, nr: 42, de: "Eingebaute Umwälzpumpe ist blockiert", en: "Built-in circulation pump is blocked"}
+  - {typ: F, nr: 43, de: "Gebläse erreicht die Solldrehzahl nicht", en: "Fan does not reach its target speed"}
+  - {typ: F, nr: 44, de: "Gebläse steht nicht still, obwohl es soll", en: "Fan does not stop when it should"}
+  - {typ: F, nr: 45, de: "Ströme am Gasventil außerhalb des Normalbereichs", en: "Gas valve currents outside the normal range"}
+  - {typ: F, nr: 46, de: "Störung am Multifunktionssensor (VPT)", en: "Multifunction sensor (VPT) disturbed"}
+  - {typ: F, nr: 47, de: "Multifunktionssensor (VPT) passt nicht zur Version der Geräteelektronik", en: "Multifunction sensor (VPT) does not match the electronics version"}
+  - {typ: F, nr: 49, de: "Parameterdaten des Feuerungsautomaten fehlerhaft", en: "Burner control parameter data corrupt"}
+  - {typ: F, nr: 50, de: "Interne Störung", en: "Internal error"}
+  - {typ: F, nr: 51, de: "Parameterdaten des Kessels fehlerhaft", en: "Boiler parameter data corrupt"}
+  - {typ: F, nr: 52, de: "Parameterdaten des Brenners fehlerhaft", en: "Burner parameter data corrupt"}
+  - {typ: F, nr: 53, de: "Versorgungsspannung außerhalb des zulässigen Bereichs", en: "Supply voltage outside the permitted range"}
+  - {typ: F, nr: 54, de: "Störung der Geräteelektronik", en: "Unit electronics error"}
+  - {typ: F, nr: 55, de: "Störung des Speichers der Geräteelektronik", en: "Memory error in the unit electronics"}
+  - {typ: F, nr: 56, de: "Messung des Flammensignals (Ionisation) gestört", en: "Flame signal (ionisation) measurement disturbed"}
+  - {typ: F, nr: 57, de: "Zusatzmodul wird nicht mehr gefunden", en: "Additional module no longer found"}
+  - {typ: F, nr: 58, de: "Zu oft hintereinander entriegelt", en: "Reset too often in a row"}
+  - {typ: F, nr: 59, de: "Parameterdaten fehlen", en: "Parameter data missing"}
+  - {typ: F, nr: 60, de: "Kalibrierung: Grundwert der Verbrennungsregelung (SCOT) zu klein", en: "Calibration: combustion control (SCOT) base value too low"}
+  - {typ: F, nr: 61, de: "Flammensignal (Ionisation) außerhalb des Normalbereichs", en: "Flame signal (ionisation) outside the normal range"}
+  - {typ: F, nr: 62, de: "Stellsignal für Gasventil oder Gebläse außerhalb des Normalbereichs", en: "Control signal for gas valve or fan outside the normal range"}
+  - {typ: F, nr: 63, de: "Störung der Verbrennungsregelung (SCOT)", en: "Combustion control (SCOT) disturbed"}
+  - {typ: F, nr: 64, de: "Kalibrierung: Grundwert der Verbrennungsregelung (SCOT) zu groß", en: "Calibration: combustion control (SCOT) base value too high"}
+  - {typ: F, nr: 65, de: "Grundwert der Verbrennungsregelung (SCOT) weicht stark vom letzten ab", en: "Combustion control (SCOT) base value differs strongly from the last one"}
+  - {typ: F, nr: 66, de: "Kalibrierung nicht möglich", en: "Calibration not possible"}
+  - {typ: F, nr: 67, de: "Grundwert der Verbrennungsregelung (SCOT) falsch gespeichert", en: "Combustion control (SCOT) base value stored incorrectly"}
+  - {typ: F, nr: 68, de: "Nullpunkt des Gasventils außerhalb des Bereichs", en: "Gas valve zero point out of range"}
+  - {typ: F, nr: 70, de: "Daten vom Kodierstecker (BCC) fehlerhaft", en: "Coding plug (BCC) data corrupt"}
+  - {typ: F, nr: 71, de: "Kodierstecker (BCC) fehlt", en: "Coding plug (BCC) missing"}
+  - {typ: F, nr: 72, de: "Daten vom Kodierstecker (BCC) fehlerhaft", en: "Coding plug (BCC) data corrupt"}
+  - {typ: F, nr: 73, de: "Kodierstecker (BCC) passt nicht zum Gerät", en: "Coding plug (BCC) does not match the unit"}
+  - {typ: F, nr: 74, de: "Daten vom Kodierstecker (BCC) sollen übernommen werden – Neustart nötig", en: "Coding plug (BCC) data to be applied – restart needed"}
+  - {typ: F, nr: 75, de: "Daten vom Kodierstecker (BCC) fehlerhaft", en: "Coding plug (BCC) data corrupt"}
+  - {typ: F, nr: 80, de: "Fernsteuersignal am Eingang N1 zu niedrig", en: "Remote control signal at input N1 too low"}
+  - {typ: F, nr: 81, de: "Fernsteuersignal am Eingang N1 zu hoch", en: "Remote control signal at input N1 too high"}
+  - {typ: F, nr: 88, de: "Interne Störung", en: "Internal error"}
+  - {typ: F, nr: 90, de: "Interne Verbindung (ChipCom) gestört", en: "Internal connection (ChipCom) disturbed"}
+  - {typ: F, nr: 91, de: "Verbindung zwischen Systemgerät und Feuerungsautomat gestört", en: "Connection between system unit and burner control disturbed"}
+  - {typ: F, nr: 92, de: "CAN-Bus-Verbindung gestört", en: "CAN bus connection disturbed"}
+  - {typ: F, nr: 93, de: "Interner Flash-Speicher antwortet nicht", en: "Internal flash memory not responding"}
+  - {typ: F, nr: 94, de: "Verbindung zum Multifunktionssensor (VPT, Modbus) gestört", en: "Connection to multifunction sensor (VPT, Modbus) disturbed"}
+  - {typ: F, nr: 95, de: "Interne Störung", en: "Internal error"}
+  - {typ: F, nr: 96, de: "Daten vom Multifunktionssensor (VPT) gestört", en: "Data from multifunction sensor (VPT) disturbed"}

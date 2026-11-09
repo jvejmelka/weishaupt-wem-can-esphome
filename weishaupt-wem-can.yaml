@@ -29,6 +29,8 @@ substitutions:
   #   RESTORE_DEFAULT_OFF = nur mithoeren (Vorgabe, wenn die Zeile fehlt)
   #   RESTORE_DEFAULT_ON  = eigene Leseanfragen im Weishaupt-Takt
   can_anfragen_start: RESTORE_DEFAULT_OFF
+  # Sprache der Stoermeldungen (Meldung WEM/Kessel): "false" = Deutsch, "true" = Englisch (fehlercodes.yaml)
+  meldungen_englisch: "false"
   # Regeln (Paket verdacht) beim ersten Start - danach gelten Weboberflaeche bzw. die
   # Regeln-Datei per MQTT (<geraet>/cmd/regeln, siehe regeln.json.example). Jede Regel einzeln:
   # Ausgeschaltete Regeln laufen im Schattenmodus weiter (melden "waere", lesen nicht). REGELN.md

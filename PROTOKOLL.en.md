@@ -1045,7 +1045,7 @@ only the Monday (sub 4–13) and the Saturday block (sub 84–93).
   sends `011: 01 F0 20 00 00 00 00 04`.
 - **RG2 start:** it sends `011: 01 F0 20 00 00 00 00 1C` and goes `704:00` → `704:7F` → `704:05` in about 20 s. With the
   WEM running it kept node 4 without intervention – directly on the bus and over the CAN tunnel.
-- **RG2 failure:** 30 s after the last heartbeat the WEM reports `081: FF FF 01 02 05 DD 01 00` (`0x05DD` = 1501) and
+- **RG2 failure:** 30 s after the last heartbeat the WEM reports `081: FF FF 01 02 05 DD 01 00` (`0x05DD` = **warning 1501**, connection to RG2 no. 1 lost, see section 10c) and
   clears it as soon as the RG2 is back. The device list then shows it under "inactive devices".
 
 ## 10b. CAN tunnel over WLAN (experiment, branch `can-tunnel`)
@@ -1095,6 +1095,57 @@ restarting board B, each without intervention.
   result: Unknown error"; the log showed `canbus took a long time … (3–5 s)`. Uploading in the browser (`/update`)
   worked every time. Stopping the CAN controller during the update (in the branch) did not remove the warning; the cause
   is open.
+
+## 10c. Fault messages on the bus and error codes
+
+The WEM reports warnings and faults **on its own** as a CANopen emergency message (EMCY) on `0x081`, the boiler on
+`0x082`. The firmware only listens and shows the message as "Meldung WEM" or "Meldung Kessel", for example
+"W 1501: Connection to room unit RG2 lost (device 1)". Nothing is requested for this.
+
+```
+081: FF FF 01 02 05 DD 01 00   message: error code FFFF, register 01, type 02 = warning, number 0x05DD = 1501
+081: 00 00 01 00 00 00 01 00   cleared (error code 0000)
+```
+
+Bytes 0–1 error code (`0000` = no message), byte 3 the type, bytes 4–5 the number (big endian). Only warning 1501 is
+confirmed so far (RG2 disconnected, several times). That type `01` means a fault is an **assumption** based on the error
+block `0x273F` (as kraiz/hassio-weishaupt reads it); we have not yet seen a real fault on the bus. The meaning of byte 6
+is open. The boiler has so far only sent `082: 00 … 01` and `082: 00 … 88` without an error code.
+
+**Communication warnings:** numbers 1101–1925 mean a lost connection to a bus device, the last two digits are its
+number: 1101–1112 system unit, 1201–1212 burner control, 1302–1325 EM heating circuit, 1401 EM solar,
+**1501–1532 room unit RG2**, 1601–1632 room sensor RF, 1701–1732 room unit RG1, 1800 EM cascade, 1902–1925 EM DHW. So a
+WEM is designed for up to 32 RG2 and 32 room sensors.
+
+**Texts and copyright.** Numbers and meaning come from chapter 10 of the installation and operating instruction
+"Gas condensing unit WTC-GW 15 … 32-B", which Weishaupt publishes:
+[German, 83307201](https://www.weishaupt.de/uploads/tx_weishaupt_documents/documents/83307201.pdf),
+[English, 83307202](https://www.weishaupt.de/uploads/tx_weishaupt_documents/documents/83307202.pdf).
+The texts of the manual are protected by copyright (rights with Max Weishaupt SE). This repo therefore contains **no
+original texts**, but in [`fehlercodes.yaml`](fehlercodes.yaml) its own short texts in German and English that only
+describe the cause. What to do is in the manual; most items may only be fixed by a qualified technician.
+
+**Original texts for your own installation:** if you prefer the manual's wording, download it yourself and create local
+files with it:
+
+```
+python3 werkzeuge/fehlertexte_aus_handbuch.py --header 83307202.pdf
+```
+
+The tool (needs `pdftotext` from poppler-utils) reads the "warning code" and "fault code" tables and writes
+`fehlertexte-original.json`, with `--header` also `components/weishaupt_can/fehlertexte_original.h`. Two ways:
+
+- **Without building** (also with the release image): settings page → "Störmeldungen" → upload `fehlertexte-original.json`
+  with the expert password (home network only). The board checks the file, stores it in the file system and uses the
+  original texts right away; "Zurück auf eigene Texte" deletes it again. The info page shows which texts are active.
+- **When building:** create it with `--header` and build the firmware.
+
+Anything missing from the file is still shown with the board's own texts. English: set `meldungen_englisch: "true"` in the main YAML and use the
+English manual. The English edition (2018) lacks six newer codes (W 7, W 8, W 1101, W 1302, W 1800, W 1902); for these
+our own English text remains. Both files are in `.gitignore` and do **not** belong in a public repo.
+
+Thanks to [cg089](https://github.com/cg089/weishaupt-wem-can-esphome/tree/olimex-esp32-evb) for the first mapping of the
+communication warnings and to [kraiz](https://github.com/kraiz/hassio-weishaupt) for the layout of the error block.
 
 ## 11. Sources
 

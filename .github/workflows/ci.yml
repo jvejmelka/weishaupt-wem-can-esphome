@@ -35,6 +35,7 @@ jobs:
         # verglichen wird der entpackte Inhalt, weil gzip-Bytes von der Python-Version abhaengen)
         run: |
           python3 werkzeuge/register_erzeugen.py
+          python3 werkzeuge/fehlercodes_erzeugen.py
           git diff --exit-code
           python3 werkzeuge/app_einbetten.py --pruefen
 

@@ -222,6 +222,21 @@
     </section>
 
     <section class="block">
+      <div class="block-head"><span class="block-title">STÖRMELDUNGEN</span><span class="block-zustand" id="ftZustand"></span></div>
+      <p class="hinweis" style="font-size:.75rem;color:var(--text2)">Ab Werk zeigt das Board eigene Kurztexte. Die Originaltexte der
+        Weishaupt-Anleitung sind urheberrechtlich geschützt und deshalb nicht eingebaut. Wer sie sehen möchte: Anleitung bei Weishaupt
+        herunterladen (<a href="https://www.weishaupt.de/uploads/tx_weishaupt_documents/documents/83307201.pdf" target="_blank" rel="noopener">deutsch</a>,
+        <a href="https://www.weishaupt.de/uploads/tx_weishaupt_documents/documents/83307202.pdf" target="_blank" rel="noopener">englisch</a>),
+        mit <code>werkzeuge/fehlertexte_aus_handbuch.py</code> die Datei <code>fehlertexte-original.json</code> erzeugen und hier einspielen.
+        Sie bleibt nur auf diesem Board.</p>
+      <input id="ftDatei" class="feld" type="file" accept=".json,application/json">
+      <input id="ftPass" class="feld" type="password" placeholder="Experten-Passwort" autocomplete="off">
+      <button id="ftBtn" class="knopf" style="margin-top:.5rem">ORIGINALTEXTE EINSPIELEN</button>
+      <button id="ftZurueckBtn" class="knopf" style="margin-top:.5rem">ZURÜCK AUF EIGENE TEXTE</button>
+      <div id="ftMeldung" class="meldung"></div>
+    </section>
+
+    <section class="block">
       <div class="block-head"><span class="block-title">FIRMWARE-UPDATE</span></div>
       <div class="zeile"><span class="name">Installiert <span class="hinweis" id="fwAktuell">–</span></span></div>
       <input id="fwDatei" class="feld" type="file" accept=".bin">
