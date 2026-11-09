@@ -1,0 +1,77 @@
+# CAN-Tunnel ueber WLAN (Board an der Therme <-> Board mit Raumgeraet).
+# Seit 08.11.2026: nach jedem Neustart schaltet sich der Tunnel
+# einmal selbst ein, sobald das WLAN steht. Von Hand ausschalten bleibt bis zum naechsten Neustart aus.
+# Nur fuer Versuche: siehe components/weishaupt_can/can_tunnel.h
+# ${tunnel_ziel} = IP der Gegenstelle, ${tunnel_log} = IP fuer den Mitschnitt ("" = keiner), ${tunnel_name} = Kuerzel im Mitschnitt,
+# ${tunnel_nur_bei_bus} = true: nur senden, wenn kurz zuvor etwas vom Bus kam (Board an der Therme)
+globals:
+  - id: tunnel_auto_erledigt
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+switch:
+  - platform: template
+    name: "CAN-Tunnel (Experten)"
+    id: tunnel_an
+    optimistic: true
+    restore_mode: ALWAYS_OFF
+    on_turn_on:
+      - lambda: |-
+          can_tunnel::schnell().start();
+          can_tunnel::kanal("${tunnel_ziel}")->neu();
+          ESP_LOGW("tunnel", "EIN (${tunnel_name})");
+    on_turn_off:
+      - lambda: |-
+          can_tunnel::schnell().stop();
+          ESP_LOGW("tunnel", "AUS");
+
+canbus:
+  - id: !extend my_can_bus
+    rx_queue_len: 64
+    tx_queue_len: 32
+    on_frame:
+      - can_id: 0x000
+        can_id_mask: 0x000
+        then:
+          - lambda: |-
+              can_tunnel::zaehler().letzter_empfang = millis();
+              can_tunnel::zaehler().hat_empfang = true;
+              if (!id(tunnel_an).state || !can_tunnel::gueltig(can_id)) return;
+              can_tunnel::kanal("${tunnel_ziel}")->senden(can_id, remote_transmission_request, x);
+              can_tunnel::zaehler().vom_bus++;
+              can_tunnel::mitschnitt("${tunnel_log}", "${tunnel_name}")->frame('R', can_id, remote_transmission_request, x, millis());
+
+interval:
+  - interval: 5s  # Tunnel nach Neustart einmal selbst einschalten
+    then:
+      - if:
+          condition:
+            and:
+              - wifi.connected:
+              - lambda: 'return !id(tunnel_auto_erledigt);'
+          then:
+            - lambda: 'id(tunnel_auto_erledigt) = true;'
+            - switch.turn_on: tunnel_an
+  - interval: 1ms
+    then:
+      - lambda: |-
+          if (!id(tunnel_an).state) return;
+          auto *k = can_tunnel::kanal("${tunnel_ziel}");
+          auto *m = can_tunnel::mitschnitt("${tunnel_log}", "${tunnel_name}");
+          uint32_t cid; bool rtr; std::vector<uint8_t> d;
+          while (k->holen(cid, rtr, d)) {
+            if (!can_tunnel::gueltig(cid)) continue;
+            // Therme aus/Bus still: nicht senden, sonst Fehlerzaehler bis Bus-off (05.11.2026)
+            if (${tunnel_nur_bei_bus} && !can_tunnel::bus_aktiv(millis())) { can_tunnel::zaehler().gesperrt++; continue; }
+            bool ok = id(my_can_bus)->send_data(cid, false, rtr, d) == canbus::ERROR_OK;
+            if (ok) can_tunnel::zaehler().zum_bus++; else can_tunnel::zaehler().can_fehler++;
+            m->frame(ok ? 'T' : 'X', cid, rtr, d, millis());
+          }
+          m->takt(millis());
+  - interval: 10s
+    then:
+      - lambda: |-
+          can_tunnel::bus_off_beheben(millis());
+          if (!id(tunnel_an).state) return;
+          can_tunnel::statistik(can_tunnel::mitschnitt("${tunnel_log}", "${tunnel_name}"), millis());

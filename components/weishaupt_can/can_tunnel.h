@@ -1,19 +1,19 @@
 #pragma once
-// CAN-Bruecke ueber WLAN (UDP) zwischen zwei Boards: echtes Raumgeraet am Tisch, WEM an der Therme.
+// CAN-Tunnel ueber WLAN (UDP) zwischen zwei Boards: echtes Raumgeraet am Tisch, WEM an der Therme.
 // Beide Richtungen leiten alles weiter (Entscheidung 05.11.2026). Sicherung ist die Herkunft: nur Frames, die das Board
 // auf seinem eigenen Bus empfangen hat, nur von der eingetragenen Gegenstelle. Dazu Zaehler und Mitschnitt.
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <vector>
-#ifndef BRUECKE_NUR_FILTER
+#ifndef CAN_TUNNEL_NUR_FILTER
 #include <driver/twai.h>
 #include <lwip/inet.h>
 #include <lwip/sockets.h>
 #include "esphome/core/helpers.h"
 #endif
 
-namespace bruecke {
+namespace can_tunnel {
 
 constexpr uint16_t PORT = 47011;      // Frames zwischen den Boards
 constexpr uint16_t PORT_LOG = 47012;  // Mitschnitt an einen Rechner im Heimnetz
@@ -53,7 +53,7 @@ inline bool bus_aktiv(uint32_t jetzt) {
   return z.hat_empfang && (uint32_t) (jetzt - z.letzter_empfang) < BUS_AKTIV_MS;
 }
 
-#ifndef BRUECKE_NUR_FILTER
+#ifndef CAN_TUNNEL_NUR_FILTER
 inline esphome::HighFrequencyLoopRequester &schnell() { static esphome::HighFrequencyLoopRequester h; return h; }
 
 class Kanal {
@@ -180,4 +180,4 @@ inline void statistik(Mitschnitt *m, uint32_t ms) {
   m->zeile(t, ms); m->leeren();
 }
 #endif
-}  // namespace bruecke
+}  // namespace can_tunnel
