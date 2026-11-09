@@ -179,7 +179,7 @@ verwirren. Deshalb nur als Experiment, mit Rückweg (Kabel oder Gerät abziehen)
 
 ### Gesucht: jemand mit Weishaupt-Raumgerät am Bus
 
-> **Stand 08.11.2026:** Ein gebrauchtes WEM-RG2 2.1 läuft bei uns, auch über eine WLAN-Brücke vom Schreibtisch aus. Aufnahme, Lesen und Schreiben sind mitgeschnitten und entschlüsselt: [PROTOKOLL.md, 10a](PROTOKOLL.md#10a-raumgerät-wem-rg2-am-bus-mitschnitt-november-2026) und [10b](PROTOKOLL.md#10b-can-brücke-über-wlan-versuch-zweig-bruecke). Weitere Mitschnitte (RG1, WEM-RF, andere Stände, mehrere Raumgeräte, Raumfühler zugeordnet) bleiben willkommen.
+> **Stand 08.11.2026:** Ein gebrauchtes WEM-RG2 2.1 läuft bei uns, auch über einen CAN-Tunnel (WLAN) vom Schreibtisch aus. Aufnahme, Lesen und Schreiben sind mitgeschnitten und entschlüsselt: [PROTOKOLL.md, 10a](PROTOKOLL.md#10a-raumgerät-wem-rg2-am-bus-mitschnitt-november-2026) und [10b](PROTOKOLL.md#10b-can-tunnel-über-wlan-versuch-zweig-can-tunnel). Weitere Mitschnitte (RG1, WEM-RF, andere Stände, mehrere Raumgeräte, Raumfühler zugeordnet) bleiben willkommen.
 
 Wir hatten bisher **kein** Raumgerät und können deshalb nicht sehen, was es auf dem Bus sendet. Genau das
 wäre aber die Grundlage für diese Idee – und nebenbei für eine Raumaufschaltung aus eigenen Sensoren

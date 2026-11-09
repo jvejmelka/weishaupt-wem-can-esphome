@@ -203,8 +203,8 @@ Die Dokumente im Überblick:
 
 - [INSTALL.md](INSTALL.md) – Schritt für Schritt vom Board bis zur Handy-App
 - [PROTOKOLL.md](PROTOKOLL.md) – CAN-Bus, WEM-JSON, Abbildung und Fehlerbilder; Raumgerät WEM-RG2 lesen und
-  schreiben ([10a](PROTOKOLL.md#10a-raumgerät-wem-rg2-am-bus-mitschnitt-november-2026)), CAN-Brücke über WLAN
-  ([10b](PROTOKOLL.md#10b-can-brücke-über-wlan-versuch-zweig-bruecke), Versuch im Zweig `bruecke`)
+  schreiben ([10a](PROTOKOLL.md#10a-raumgerät-wem-rg2-am-bus-mitschnitt-november-2026)), CAN-Tunnel über WLAN
+  ([10b](PROTOKOLL.md#10b-can-tunnel-über-wlan-versuch-zweig-can-tunnel), Versuch im Zweig `can-tunnel`)
 - [REGELN.md](REGELN.md) – die Regeln R1–R5 und eigene Regeln: wann das Board Betriebsarten nachliest
 - [ANLAGE.md](ANLAGE.md) – Beispielanlage mit Wärmepumpe und PV
 - [IDEEN.md](IDEEN.md) – was sich noch bauen ließe: Datenbank und Grafana, H2-Sperre,

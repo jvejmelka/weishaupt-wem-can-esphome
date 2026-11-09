@@ -894,7 +894,7 @@ Wie das Objekt `0x2A20`/2 gefunden wurde, steht in [Abschnitt 7](#7-neue-objekte
 ## 10a. Raumgerät WEM-RG2 am Bus (Mitschnitt, November 2026)
 
 Mitgeschnitten an einer Anlage mit WTC-GW 15-B und einem gebrauchten WEM-RG2 2.1 (Software
-453.210). Zuerst nur lesend am Bus; am 08.11.2026 lief das RG2 über die WLAN-Brücke (Abschnitt 10b), und am RG2
+453.210). Zuerst nur lesend am Bus; am 08.11.2026 lief das RG2 über den CAN-Tunnel (Abschnitt 10b), und am RG2
 wurden gezielt Werte verstellt und wieder zurückgestellt, um die Schreibseite zu sehen. Das Board selbst hat dabei
 nichts geschrieben, es hat nur die Frames des RG2 weitergereicht.
 
@@ -907,7 +907,7 @@ gemeinsam**: Der WEM fragt `0x1018/1`, startet nach „System hat neue Geräte e
 Knoten 4 mit seinen Modulen (`TERMINAL1`, `GROUND2`) in der `systable.csv`.
 
 Läuft das RG2 bei einem Neustart des WEM einfach weiter, antwortete es bei uns nicht auf diese Abfrage und
-verlor seine Knotenadresse (LSS-Abfrage danach: `FF`). Das war ein einzelner Versuch über eine WLAN-Brücke;
+verlor seine Knotenadresse (LSS-Abfrage danach: `FF`). Das war ein einzelner Versuch über den CAN-Tunnel (10b);
 die Ursache ist nicht bewiesen.
 
 Nach der Aufnahme überträgt der WEM ein **Menü-Paket von rund 1,6 MB** per SDO-Block auf `0x20F4/0`
@@ -1017,11 +1017,14 @@ das RG2 las nur den Montags- (Sub 4–13) und den Samstagsblock (Sub 84–93).
   `0x04000001`), das RG2 quittiert, und sein Leuchtring blinkt grün (Deutung: Gerät identifizieren). Dazu sendet der WEM
   `011: 01 F0 20 00 00 00 00 04`.
 - **Start des RG2:** Es sendet `011: 01 F0 20 00 00 00 00 1C` und läuft `704:00` → `704:7F` → `704:05` in rund 20 s hoch.
-  Bei laufendem WEM behielt es seinen Knoten 4 ohne Eingriff – direkt am Bus wie über die Brücke.
+  Bei laufendem WEM behielt es seinen Knoten 4 ohne Eingriff – direkt am Bus wie über den CAN-Tunnel.
 - **Ausfall des RG2:** 30 s nach dem letzten Lebenszeichen meldet der WEM `081: FF FF 01 02 05 DD 01 00` (`0x05DD` = 1501)
   und löscht die Meldung, sobald das RG2 wieder da ist. In der Geräteliste steht es dann unter „Nicht aktive Geräte“.
 
-## 10b. CAN-Brücke über WLAN (Versuch, Zweig `bruecke`)
+## 10b. CAN-Tunnel über WLAN (Versuch, Zweig `can-tunnel`)
+
+> **Abgrenzung:** Das Projekt als Ganzes ist die „ESP-Brücke“ – ein Board vermittelt zwischen CAN-Bus und Heimnetz.
+> Der **CAN-Tunnel** ist etwas anderes: Zwei Boards verlängern den CAN-Bus selbst über das WLAN.
 
 Zwei Boards dieses Projekts verbinden zwei CAN-Busse über das WLAN: Board A hängt an der Therme am echten Bus, Board B
 steht mit dem Raumgerät am Schreibtisch und bildet mit ihm einen kleinen eigenen Bus. So lässt sich ein RG2 bedienen und
@@ -1034,32 +1037,32 @@ Gegenstelle. Ein Paket ist `'W' 'B' Folge id_lo id_hi(+0x80 = RTR) Länge d0…d
 verlorene Pakete. Alle 10 s entsteht eine Statuszeile (vom/zum Bus, verloren, Fehler, Bus-off), auf Wunsch geht ein
 Textmitschnitt per UDP (Port 47012) an einen Rechner. Der Rundlauf Bestellung → Lieferung lag bei 25–35 ms.
 
-**Schutz.** Die Brücke filtert nicht: Alles, was das RG2 sendet, kommt am WEM an, auch Schreibaufträge. Sie ist
+**Schutz.** Der Tunnel filtert nicht: Alles, was das RG2 sendet, kommt am WEM an, auch Schreibaufträge. Er ist
 nur für Versuche gedacht. Board A sendet nur, wenn in den letzten 3 s etwas vom Bus kam – bei ausgeschalteter Therme
 stieg sonst der Fehlerzähler bis zum Bus-off. Board B nutzt diese Sperre nicht, damit Anfragen des WEM das stumme RG2
 erreichen. Beide versuchen alle 10 s einen Wiederanlauf, falls der CAN-Baustein im Bus-off steht.
 
-**Schalter** „CAN-Bruecke (Experten)“: Er schaltet sich nach jedem Neustart einmal selbst ein, sobald das WLAN steht. Von
+**Schalter** „CAN-Tunnel (Experten)“: Er schaltet sich nach jedem Neustart einmal selbst ein, sobald das WLAN steht. Von
 Hand ausgeschaltet bleibt er bis zum nächsten Neustart aus.
 
 **Einbinden** (Adressen sind Platzhalter):
 
 ```yaml
 substitutions:
-  bruecke_ziel: "<ip-der-gegenstelle>"
-  bruecke_log: ""              # oder <ip-eines-rechners> für den Mitschnitt
-  bruecke_name: "B1"           # Kürzel im Mitschnitt
-  bruecke_nur_bei_bus: "true"  # Board an der Therme: true, Board am Raumgerät: false
+  tunnel_ziel: "<ip-der-gegenstelle>"
+  tunnel_log: ""              # oder <ip-eines-rechners> für den Mitschnitt
+  tunnel_name: "B1"           # Kürzel im Mitschnitt
+  tunnel_nur_bei_bus: "true"  # Board an der Therme: true, Board am Raumgerät: false
 
 packages:
-  bruecke: !include pakete/bruecke.yaml
+  can_tunnel: !include pakete/can-tunnel.yaml
 ```
 
 **Was geklappt hat:** Aufnahme des RG2, Lesen und Schreiben aller Werte aus Abschnitt 10a, Neustart des RG2 und Neustart
 von Board B jeweils ohne Eingriff.
 
 **Bekannte Probleme:**
-- Kaltstart der Therme bei laufender Brücke (05.11.2026, ältere Firmware): Das RG2 lief weiter, antwortete nicht auf
+- Kaltstart der Therme bei laufendem Tunnel (05.11.2026, ältere Firmware): Das RG2 lief weiter, antwortete nicht auf
   `0x1018/1` und verlor seine Knotenadresse (LSS: `FF`). Direkt am Bus, mit gemeinsamem Kaltstart, ging es. Mit dem
   heutigen Stand noch nicht wiederholt.
 - Firmware-Update: Am Board an der Therme brach `esphome upload` (Port 3232) mehrfach mit „receiving chunk result:

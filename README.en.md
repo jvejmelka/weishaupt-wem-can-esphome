@@ -216,8 +216,8 @@ The documents at a glance:
 
 - [INSTALL.md](INSTALL.md) (German) – step by step from the board to the phone app
 - [PROTOKOLL.en.md](PROTOKOLL.en.md) – CAN bus, WEM JSON, mapping and failure patterns; WEM-RG2 room unit reading and
-  writing ([10a](PROTOKOLL.en.md#10a-wem-rg2-room-unit-on-the-bus-capture-november-2026)), CAN bridge over WLAN
-  ([10b](PROTOKOLL.en.md#10b-can-bridge-over-wlan-experiment-branch-bruecke), experiment in branch `bruecke`)
+  writing ([10a](PROTOKOLL.en.md#10a-wem-rg2-room-unit-on-the-bus-capture-november-2026)), CAN tunnel over WLAN
+  ([10b](PROTOKOLL.en.md#10b-can-tunnel-over-wlan-experiment-branch-can-tunnel), experiment in branch `can-tunnel`)
 - [REGELN.md](REGELN.md) (German) – rules R1–R5 and custom rules: when the board re-reads operating modes
 - [ANLAGE.md](ANLAGE.md) (German) – example installation with heat pump and PV
 - [IDEEN.md](IDEEN.md) (German) – what could still be built: database and Grafana, H2 lockout,

@@ -927,7 +927,7 @@ How the object `0x2A20`/2 was found is described in [section 7](#7-finding-new-o
 ## 10a. WEM-RG2 room unit on the bus (capture, November 2026)
 
 Captured on a WTC-GW 15-B with a used WEM-RG2 2.1 (software 453.210). At first listening only; on 8 Nov 2026 the RG2
-ran over the WLAN bridge (section 10b), and values were deliberately changed on the RG2 and set back to see the write side.
+ran over the CAN tunnel (section 10b), and values were deliberately changed on the RG2 and set back to see the write side.
 The board itself wrote nothing; it only passed on the RG2's frames.
 
 ### Commissioning
@@ -938,7 +938,7 @@ worked **only after a cold start of boiler and RG2 together**: the WEM queries `
 devices”, and node 4 then appears in `systable.csv` with its modules (`TERMINAL1`, `GROUND2`).
 
 If the RG2 simply keeps running during a WEM restart, ours did not answer this query and lost its node address (LSS query afterwards:
-`FF`). This was a single attempt over a WLAN bridge; the cause is not proven.
+`FF`). This was a single attempt over the CAN tunnel (10b); the cause is not proven.
 
 After commissioning the WEM transfers a **menu bundle of about 1.6 MB** by SDO block to `0x20F4/0`
 (`604: C6 F4 20 00 00 10 00 00`, blocks of 4096 bytes) with multi-language text and parameter tables. It took about 25 minutes at up to
@@ -1044,11 +1044,14 @@ only the Monday (sub 4–13) and the Saturday block (sub 84–93).
   `0x04000001`), the RG2 acknowledges and its light ring flashes green (interpretation: identify the device). The WEM also
   sends `011: 01 F0 20 00 00 00 00 04`.
 - **RG2 start:** it sends `011: 01 F0 20 00 00 00 00 1C` and goes `704:00` → `704:7F` → `704:05` in about 20 s. With the
-  WEM running it kept node 4 without intervention – directly on the bus and over the bridge.
+  WEM running it kept node 4 without intervention – directly on the bus and over the CAN tunnel.
 - **RG2 failure:** 30 s after the last heartbeat the WEM reports `081: FF FF 01 02 05 DD 01 00` (`0x05DD` = 1501) and
   clears it as soon as the RG2 is back. The device list then shows it under "inactive devices".
 
-## 10b. CAN bridge over WLAN (experiment, branch `bruecke`)
+## 10b. CAN tunnel over WLAN (experiment, branch `can-tunnel`)
+
+> **Not to be confused with the project itself:** the project is the "ESP bridge" – one board connecting the CAN bus
+> to the home network. The **CAN tunnel** is different: two boards extend the CAN bus itself over WLAN.
 
 Two boards of this project join two CAN buses over WLAN: board A sits at the boiler on the real bus, board B sits on the
 desk with the room unit and forms a small bus of its own with it. This lets you operate and capture an RG2 without running
@@ -1060,32 +1063,32 @@ and puts what arrives from there on its own bus. Only packets from the peer's ad
 there is a status line (from/to bus, lost, errors, bus-off); optionally a text capture goes to a computer via UDP
 (port 47012). The round trip order → delivery was 25–35 ms.
 
-**Protection.** The bridge does not filter: everything the RG2 sends reaches the WEM, including write orders. It is
+**Protection.** The tunnel does not filter: everything the RG2 sends reaches the WEM, including write orders. It is
 meant for experiments only. Board A only sends if something came from the bus in the last 3 s – with the boiler switched
 off the error counter otherwise rose to bus-off. Board B does not use this lock, so that the WEM's requests reach the
 silent RG2. Both try a recovery every 10 s if the CAN controller is in bus-off.
 
-**Switch** "CAN-Bruecke (Experten)": it turns itself on once after every restart as soon as WLAN is up. Switched off by
+**Switch** "CAN-Tunnel (Experten)": it turns itself on once after every restart as soon as WLAN is up. Switched off by
 hand it stays off until the next restart.
 
 **Including it** (addresses are placeholders):
 
 ```yaml
 substitutions:
-  bruecke_ziel: "<peer-ip>"
-  bruecke_log: ""              # or <ip-of-a-computer> for the capture
-  bruecke_name: "B1"           # tag in the capture
-  bruecke_nur_bei_bus: "true"  # board at the boiler: true, board at the room unit: false
+  tunnel_ziel: "<peer-ip>"
+  tunnel_log: ""              # or <ip-of-a-computer> for the capture
+  tunnel_name: "B1"           # tag in the capture
+  tunnel_nur_bei_bus: "true"  # board at the boiler: true, board at the room unit: false
 
 packages:
-  bruecke: !include pakete/bruecke.yaml
+  can_tunnel: !include pakete/can-tunnel.yaml
 ```
 
 **What worked:** commissioning the RG2, reading and writing all values from section 10a, restarting the RG2 and
 restarting board B, each without intervention.
 
 **Known problems:**
-- Cold start of the boiler with the bridge running (5 Nov 2026, older firmware): the RG2 kept running, did not answer
+- Cold start of the boiler with the tunnel running (5 Nov 2026, older firmware): the RG2 kept running, did not answer
   `0x1018/1` and lost its node address (LSS: `FF`). Directly on the bus, with a joint cold start, it worked. Not yet
   repeated with the current state.
 - Firmware update: on the board at the boiler `esphome upload` (port 3232) failed several times with "receiving chunk
