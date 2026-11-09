@@ -7,8 +7,10 @@
 # Diese Datei waehlt nur die Pakete aus. Alles Persoenliche steht in secrets.yaml
 # (Vorlage: secrets.yaml.example). Nicht benoetigte Pakete auskommentieren.
 #
-#   pakete/kessel.yaml               Pflicht: Kesselwerte lesen, Diagnose, WLAN-Felder (bindet das
+#   pakete/kessel.yaml               Pflicht: Kesselwerte lesen, Diagnose (bindet das
 #                                    Bauteil weishaupt_can ein, das Zustand und Logik haelt)
+#   pakete/netz-wlan.yaml            WLAN-Anzeigen und WLAN-Wechsel (Boards mit Ethernet: netz-lan.yaml,
+#                                    siehe olimex-weishaupt.yaml)
 #   pakete/warmwasser.yaml           Warmwasserwerte (nur mit Warmwasserspeicher am WTC)
 #   pakete/mqtt.yaml                 Werte und Befehle ueber MQTT
 #   pakete/homeassistant-api.yaml    native Home-Assistant-API (statt oder neben MQTT)
@@ -20,6 +22,9 @@
 #   pakete/app.yaml                  Heizungs-App direkt auf dem Board (http://<board>/app, ab v38)
 #   pakete/json-lesen.yaml           Werte von Hand per WEM-JSON abrufen (ohne CAN-Kabel, ab v42; braucht wem-schalten)
 #   pakete/feste-ip.yaml             feste IP statt DHCP (Empfehlung: DHCP + Router-Reservierung)
+#   pakete/kraiz-per-can.yaml        weitere Werte wie kraiz/hassio-weishaupt, per CAN gelesen; Warmwasser-Push,
+#                                    Fehlerblock des WEM (von cg089; braucht wem-schalten und eigene CAN-Anfragen)
+#   pakete/dallas.yaml               1-Wire-Bus fuer eigene DS18B20-Fuehler (von cg089, Beispiel: olimex-weishaupt.yaml)
 #
 substitutions:
   geraet: weact-can485-weishaupt       # Geraetename = MQTT-Praefix
@@ -59,6 +64,7 @@ external_components:
 
 packages:
   kessel: !include pakete/kessel.yaml
+  netz: !include pakete/netz-wlan.yaml
   warmwasser: !include pakete/warmwasser.yaml
   mqtt: !include pakete/mqtt.yaml
   # api: !include pakete/homeassistant-api.yaml
@@ -69,6 +75,7 @@ packages:
   app: !include pakete/app.yaml
   json_lesen: !include pakete/json-lesen.yaml
   # feste_ip: !include pakete/feste-ip.yaml
+  # kraiz: !include pakete/kraiz-per-can.yaml
 
 esphome:
   name: ${geraet}

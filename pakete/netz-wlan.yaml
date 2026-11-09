@@ -1,0 +1,95 @@
+# Paket NETZ-WLAN: Anzeigen zum WLAN (IP, Name, Signal, Zugangspunkt, Gateway, Netzmaske) und der
+# WLAN-Wechsel ueber die Weboberflaeche. Bis v42 Teil des Pakets kessel; eigenes Paket, damit Boards mit
+# Ethernet (Paket netz-lan, z. B. Olimex ESP32-EVB) das Paket kessel unveraendert nutzen koennen.
+# Braucht den Block  wifi:  in der Haupt-YAML und das Paket kessel (Gruppen g_diag, g_einst).
+# Das Paket app braucht dieses Paket (WLAN-Wechsel im Assistenten).
+
+text_sensor:
+  - platform: template
+    name: "WLAN-Wechsel"
+    id: wlan_ergebnis
+    web_server: { sorting_group_id: g_einst, sorting_weight: 23 }
+  - platform: wifi_info
+    ip_address:
+      name: "IP-Adresse"
+      web_server: { sorting_group_id: g_diag, sorting_weight: 5 }
+    ssid:
+      name: "WLAN"
+      web_server: { sorting_group_id: g_diag, sorting_weight: 6 }
+    dns_address:
+      name: "DNS-Server"
+      web_server: { sorting_group_id: g_diag, sorting_weight: 9 }
+    bssid:
+      name: "WLAN-Zugangspunkt (BSSID)"
+      web_server: { sorting_group_id: g_diag, sorting_weight: 11 }
+    mac_address:
+      name: "MAC-Adresse"
+      web_server: { sorting_group_id: g_diag, sorting_weight: 12 }
+  - platform: template
+    name: "Gateway"
+    update_interval: 60s
+    web_server: { sorting_group_id: g_diag, sorting_weight: 7 }
+    lambda: |-
+      esp_netif_t *n = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+      esp_netif_ip_info_t ip;
+      if (n == nullptr || esp_netif_get_ip_info(n, &ip) != ESP_OK) return {"-"};
+      char b[20]; snprintf(b, sizeof(b), IPSTR, IP2STR(&ip.gw));
+      return {b};
+  - platform: template
+    name: "Netzmaske"
+    update_interval: 60s
+    web_server: { sorting_group_id: g_diag, sorting_weight: 8 }
+    lambda: |-
+      esp_netif_t *n = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+      esp_netif_ip_info_t ip;
+      if (n == nullptr || esp_netif_get_ip_info(n, &ip) != ESP_OK) return {"-"};
+      char b[20]; snprintf(b, sizeof(b), IPSTR, IP2STR(&ip.netmask));
+      return {b};
+
+button:
+  # WLAN wechseln: neue Daten eintragen, dann diesen Knopf. Klappt die Verbindung
+  # binnen 30 s, werden die Daten gespeichert; sonst bleibt das bisherige WLAN.
+  # Letzter Rueckweg ist der Notfall-Hotspot (ap) mit Captive Portal.
+  - platform: template
+    name: "WLAN uebernehmen"
+    id: wlan_uebernehmen
+    web_server: { sorting_group_id: g_einst, sorting_weight: 22 }
+    on_press:
+      - if:
+          condition:
+            lambda: 'return id(wlan_neu_ssid).state.empty();'
+          then:
+            - lambda: 'id(wlan_ergebnis).publish_state("bitte zuerst den WLAN-Namen eintragen");'
+          else:
+            - lambda: 'id(wlan_ergebnis).publish_state("verbinde mit " + id(wlan_neu_ssid).state + " ...");'
+            - wifi.configure:
+                ssid: !lambda 'return id(wlan_neu_ssid).state;'
+                password: !lambda 'return id(wlan_neu_pass).state;'
+                save: true
+                timeout: 30s
+                on_connect:
+                  - lambda: 'id(wlan_ergebnis).publish_state("verbunden und gespeichert: " + id(wlan_neu_ssid).state);'
+                on_error:
+                  - lambda: 'id(wlan_ergebnis).publish_state("keine Verbindung zu " + id(wlan_neu_ssid).state + " - bisheriges WLAN bleibt");'
+
+text:
+  - platform: template
+    name: "WLAN-Name (neu)"
+    id: wlan_neu_ssid
+    optimistic: true
+    mode: text
+    max_length: 32
+    web_server: { sorting_group_id: g_einst, sorting_weight: 20 }
+  - platform: template
+    name: "WLAN-Passwort (neu)"
+    id: wlan_neu_pass
+    optimistic: true
+    mode: password
+    max_length: 64
+    web_server: { sorting_group_id: g_einst, sorting_weight: 21 }
+
+sensor:
+  - platform: wifi_signal
+    name: "WLAN-Signal"
+    update_interval: 60s
+    web_server: { sorting_group_id: g_diag, sorting_weight: 1 }

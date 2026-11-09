@@ -1,5 +1,5 @@
 # Paket KESSEL (Pflicht): Kesselwerte vom CAN-Bus, Heizkreis-Zustand, Diagnose,
-# Lesebefehl, Bus-Waechter, WLAN-Wechsel ueber die Weboberflaeche.
+# Lesebefehl, Bus-Waechter. Netz-Anzeigen: Paket netz-wlan (WLAN) oder netz-lan (Ethernet).
 #
 # Was dieses Paket auf den Bus schickt, sind ausschliesslich LESE-Anfragen
 # (SDO-Upload, Kommandobyte 0x40). Es wird nie etwas auf den Kessel geschrieben.
@@ -29,6 +29,9 @@ substitutions:
   can_anfragen_start: RESTORE_DEFAULT_OFF
   # Sprache der Stoermeldungen: "false" = Deutsch (Vorgabe), "true" = Englisch
   meldungen_englisch: "false"
+  # CAN-Pins des Boards: WeAct CAN485 = GPIO27/GPIO26 (Vorgabe), Olimex ESP32-EVB = GPIO5/GPIO35
+  can_tx_pin: GPIO27
+  can_rx_pin: GPIO26
 
 # Das Bauteil weishaupt_can (components/weishaupt_can) haelt Zustand und Logik: Bus-Waechter,
 # Anlass-Nachlesen, Lesebefehl, Scan, Brennerstarts, Regeln, Zusatzanzeigen, Schaltbefehle.
@@ -172,8 +175,8 @@ canbus:
   - platform: esp32_can
     id: my_can_bus
     can_id: 0x602
-    tx_pin: GPIO27
-    rx_pin: GPIO26
+    tx_pin: ${can_tx_pin}
+    rx_pin: ${can_rx_pin}
     bit_rate: 50kbps
     on_frame:
       # jeder Frame: Lebenszeichen des Busses + Antwort auf einen offenen Lesebefehl
@@ -381,10 +384,6 @@ text_sensor:
     web_server: { sorting_group_id: g_diag, sorting_weight: 4 }
     lambda: 'return {wc::anfragen_text(id(can_anfragen).state, id(wcan)->bus, millis())};'
   - platform: template
-    name: "WLAN-Wechsel"
-    id: wlan_ergebnis
-    web_server: { sorting_group_id: g_einst, sorting_weight: 23 }
-  - platform: template
     name: "Firmware"
     id: fw_stand
     lambda: 'return {"${firmware}"};'
@@ -394,42 +393,6 @@ text_sensor:
     name: "ESPHome-Version"
     hide_timestamp: false
     web_server: { sorting_group_id: g_fw, sorting_weight: 2 }
-  - platform: wifi_info
-    ip_address:
-      name: "IP-Adresse"
-      web_server: { sorting_group_id: g_diag, sorting_weight: 5 }
-    ssid:
-      name: "WLAN"
-      web_server: { sorting_group_id: g_diag, sorting_weight: 6 }
-    dns_address:
-      name: "DNS-Server"
-      web_server: { sorting_group_id: g_diag, sorting_weight: 9 }
-    bssid:
-      name: "WLAN-Zugangspunkt (BSSID)"
-      web_server: { sorting_group_id: g_diag, sorting_weight: 11 }
-    mac_address:
-      name: "MAC-Adresse"
-      web_server: { sorting_group_id: g_diag, sorting_weight: 12 }
-  - platform: template
-    name: "Gateway"
-    update_interval: 60s
-    web_server: { sorting_group_id: g_diag, sorting_weight: 7 }
-    lambda: |-
-      esp_netif_t *n = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
-      esp_netif_ip_info_t ip;
-      if (n == nullptr || esp_netif_get_ip_info(n, &ip) != ESP_OK) return {"-"};
-      char b[20]; snprintf(b, sizeof(b), IPSTR, IP2STR(&ip.gw));
-      return {b};
-  - platform: template
-    name: "Netzmaske"
-    update_interval: 60s
-    web_server: { sorting_group_id: g_diag, sorting_weight: 8 }
-    lambda: |-
-      esp_netif_t *n = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
-      esp_netif_ip_info_t ip;
-      if (n == nullptr || esp_netif_get_ip_info(n, &ip) != ESP_OK) return {"-"};
-      char b[20]; snprintf(b, sizeof(b), IPSTR, IP2STR(&ip.netmask));
-      return {b};
 
 button:
   - platform: template
@@ -449,30 +412,6 @@ button:
           bool senden = id(wcan)->lesen.starten(id(lese_eingabe).state, id(wcan)->bus.tot(millis()), m, cid, d);
           id(lese_antwort).publish_state(m);
           if (senden) id(wcan)->senden(cid, d);
-  # WLAN wechseln: neue Daten eintragen, dann diesen Knopf. Klappt die Verbindung
-  # binnen 30 s, werden die Daten gespeichert; sonst bleibt das bisherige WLAN.
-  # Letzter Rueckweg ist der Notfall-Hotspot (ap) mit Captive Portal.
-  - platform: template
-    name: "WLAN uebernehmen"
-    id: wlan_uebernehmen
-    web_server: { sorting_group_id: g_einst, sorting_weight: 22 }
-    on_press:
-      - if:
-          condition:
-            lambda: 'return id(wlan_neu_ssid).state.empty();'
-          then:
-            - lambda: 'id(wlan_ergebnis).publish_state("bitte zuerst den WLAN-Namen eintragen");'
-          else:
-            - lambda: 'id(wlan_ergebnis).publish_state("verbinde mit " + id(wlan_neu_ssid).state + " ...");'
-            - wifi.configure:
-                ssid: !lambda 'return id(wlan_neu_ssid).state;'
-                password: !lambda 'return id(wlan_neu_pass).state;'
-                save: true
-                timeout: 30s
-                on_connect:
-                  - lambda: 'id(wlan_ergebnis).publish_state("verbunden und gespeichert: " + id(wlan_neu_ssid).state);'
-                on_error:
-                  - lambda: 'id(wlan_ergebnis).publish_state("keine Verbindung zu " + id(wlan_neu_ssid).state + " - bisheriges WLAN bleibt");'
 
 switch:
   # Eigene CAN-Anfragen: AUS = das Board hoert nur mit und wertet aus, was ohnehin auf dem
@@ -529,20 +468,6 @@ text:
     mode: text
     max_length: 24
     web_server: { sorting_group_id: g_lesen, sorting_weight: 1 }
-  - platform: template
-    name: "WLAN-Name (neu)"
-    id: wlan_neu_ssid
-    optimistic: true
-    mode: text
-    max_length: 32
-    web_server: { sorting_group_id: g_einst, sorting_weight: 20 }
-  - platform: template
-    name: "WLAN-Passwort (neu)"
-    id: wlan_neu_pass
-    optimistic: true
-    mode: password
-    max_length: 64
-    web_server: { sorting_group_id: g_einst, sorting_weight: 21 }
 
 sensor:
   # --- Kessel ---
@@ -739,10 +664,6 @@ sensor:
     update_interval: never
     web_server: { sorting_group_id: g_codes, sorting_weight: 6 }
   # --- Diagnose ---
-  - platform: wifi_signal
-    name: "WLAN-Signal"
-    update_interval: 60s
-    web_server: { sorting_group_id: g_diag, sorting_weight: 1 }
   - platform: uptime
     name: "Laufzeit"
     update_interval: 60s

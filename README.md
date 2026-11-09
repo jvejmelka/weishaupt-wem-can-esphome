@@ -112,7 +112,8 @@ Nicht benötigte Zeilen unter `packages:` auskommentieren.
 
 | Paket | Inhalt | Pflicht |
 |---|---|---|
-| `kessel.yaml` | Kesselwerte, Heizkreis-Zustand, Diagnose, Lesefeld, Bus-Wächter, WLAN-Wechsel | ja |
+| `kessel.yaml` | Kesselwerte, Heizkreis-Zustand, Diagnose, Lesefeld, Bus-Wächter; CAN-Pins über `can_tx_pin`/`can_rx_pin` | ja |
+| `netz-wlan.yaml` | WLAN-Anzeigen und WLAN-Wechsel (bis v42 Teil von `kessel`; `app.yaml` braucht es). Boards mit Ethernet: `netz-lan.yaml` | nein |
 | `warmwasser.yaml` | Warmwasserwerte (nur mit Speicher am WTC) | nein |
 | `mqtt.yaml` | MQTT-Broker, `cmd/lesen`, `cmd/scan`, `cmd/stop`, `cmd/status`, Rohmitschnitt | nein |
 | `homeassistant-api.yaml` | native ESPHome-API (verschlüsselt) | nein |
@@ -122,6 +123,11 @@ Nicht benötigte Zeilen unter `packages:` auskommentieren.
 | `zusatz.yaml` | **Zusatzanzeigen für die Handy-App:** Liste von bis zu 6 fremden MQTT-Topics (z. B. Raumtemperaturen, „Wärmepumpe läuft“), einstellbar per Web und Datei. Das Board liest diese Werte **nicht** selbst, es verwaltet nur die Liste (braucht `mqtt`). Details: [PROTOKOLL.md, Abschnitt 6b](PROTOKOLL.md#6b-zusatzanzeigen-für-die-handy-app) | nein |
 | `app.yaml` | **Handy-App direkt auf dem Board** (ab v38): `http://<board>/app`, eigener Login (`app_benutzer`/`app_passwort` in `secrets.yaml`), kein Server nötig (braucht `wem-schalten`, `warmwasser-schalten`) | nein |
 | `feste-ip.yaml` | feste IP statt DHCP | nein |
+| `kraiz-per-can.yaml` | **Weitere Werte per CAN** (von cg089): 29 Objekte der Integration kraiz/hassio-weishaupt – Raum-/Vorlaufsollwerte, Status Heizkreis und Warmwasser, Betriebsphase –, Knopf „Warmwasser-Push“, Fehlerblock des WEM mit Klartext (braucht `wem-schalten` und eingeschaltete eigene CAN-Anfragen) | nein |
+| `dallas.yaml` | 1-Wire-Bus für eigene DS18B20-Fühler (von cg089) | nein |
+
+**Zweites Board:** [`olimex-weishaupt.yaml`](olimex-weishaupt.yaml) baut dieselben Pakete für das **Olimex ESP32-EVB**
+(Ethernet statt WLAN, Home-Assistant-API) – Variante von cg089, siehe [OLIMEX-ESP32-EVB.md](OLIMEX-ESP32-EVB.md).
 
 Die Handy-App läuft entweder direkt auf dem Board (Paket `app.yaml`) oder als Docker-Container aus dem Ordner `app/` (siehe unten).
 
@@ -543,7 +549,7 @@ Registerwissen stammt außerdem aus den unter „Quellen“ genannten Projekten.
 
 ## Lizenz
 
-[MIT](LICENSE) – © 2026 Juergen Vejmelka.
+[MIT](LICENSE) – © 2026 Juergen Vejmelka; die Olimex-Variante und die Pakete `kraiz-per-can` und `dallas`: © 2026 cg089.
 Verwendung auf eigene Gefahr; keine Verbindung zu Weishaupt.
 
 Was von anderen stammt, steht in [LIZENZEN-DRITTER.md](LIZENZEN-DRITTER.md). Die fertigen Firmware-Dateien (`*.bin`)

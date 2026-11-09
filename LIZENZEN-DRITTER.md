@@ -20,6 +20,39 @@ Quelltext dazu ist dieses Repository am Tag des jeweiligen Releases, gebaut mit 
 
 Die Lizenztexte stehen in den genannten Projekten; der Text der GPL-3.0: <https://www.gnu.org/licenses/gpl-3.0.txt>.
 
+## Im Repository enthalten
+
+| Teil | Von | Lizenz |
+|---|---|---|
+| `olimex-weishaupt.yaml`, `pakete/netz-lan.yaml`, `pakete/kraiz-per-can.*`, `pakete/dallas.yaml`, `werkzeuge/kraiz-per-can/`, `OLIMEX-ESP32-EVB.md` | cg089 ([Fork](https://github.com/cg089/weishaupt-wem-can-esphome), Zweig `olimex-esp32-evb`), eingebaut und angepasst | MIT, siehe [`LICENSE`](LICENSE) |
+| Objektnamen und Wertetexte in `pakete/kraiz-per-can.yaml` und `pakete/kraiz-per-can-texte.h` (erzeugt aus `sensors.py`) | [kraiz/hassio-weishaupt](https://github.com/kraiz/hassio-weishaupt) | MIT, Text unten |
+
+### kraiz/hassio-weishaupt
+
+```
+MIT License
+
+Copyright (c) 2026 Lars Kreisz
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
 ## Nur verlinkt oder beim Bauen geladen (nicht im Repository)
 
 | Teil | Wo | Lizenz |

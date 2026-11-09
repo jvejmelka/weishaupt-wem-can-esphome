@@ -144,6 +144,7 @@ packages:
     ref: main
     files:
       - pakete/kessel.yaml
+      - pakete/netz-wlan.yaml        # WLAN-Anzeigen und WLAN-Wechsel (bis v42 Teil von kessel)
       - pakete/warmwasser.yaml
       - pakete/mqtt.yaml
       # weitere Pakete nach Bedarf, siehe Abschnitt 5

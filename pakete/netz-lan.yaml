@@ -1,0 +1,35 @@
+# Paket NETZ-LAN: Anzeigen zum Netz fuer Boards mit Ethernet (IP, DNS, MAC, Gateway, Netzmaske) - das
+# Gegenstueck zu netz-wlan. Braucht den Block  ethernet:  in der Haupt-YAML und das Paket kessel (Gruppe g_diag).
+# Von cg089 (Olimex ESP32-EVB, Fork cg089/weishaupt-wem-can-esphome, 31.10.2026), MIT.
+
+text_sensor:
+  - platform: ethernet_info
+    ip_address:
+      name: "IP-Adresse"
+      web_server: { sorting_group_id: g_diag, sorting_weight: 5 }
+    dns_address:
+      name: "DNS-Server"
+      web_server: { sorting_group_id: g_diag, sorting_weight: 9 }
+    mac_address:
+      name: "MAC-Adresse"
+      web_server: { sorting_group_id: g_diag, sorting_weight: 12 }
+  - platform: template
+    name: "Gateway"
+    update_interval: 60s
+    web_server: { sorting_group_id: g_diag, sorting_weight: 7 }
+    lambda: |-
+      esp_netif_t *n = esp_netif_get_handle_from_ifkey("ETH_DEF");
+      esp_netif_ip_info_t ip;
+      if (n == nullptr || esp_netif_get_ip_info(n, &ip) != ESP_OK) return {"-"};
+      char b[20]; snprintf(b, sizeof(b), IPSTR, IP2STR(&ip.gw));
+      return {b};
+  - platform: template
+    name: "Netzmaske"
+    update_interval: 60s
+    web_server: { sorting_group_id: g_diag, sorting_weight: 8 }
+    lambda: |-
+      esp_netif_t *n = esp_netif_get_handle_from_ifkey("ETH_DEF");
+      esp_netif_ip_info_t ip;
+      if (n == nullptr || esp_netif_get_ip_info(n, &ip) != ESP_OK) return {"-"};
+      char b[20]; snprintf(b, sizeof(b), IPSTR, IP2STR(&ip.netmask));
+      return {b};

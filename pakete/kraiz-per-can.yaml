@@ -1,0 +1,430 @@
+# ERZEUGT von werkzeuge/kraiz-per-can/kraiz_erzeugen.js aus kraiz/hassio-weishaupt (sensors.py) -
+# Aenderungen im Generator, nicht hier. Paket von cg089 (MIT); Objektnamen und Wertetexte aus
+# kraiz/hassio-weishaupt (MIT, (c) 2026 Lars Kreisz), siehe LIZENZEN-DRITTER.md.
+#
+# Paket KRAIZ-PER-CAN: die Werte der Home-Assistant-Integration kraiz/hassio-weishaupt (WEM-JSON), hier per
+# CAN gelesen. Die JSON-Objekte (MI/MX/OX/OS) sind je Modul um einen festen Betrag verschoben auf den Bus
+# abgebildet (PROTOKOLL.md, "Abbildung JSON-Objekt -> CAN-Objekt"): MI01 Knoten 1 +0x100, MI02 +0x400,
+# MI03 +0x500, MI07 Knoten 2 +0, MI09/MX01 Knoten 2 +0x100.  Nur LESEN (SDO-Upload 0x40) - plus der
+# Schreibknopf Warmwasser-Push an den WEM (Knoten 1) wie in kraiz.
+# Heizkreis 2/3 und Solar fehlen bewusst: diese Module gibt es an der Anlage nicht.
+# Dazu der Fehlerblock des WEM (0x273F, alle 2 min): Status, Nummer, Modul und Klartext (Texte aus
+# fehlercodes.yaml, wie bei "Meldung WEM"/"Meldung Kessel" im Paket kessel).
+# Braucht die Pakete kessel (wcan, can_anfragen) und wem-schalten (Schreib-Helfer, Sperrminute) und eine
+# lokale Kopie des Repos: die beiden .h-Dateien liegen neben diesem Paket (esphome: includes: sucht sie
+# relativ zur Haupt-YAML, als Paket direkt von GitHub geht es deshalb nicht).
+# Abgefragt wird nur bei eingeschaltetem Schalter "Eigene CAN-Anfragen", hoechstens alle 3 s eine Anfrage,
+# jedes Objekt hoechstens alle 60 s / 5 min / 10 min; Objekte, die der WEM mit Abbruch (0x80) ablehnt,
+# werden bis zum Neustart nicht mehr gefragt.
+
+esphome:
+  includes:
+    - pakete/kraiz-per-can.h
+    - pakete/kraiz-per-can-texte.h
+  on_boot:
+    priority: -100
+    then:
+      - lambda: |-
+          kc::anlegen(1, 0x297E, 4, false, 1.0f, 60, [](int32_t r, float v) { id(kc_betriebsart_hk1_aktuell).publish_state(kc::text_BETRIEBSART_AKTUELL_MAP((int) r)); });
+          kc::anlegen(1, 0x297E, 5, false, 1.0f, 60, [](int32_t r, float v) { id(kc_status_hk1).publish_state(kc::text_STATUS_HK_MAP((int) r)); });
+          kc::anlegen(1, 0x2982, 2, false, 1.0f, 600, [](int32_t r, float v) { id(kc_sowi_umschaltung_hk1).publish_state(kc::text_SOWI_UMSCHALTUNG_MAP((int) r)); });
+          kc::anlegen(1, 0x293B, 2, true, 0.1f, 600, [](int32_t r, float v) { id(kc_raumsolltemperatur_komfort).publish_state(v); });
+          kc::anlegen(1, 0x293A, 2, true, 0.1f, 600, [](int32_t r, float v) { id(kc_raumsolltemperatur_normal).publish_state(v); });
+          kc::anlegen(1, 0x2939, 2, true, 0.1f, 600, [](int32_t r, float v) { id(kc_raumsolltemperatur_absenk).publish_state(v); });
+          kc::anlegen(1, 0x296B, 2, true, 0.1f, 600, [](int32_t r, float v) { id(kc_vorlaufsolltemperatur_komfort).publish_state(v); });
+          kc::anlegen(1, 0x296A, 2, true, 0.1f, 600, [](int32_t r, float v) { id(kc_vorlaufsolltemperatur_normal).publish_state(v); });
+          kc::anlegen(1, 0x2969, 2, true, 0.1f, 600, [](int32_t r, float v) { id(kc_vorlaufsolltemperatur_absenk).publish_state(v); });
+          kc::anlegen(1, 0x292C, 2, true, 0.1f, 600, [](int32_t r, float v) { id(kc_vorlaufsolltemperatur_sonderniveau).publish_state(v); });
+          kc::anlegen(1, 0x2959, 2, true, 0.1f, 60, [](int32_t r, float v) { id(kc_vorlaufsolltemperatur_aktuell).publish_state(v); });
+          kc::anlegen(1, 0x2A69, 2, false, 1.0f, 60, [](int32_t r, float v) { id(kc_status_warmwasser).publish_state(kc::text_STATUS_WW_MAP((int) r)); });
+          kc::anlegen(1, 0x2A49, 2, false, 1.0f, 60, [](int32_t r, float v) { id(kc_warmwasser_push).publish_state(kc::text_PUMPE_MAP((int) r)); });
+          kc::anlegen(1, 0x2A38, 2, true, 0.1f, 600, [](int32_t r, float v) { id(kc_wwsolltemperatur_absenk).publish_state(v); });
+          kc::anlegen(1, 0x2A51, 2, false, 1.0f, 60, [](int32_t r, float v) { id(kc_pumpe_warmwasser).publish_state(kc::text_PUMPE_MAP((int) r)); });
+          kc::anlegen(1, 0x269D, 1, true, 0.1f, 60, [](int32_t r, float v) { id(kc_waermeanforderung_warmwasser).publish_state(v); });
+          kc::anlegen(1, 0x2A57, 2, true, 0.1f, 60, [](int32_t r, float v) { id(kc_ruecklauftemperatur_zirkulation).publish_state(v); });
+          kc::anlegen(1, 0x271F, 2, true, 0.1f, 60, [](int32_t r, float v) { id(kc_plattenwaermetauschertemperatur_b2).publish_state(v); });
+          kc::anlegen(1, 0x2660, 2, true, 0.1f, 60, [](int32_t r, float v) { id(kc_pufferspeicher_temperatur_oben).publish_state(v); });
+          kc::anlegen(1, 0x2661, 2, true, 0.1f, 60, [](int32_t r, float v) { id(kc_pufferspeicher_temperatur_unten).publish_state(v); });
+          kc::anlegen(1, 0x28F9, 2, false, 0.01f, 60, [](int32_t r, float v) { id(kc_n1_vorgabe_ethernet).publish_state(v); });
+          kc::anlegen(1, 0x2712, 0, true, 0.1f, 300, [](int32_t r, float v) { id(kc_kaskade_sollwert_hz).publish_state(v); });
+          kc::anlegen(1, 0x2713, 0, true, 0.1f, 300, [](int32_t r, float v) { id(kc_kaskade_sollwert_ww).publish_state(v); });
+          kc::anlegen(1, 0x271C, 0, false, 0.01f, 300, [](int32_t r, float v) { id(kc_kaskade_sollmodulation_hz).publish_state(v); });
+          kc::anlegen(1, 0x271D, 0, false, 0.01f, 300, [](int32_t r, float v) { id(kc_kaskade_sollmodulation_ww).publish_state(v); });
+          kc::anlegen(1, 0x27E4, 2, false, 1.0f, 600, [](int32_t r, float v) { id(kc_folgewechsel).publish_state(kc::text_FOLGEWECHSEL_MAP((int) r)); });
+          kc::anlegen(1, 0x27E6, 2, false, 1.0f, 600, [](int32_t r, float v) { id(kc_wechselzeit).publish_state(v); });
+          kc::anlegen(1, 0x27FE, 2, true, 0.1f, 600, [](int32_t r, float v) { id(kc_kaskade_abgleichtemperatur).publish_state(v); });
+          kc::anlegen(2, 0x2739, 0, false, 1.0f, 60, [](int32_t r, float v) { id(kc_betriebsphase).publish_state(kc::text_BETRIEBSPHASE_WTC_MAP((int) r)); });
+
+web_server:
+  sorting_groups:
+    - id: g_kraiz
+      name: "Weitere Werte (wie kraiz/JSON, per CAN)"
+      sorting_weight: 35
+
+interval:
+  # reihum die naechste faellige Anfrage, hoechstens eine alle 3 s
+  - interval: 3s
+    then:
+      - if:
+          condition:
+            lambda: 'return id(can_anfragen).state && id(wcan)->bus.senden_erlaubt(millis());'
+          then:
+            - lambda: |-
+                uint8_t kn = 0; std::vector<uint8_t> d;
+                if (kc::naechste(millis(), kn, d)) id(wcan)->senden(0x600 + kn, d);
+  # Fehlerblock des WEM (8 Byte, Teilstuecke ueber die Lese-Engine des Repos)
+  - interval: 120s
+    then:
+      - if:
+          condition:
+            lambda: 'return id(can_anfragen).state && id(wcan)->bus.senden_erlaubt(millis());'
+          then:
+            - script.execute: kc_fehler_lesen
+
+canbus:
+  - id: !extend my_can_bus
+    on_frame:
+      # SDO-Antworten von WEM (0x581) und Kessel (0x582): was zur Tabelle passt, wird veroeffentlicht
+      - can_id: 0x581
+        then:
+          - lambda: 'kc::antwort(can_id, x);'
+      - can_id: 0x582
+        then:
+          - lambda: 'kc::antwort(can_id, x);'
+
+script:
+  - id: kc_fehler_lesen
+    mode: single
+    then:
+      - lambda: |-
+          kc::fehler_wartet = false;
+          if (id(wcan)->lesen.aktiv) return;      // ein Lesebefehl von Hand laeuft
+          std::string m; uint32_t cid = 0; std::vector<uint8_t> d;
+          if (id(wcan)->lesen.starten("01 273F 00", id(wcan)->bus.tot(millis()), m, cid, d)) {
+            id(wcan)->senden(cid, d);
+            kc::fehler_wartet = true;
+          }
+      - if:
+          condition:
+            lambda: 'return kc::fehler_wartet;'
+          then:
+            - delay: 3s
+            - lambda: |-
+                auto &l = id(wcan)->lesen;
+                kc::fehler_wartet = false;
+                if (l.aktiv || l.kn != 1 || l.idx != 0x273F || l.puffer.size() < 8) return;
+                const std::vector<uint8_t> &p = l.puffer;
+                id(kc_fehlerblock).publish_state(kc::hex(p));
+                id(kc_fehler_status).publish_state(kc::fehler_text((p[2] << 8) | p[3]));
+                id(kc_fehlernummer).publish_state((p[4] << 8) | p[5]);
+                id(kc_fehler_modul).publish_state((p[6] << 8) | p[7]);
+                // Klartext aus fehlercodes.yaml (eigene Texte; Originaltexte nur, wenn selbst eingebunden - README)
+                uint16_t st = (p[2] << 8) | p[3], nr = (p[4] << 8) | p[5];
+                uint8_t art = st & 0x0F;
+                std::string kt = "Keine Meldung";
+                if (nr != 0 || art != 0 || (st >> 8) != 0) {
+                  char typ = art == 1 ? 'F' : art == 2 ? 'W' : '?';
+                  char k[16]; snprintf(k, sizeof(k), "%c %u: ", typ, (unsigned) nr);
+                  kt = std::string(k) + fehlercodes::text_zu(typ, nr, ${meldungen_englisch});
+                }
+                id(kc_fehler_klartext).publish_state(kt);
+
+  # Schreiben an den WEM per CAN (Knoten 1, 1 Byte) - nur die hier freigegebenen Ziele, Ablauf wie "Freies CAN-Schreiben"
+  - id: kc_schreiben
+    mode: queued
+    max_runs: 3
+    parameters:
+      idx: int
+      sub: int
+      wert: int
+      was: string
+    then:
+      - lambda: |-
+          kc::schreiben_gesendet = false;
+          auto &sc = id(wcan)->schalten;
+          if (id(wem_senden).is_running() || id(can_senden).is_running() || id(can_frei_senden).is_running() || id(sd_holen).is_running() || sc.sperrminute(millis())) {
+            id(schalt_status).publish_state(was + ": bitte warten - Abstand zum letzten Befehl"); return;
+          }
+          if (id(wcan)->bus.tot(millis())) { id(schalt_status).publish_state(was + ": Bus tot - nicht gesendet"); return; }
+          wc::CanSchreibbefehl c; c.kn = 1; c.idx = idx; c.sub = sub; c.daten = {(uint8_t) wert};
+          sc.beginnen(millis(), (uint32_t) id(abstand_can).state * 1000); id(wcan)->anlass.eigener_befehl_ms = sc.letzter_befehl;
+          uint32_t u = id(wcan)->unix_zeit();
+          if (u != 0) bf::status().setze(bf::status().frei_ab, u + sc.sperre_s());
+          uint32_t cid = 0; std::vector<uint8_t> d;
+          sc.can_fertig = false; sc.can_text.clear();
+          id(wcan)->schreiben.starten(c, cid, d);
+          ESP_LOGW("kraiz", "CAN-Schreibbefehl %s: 01 %04X/%02X = %d", was.c_str(), idx, sub, wert);
+          id(wcan)->senden(cid, d);
+          kc::schreiben_gesendet = true;
+      - if:
+          condition:
+            lambda: 'return kc::schreiben_gesendet;'
+          then:
+            - delay: 2s
+            - lambda: |-
+                auto &sc = id(wcan)->schalten;
+                auto &w = id(wcan)->schreiben;
+                kc::schreiben_gesendet = false;
+                std::string t = sc.can_fertig ? sc.can_text : "keine Antwort vom WEM";
+                if (!sc.can_fertig) w.aktiv = false;
+                id(schalt_status).publish_state(was + " per CAN: " + t);
+                id(protokoll_eintrag)->execute(was + " (Web/HA): " + t);
+                ESP_LOGI("kraiz", "%s | roh: %s", t.c_str(), w.roh.c_str());
+                kc::bald(1, idx, sub);        // Zielobjekt in ein paar Sekunden zur Kontrolle neu lesen
+
+button:
+  - platform: template
+    name: "Warmwasser-Push"
+    id: kc_ww_push
+    icon: mdi:water-boiler-alert
+    web_server: { sorting_group_id: g_schalten, sorting_weight: 3 }
+    on_press:
+      - script.execute:
+          id: kc_schreiben
+          idx: 0x2A49
+          sub: 2
+          wert: 1
+          was: "Warmwasser-Push"
+
+sensor:
+  - platform: template
+    name: "Raumsolltemperatur Komfort"
+    id: kc_raumsolltemperatur_komfort
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    web_server: { sorting_group_id: g_kraiz }
+  - platform: template
+    name: "Raumsolltemperatur Normal"
+    id: kc_raumsolltemperatur_normal
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    web_server: { sorting_group_id: g_kraiz }
+  - platform: template
+    name: "Raumsolltemperatur Absenk"
+    id: kc_raumsolltemperatur_absenk
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    web_server: { sorting_group_id: g_kraiz }
+  - platform: template
+    name: "Vorlaufsolltemperatur Komfort"
+    id: kc_vorlaufsolltemperatur_komfort
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    web_server: { sorting_group_id: g_kraiz }
+  - platform: template
+    name: "Vorlaufsolltemperatur Normal"
+    id: kc_vorlaufsolltemperatur_normal
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    web_server: { sorting_group_id: g_kraiz }
+  - platform: template
+    name: "Vorlaufsolltemperatur Absenk"
+    id: kc_vorlaufsolltemperatur_absenk
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    web_server: { sorting_group_id: g_kraiz }
+  - platform: template
+    name: "Vorlaufsolltemperatur Sonderniveau"
+    id: kc_vorlaufsolltemperatur_sonderniveau
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    web_server: { sorting_group_id: g_kraiz }
+  - platform: template
+    name: "Vorlaufsolltemperatur aktuell"
+    id: kc_vorlaufsolltemperatur_aktuell
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    web_server: { sorting_group_id: g_kraiz }
+  - platform: template
+    name: "WW-Solltemperatur Absenk"
+    id: kc_wwsolltemperatur_absenk
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    web_server: { sorting_group_id: g_kraiz }
+  - platform: template
+    name: "Wärmeanforderung Warmwasser"
+    id: kc_waermeanforderung_warmwasser
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    web_server: { sorting_group_id: g_kraiz }
+  - platform: template
+    name: "Rücklauftemperatur Zirkulation"
+    id: kc_ruecklauftemperatur_zirkulation
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    disabled_by_default: true
+    web_server: { sorting_group_id: g_kraiz }
+  - platform: template
+    name: "Plattenwärmetauschertemperatur (B2)"
+    id: kc_plattenwaermetauschertemperatur_b2
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    disabled_by_default: true
+    web_server: { sorting_group_id: g_kraiz }
+  - platform: template
+    name: "Pufferspeicher Temperatur oben"
+    id: kc_pufferspeicher_temperatur_oben
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    disabled_by_default: true
+    web_server: { sorting_group_id: g_kraiz }
+  - platform: template
+    name: "Pufferspeicher Temperatur unten"
+    id: kc_pufferspeicher_temperatur_unten
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    disabled_by_default: true
+    web_server: { sorting_group_id: g_kraiz }
+  - platform: template
+    name: "N1-Vorgabe über Ethernet"
+    id: kc_n1_vorgabe_ethernet
+    unit_of_measurement: "%"
+    state_class: measurement
+    accuracy_decimals: 2
+    disabled_by_default: true
+    web_server: { sorting_group_id: g_kraiz }
+  - platform: template
+    name: "Kaskade Sollwert HZ"
+    id: kc_kaskade_sollwert_hz
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    disabled_by_default: true
+    web_server: { sorting_group_id: g_kraiz }
+  - platform: template
+    name: "Kaskade Sollwert WW"
+    id: kc_kaskade_sollwert_ww
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    disabled_by_default: true
+    web_server: { sorting_group_id: g_kraiz }
+  - platform: template
+    name: "Kaskade Soll-Modulation HZ"
+    id: kc_kaskade_sollmodulation_hz
+    unit_of_measurement: "%"
+    state_class: measurement
+    accuracy_decimals: 2
+    disabled_by_default: true
+    web_server: { sorting_group_id: g_kraiz }
+  - platform: template
+    name: "Kaskade Soll-Modulation WW"
+    id: kc_kaskade_sollmodulation_ww
+    unit_of_measurement: "%"
+    state_class: measurement
+    accuracy_decimals: 2
+    disabled_by_default: true
+    web_server: { sorting_group_id: g_kraiz }
+  - platform: template
+    name: "Wechselzeit"
+    id: kc_wechselzeit
+    accuracy_decimals: 0
+    disabled_by_default: true
+    web_server: { sorting_group_id: g_kraiz }
+  - platform: template
+    name: "Kaskade Abgleichtemperatur"
+    id: kc_kaskade_abgleichtemperatur
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    disabled_by_default: true
+    web_server: { sorting_group_id: g_kraiz }
+  - platform: template
+    name: "Fehlernummer"
+    id: kc_fehlernummer
+    icon: mdi:numeric
+    entity_category: diagnostic
+    accuracy_decimals: 0
+    web_server: { sorting_group_id: g_diag }
+  - platform: template
+    name: "Fehlermodul"
+    id: kc_fehler_modul
+    icon: mdi:chip
+    entity_category: diagnostic
+    accuracy_decimals: 0
+    web_server: { sorting_group_id: g_diag }
+
+text_sensor:
+  - platform: template
+    name: "Betriebsart HK1 aktuell"
+    id: kc_betriebsart_hk1_aktuell
+    web_server: { sorting_group_id: g_kraiz }
+  - platform: template
+    name: "Status HK1"
+    id: kc_status_hk1
+    web_server: { sorting_group_id: g_kraiz }
+  - platform: template
+    name: "So-Wi Umschaltung HK1"
+    id: kc_sowi_umschaltung_hk1
+    web_server: { sorting_group_id: g_kraiz }
+  - platform: template
+    name: "Status Warmwasser"
+    id: kc_status_warmwasser
+    web_server: { sorting_group_id: g_kraiz }
+  - platform: template
+    name: "Warmwasser-Push"
+    id: kc_warmwasser_push
+    web_server: { sorting_group_id: g_kraiz }
+  - platform: template
+    name: "Pumpe Warmwasser"
+    id: kc_pumpe_warmwasser
+    web_server: { sorting_group_id: g_kraiz }
+  - platform: template
+    name: "Folgewechsel"
+    id: kc_folgewechsel
+    disabled_by_default: true
+    web_server: { sorting_group_id: g_kraiz }
+  - platform: template
+    name: "Betriebsphase WTC"
+    id: kc_betriebsphase
+    web_server: { sorting_group_id: g_kraiz }
+  - platform: template
+    name: "Fehler-Warnung Status"
+    id: kc_fehler_status
+    icon: mdi:alert-circle-outline
+    entity_category: diagnostic
+    web_server: { sorting_group_id: g_diag }
+  - platform: template
+    name: "Fehler-Klartext"
+    id: kc_fehler_klartext
+    icon: mdi:alert-circle-check-outline
+    entity_category: diagnostic
+    web_server: { sorting_group_id: g_diag }
+  - platform: template
+    name: "CANopen Fehlerblock"
+    id: kc_fehlerblock
+    icon: mdi:alert-box-outline
+    entity_category: diagnostic
+    disabled_by_default: true
+    web_server: { sorting_group_id: g_diag }

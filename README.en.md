@@ -121,7 +121,8 @@ Comment out unneeded lines under `packages:`.
 
 | Package | Contents | Required |
 |---|---|---|
-| `kessel.yaml` | boiler values, heating circuit state, diagnostics, read field, bus watchdog, Wi-Fi change | yes |
+| `kessel.yaml` | boiler values, heating circuit state, diagnostics, read field, bus watchdog; CAN pins via `can_tx_pin`/`can_rx_pin` | yes |
+| `netz-wlan.yaml` | Wi-Fi displays and Wi-Fi change (part of `kessel` up to v42; required by `app.yaml`). Boards with Ethernet: `netz-lan.yaml` | no |
 | `warmwasser.yaml` | DHW values (only with a storage tank connected to the WTC) | no |
 | `mqtt.yaml` | MQTT broker, `cmd/lesen`, `cmd/scan`, `cmd/stop`, `cmd/status`, raw capture | no |
 | `homeassistant-api.yaml` | native ESPHome API (encrypted) | no |
@@ -131,6 +132,11 @@ Comment out unneeded lines under `packages:`.
 | `zusatz.yaml` | **Extra displays for the phone app:** list of up to 6 third-party MQTT topics (e.g. room temperatures, "heat pump running"), configurable via web and file. The board does **not** read these values itself, it only manages the list (requires `mqtt`). Details: [PROTOKOLL.en.md, section 6b](PROTOKOLL.en.md#6b-additional-displays-for-the-phone-app) | no |
 | `app.yaml` | **Phone app served by the board itself** (from v38): `http://<board>/app`, own login (`app_benutzer`/`app_passwort` in `secrets.yaml`), no server needed (needs `wem-schalten`, `warmwasser-schalten`) | no |
 | `feste-ip.yaml` | static IP instead of DHCP | no |
+| `kraiz-per-can.yaml` | **More values via CAN** (by cg089): 29 objects of the kraiz/hassio-weishaupt integration – room/flow setpoints, heating circuit and DHW status, operating phase –, button "Warmwasser-Push" (DHW boost), error block of the WEM as text (requires `wem-schalten` and own CAN requests switched on) | no |
+| `dallas.yaml` | 1-Wire bus for your own DS18B20 sensors (by cg089) | no |
+
+**Second board:** [`olimex-weishaupt.yaml`](olimex-weishaupt.yaml) builds the same packages for the **Olimex ESP32-EVB**
+(Ethernet instead of Wi-Fi, Home Assistant API) – variant by cg089, see [OLIMEX-ESP32-EVB.md](OLIMEX-ESP32-EVB.md) (German).
 
 Optionally, there is also the phone app in the `app/` folder (see below).
 
@@ -562,7 +568,7 @@ Further register knowledge comes from the projects listed under "Sources".
 
 ## License
 
-[MIT](LICENSE) – © 2026 Juergen Vejmelka.
+[MIT](LICENSE) – © 2026 Juergen Vejmelka; the Olimex variant and the packages `kraiz-per-can` and `dallas`: © 2026 cg089.
 Use at your own risk; no affiliation with Weishaupt.
 
 Third-party parts are listed in [LIZENZEN-DRITTER.md](LIZENZEN-DRITTER.md) (German). The prebuilt firmware files (`*.bin`)
