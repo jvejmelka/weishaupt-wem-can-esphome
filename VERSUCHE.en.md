@@ -199,8 +199,8 @@ therefore needs a board **on the CAN bus** (WeAct CAN485; for Ethernet the
 | `tunnel_selbst_ein` | `"false"` | `"false"`: the tunnel is off after every restart. `"true"`: it turns itself on once after every restart as soon as WLAN is up. |
 
 The settings are fixed in the firmware; at runtime only the switch can be operated. The defaults and their description
-are in the header of [`pakete/can-tunnel.yaml`](pakete/can-tunnel.yaml), the UDP ports in
-[`can_tunnel.h`](components/weishaupt_can/can_tunnel.h) (if you change them, rebuild both boards).
+are in the header of [`pakete/can-tunnel.yaml`](https://github.com/jvejmelka/weishaupt-wem-can-esphome/blob/can-tunnel/pakete/can-tunnel.yaml), the UDP ports in
+[`can_tunnel.h`](https://github.com/jvejmelka/weishaupt-wem-can-esphome/blob/can-tunnel/components/weishaupt_can/can_tunnel.h) (if you change them, rebuild both boards).
 
 **How it works.** Each board sends every frame it receives on its own bus via UDP (port 47011) to the configured peer
 and puts what arrives from there on its own bus. Only packets from the peer's address are accepted. A packet is
@@ -218,7 +218,7 @@ convenient for long captures, but it also means the board writes to the bus agai
 
 **Capture.** If `tunnel_log` is set, each board sends its frames as text lines via UDP (port 47012) to that computer,
 plus a status line every 10 s (from/to bus, lost, errors, locked, bus-off). Receive it with
-[`werkzeuge/tunnel_mitschnitt.py`](werkzeuge/tunnel_mitschnitt.py) (Python 3 only):
+[`werkzeuge/tunnel_mitschnitt.py`](https://github.com/jvejmelka/weishaupt-wem-can-esphome/blob/can-tunnel/werkzeuge/tunnel_mitschnitt.py) (Python 3 only):
 
 ```
 python3 werkzeuge/tunnel_mitschnitt.py --datei tunnel.txt

@@ -207,8 +207,8 @@ Tunnel oder später nachgebildet –, braucht deshalb ein Board **am CAN-Bus** (
 | `tunnel_selbst_ein` | `"false"` | `"false"`: Der Tunnel ist nach jedem Neustart aus. `"true"`: Er schaltet sich nach jedem Neustart einmal selbst ein, sobald das WLAN steht. |
 
 Die Einstellungen stehen fest in der Firmware; zur Laufzeit lässt sich nur der Schalter bedienen. Die Vorgaben und ihre
-Beschreibung stehen im Kopf von [`pakete/can-tunnel.yaml`](pakete/can-tunnel.yaml), die UDP-Ports in
-[`can_tunnel.h`](components/weishaupt_can/can_tunnel.h) (wer sie ändert, baut beide Boards neu).
+Beschreibung stehen im Kopf von [`pakete/can-tunnel.yaml`](https://github.com/jvejmelka/weishaupt-wem-can-esphome/blob/can-tunnel/pakete/can-tunnel.yaml), die UDP-Ports in
+[`can_tunnel.h`](https://github.com/jvejmelka/weishaupt-wem-can-esphome/blob/can-tunnel/components/weishaupt_can/can_tunnel.h) (wer sie ändert, baut beide Boards neu).
 
 **Ablauf.** Jedes Board schickt jeden Frame, den es auf seinem eigenen Bus empfängt, per UDP (Port 47011) an die
 eingetragene Gegenstelle und sendet, was von dort kommt, auf seinen Bus. Angenommen werden nur Pakete von der Adresse der
@@ -227,7 +227,7 @@ von selbst auf den Bus.
 
 **Mitschnitt.** Ist `tunnel_log` gesetzt, schickt jedes Board seine Frames als Textzeilen per UDP (Port 47012) an diesen
 Rechner, dazu alle 10 s eine Statuszeile (vom/zum Bus, verloren, Fehler, gesperrt, Bus-off). Annehmen mit
-[`werkzeuge/tunnel_mitschnitt.py`](werkzeuge/tunnel_mitschnitt.py) (nur Python 3):
+[`werkzeuge/tunnel_mitschnitt.py`](https://github.com/jvejmelka/weishaupt-wem-can-esphome/blob/can-tunnel/werkzeuge/tunnel_mitschnitt.py) (nur Python 3):
 
 ```
 python3 werkzeuge/tunnel_mitschnitt.py --datei tunnel.txt
