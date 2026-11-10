@@ -23,7 +23,7 @@ added one). **This table is the one place for it**; README, INSTALL and the othe
 > | **CAN reading** (SDO, command byte `0x40`) | own read requests to the WEM (node 1) and the boiler (node 2): on a schedule, on occasion (operating modes, WEM only), for verification after switching, by hand | schedule <!--ab-werk:can_anfragen-->off<!--/ab-werk--> (switch “Eigene CAN-Anfragen”), everything else on |
 > | **CAN writing to the WEM** (SDO, node 1) | switching heating circuit (`0x2933`/2) and hot water (`0x2A20`/2) – directly on the bus, without JSON | **<!--ab-werk:can_schalten-->on<!--/ab-werk-->** since v42 (v35–v41: could be enabled) |
 > | **Free CAN writing** (experts) | single objects by hand, by default on the WEM (node 1) only – further nodes only after explicit release, never the boiler; `0x2000`–`0x5FFF` only | <!--ab-werk:can_frei-->off<!--/ab-werk--> |
-> | **DHW push** (“Warmwasser-Push”; Olimex variant only, package `kraiz-per-can` by cg089) | one button writes `1` to `0x2A49`/2 of the WEM (node 1): fixed target, fixed value, with minimum interval and verification on the bus. The switch “Freies CAN-Schreiben” does not apply to this button ([OLIMEX-ESP32-EVB.md](OLIMEX-ESP32-EVB.md#warmwasser-push), German). | not included in the main file (WeAct); in the Olimex variant on button press only |
+> | **DHW push** (“Warmwasser-Push”; Olimex variant only, package `kraiz-per-can` by cg089) | one button writes `1` to `0x2A49`/2 of the WEM (node 1): fixed target, fixed value, with minimum interval and verification on the bus. The switch “Freies CAN-Schreiben” does not apply to this button ([OLIMEX-ESP32-EVB.en.md](OLIMEX-ESP32-EVB.en.md#dhw-push-warmwasser-push), German). | not included in the main file (WeAct); in the Olimex variant on button press only |
 > | **JSON writing** (HTTP to the WEM) | fallback for switching when “Schalten per CAN statt JSON” is off. Up to v34 this was the only way. Also the field “Schreibbefehl über WEM (Experten)”, which always goes via JSON. | unused as long as nobody uses the fallback or the write field |
 > | **JSON reading** (HTTP to the WEM) | by hand only: “Werte per JSON abrufen” (one request, from v42), files on the SD card. Never on a schedule – the WEM does not tolerate polling. | on button press only |
 > | **CAN tunnel** (experiment, branch `can-tunnel`) | forwards unfiltered whatever the device at the other end sends – including the write requests of a room unit ([VERSUCHE.en.md, section 10b](VERSUCHE.en.md#10b-can-tunnel-over-wlan-experiment-branch-can-tunnel)) | not included |
@@ -57,7 +57,7 @@ added one). **This table is the one place for it**; README, INSTALL and the othe
 ## 1. Overview
 
 What this looks like on a specific installation with heat pump and PV (setpoints, measurements):
-[ANLAGE.md](ANLAGE.md) (German).
+[ANLAGE.en.md](ANLAGE.en.md).
 
 ### Bus parameters
 
@@ -324,7 +324,7 @@ picked up without WEM requests. Which device sends which of the PDOs is not sett
 ## 3. What is picked up by passive listening
 
 The tables in sections 3–5 are generated from [`register.yaml`](register.yaml)
-([INSTALL.md, section 14](INSTALL.md#14-register-ändern) (German)); please add extensions there.
+([INSTALL.en.md, section 14](INSTALL.en.md#14-changing-registers)); please add extensions there.
 
 **Status:** *verified* (**belegt**) = checked on the installation against the boiler display or an independent source;
 *plausible* (plausibel) = values fit, but not cross-checked; *unconfirmed* (**unbestätigt**) = interpretation from third-party sources.
@@ -672,7 +672,7 @@ concerned other objects or the boiler.
 6. The result appears in **“Ergebnis letzter Schaltbefehl”** (result of last switching command) and in the
    **“Schaltprotokoll”** (switching log) (plain text, deprecated), and from v27 onwards in structured form on
    **`<gerät>/befehl/status`** (every phase, with ID) and in **`<gerät>/status/json`** → `schalten` – structure in
-   [TOPICS.md](TOPICS.md) (German).
+   [TOPICS.en.md](TOPICS.en.md).
 
 ## 6. Web interface: reading and writing
 
@@ -949,7 +949,7 @@ The app on the board (package `app`) hands the same request to the firmware dire
 source `App`. Equivalent: `2` or `Zeitprogramm 1` as text via MQTT (the board then assigns the ID), or
 “Heizkreis Betriebsart setzen” in the expert interface or in Home Assistant. On
 `<gerät>/befehl/status`, `angenommen` (accepted) and `vorgemerkt` (queued, with `warten_s`) appear, later
-`gesendet` (sent), `pruefe_bus` (checking bus) and `bestaetigt` (confirmed) – see [TOPICS.md](TOPICS.md#gerätbefehlstatus) (German).
+`gesendet` (sent), `pruefe_bus` (checking bus) and `bestaetigt` (confirmed) – see [TOPICS.en.md](TOPICS.en.md#gerätbefehlstatus).
 The board additionally reports (deprecated) in “Ergebnis letzter Schaltbefehl”:
 
 ```

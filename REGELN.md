@@ -1,5 +1,7 @@
 # Regeln: Betriebsarten lesen, wenn sich etwas geändert haben könnte
 
+> 🇬🇧 English version: [REGELN.en.md](REGELN.en.md)
+
 Paket `pakete/verdacht.yaml`, ab Firmware v22, in dieser Form ab **v25**; seit **v30** sind R1–R5
 Datenregeln im selben Format wie die eigenen Regeln (Verhalten unverändert, gegen v29 geprüft). Diese Seite erklärt, was
 die Regeln tun, woran sie eine Änderung erkennen, wie sicher das ist und wie man sie einstellt.

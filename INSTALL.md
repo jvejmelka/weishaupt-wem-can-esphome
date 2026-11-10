@@ -1,5 +1,7 @@
 # Installation
 
+> 🇬🇧 English version: [INSTALL.en.md](INSTALL.en.md)
+
 Schritt für Schritt vom Board in der Verpackung bis zu Werten in Home Assistant oder der Handy-App.
 Rechne mit einer Stunde, die meiste Zeit geht aufs erste Kompilieren.
 
@@ -409,6 +411,7 @@ tests/run.sh                                   # Regellogik, Klassen des Bauteil
 python3 werkzeuge/register_erzeugen.py --pruefen  # erzeugte Dateien passen zu register.yaml (PyYAML)
 python3 werkzeuge/einstellungen_erzeugen.py --pruefen  # Angaben „ab Werk“ in der Doku passen zu den Paketen
 python3 tests/links.py                         # Links in den .md-Dateien
+python3 tests/sprachen.py                      # jede Doku deutsch und englisch, gleich aufgebaut
 esphome compile weishaupt-wem-can.yaml         # Firmware baut
 ```
 

@@ -1,5 +1,7 @@
 # Olimex ESP32-EVB (LAN) – Variante für die Weishaupt WTC-GW
 
+> 🇬🇧 English version: [OLIMEX-ESP32-EVB.en.md](OLIMEX-ESP32-EVB.en.md)
+
 Diese Variante stammt von **cg089** ([Fork cg089/weishaupt-wem-can-esphome](https://github.com/cg089/weishaupt-wem-can-esphome),
 Zweig `olimex-esp32-evb`, 31.10.2026): eine fertige Konfiguration für das **Olimex ESP32-EVB** (Ethernet statt WLAN,
 CAN-Transceiver onboard) und Funktionen, die eine Home-Assistant-Integration über die WEM-JSON-Schnittstelle bietet –
