@@ -448,7 +448,7 @@ struct Schalten {
   // Schreiben per CAN (ab v35): Ergebnis des laufenden Schreibbefehls fuer die Skripte
   bool can_fertig = false;
   bool can_frei_gesendet = false;  // freier Schreibbefehl ist raus, Ergebnis abholen
-  bool can_frei_wartet = false;    // freier Schreibbefehl geprueft, wartet auf eine Pause im SDO-Verkehr (ab v43)
+  bool can_frei_wartet = false;    // freier Schreibbefehl geprueft, wartet auf eine Pause im SDO-Verkehr (ab v42)
   std::string can_text;
 
   // Abstand nach dem letzten Befehl (ab v38 einstellbar): per CAN kurz, ueber JSON/HTTP mindestens 1 min.
@@ -659,7 +659,7 @@ template<size_t N> inline bool speicher_schreiben(std::array<char, N> &m, const 
 // (Heartbeat, COB-IDs ...), nie den Kessel (dort schreibt der WEM selbst alle ~5 s und teilt sich
 // den SDO-Kanal mit dem Board). Bis 4 Byte in einem Frame, laengere Daten (bis 64 Byte) in
 // Teilstuecken.
-// Ab v43 lassen sich fuer das freie CAN-Schreiben weitere Knoten ausdruecklich freischalten
+// Ab v42 lassen sich fuer das freie CAN-Schreiben weitere Knoten ausdruecklich freischalten
 // (KnotenFreigabe, Eingabefeld im Expertenmenue) - z. B. 04 fuer ein Raumgeraet. Knoten 00 (alle)
 // und 02 (Kessel) lassen sich nie freischalten.
 inline std::string hex_bytes(const std::vector<uint8_t> &d) {
@@ -670,7 +670,7 @@ inline std::string hex_bytes(const std::vector<uint8_t> &d) {
 
 struct CanSchreibbefehl { int kn = 0, idx = 0, sub = 0; std::vector<uint8_t> daten; };
 
-// Knoten, an die das freie CAN-Schreiben senden darf (ab v43). Ab Werk nur 01 (WEM).
+// Knoten, an die das freie CAN-Schreiben senden darf (ab v42). Ab Werk nur 01 (WEM).
 struct KnotenFreigabe {
   static constexpr int KESSEL = 2;
   bool erlaubt[128] = {false};
@@ -747,6 +747,21 @@ inline bool can_schreib_lesen(const std::string &e, CanSchreibbefehl &c, std::st
   c.kn = k; c.idx = i; c.sub = s; c.daten = d;
   return true;
 }
+
+// SDO-Verkehr je Knoten (ab v42): Das freie CAN-Schreiben sendet erst, wenn auf dem SDO-Kanal des
+// Zielknotens (0x580+n, 0x600+n) RUHE_MS lang nichts lief - sonst geraet der eigene Befehl zwischen
+// Anfrage und Antwort eines anderen Teilnehmers (WEM <-> Raumgeraet), und beide lesen die falsche Antwort.
+struct SdoVerkehr {
+  static constexpr uint32_t RUHE_MS = 200;
+  uint32_t zuletzt[128] = {0};          // millis() des letzten SDO-Frames von/an Knoten n (0 = nie)
+  void gesehen(uint32_t can_id, uint32_t jetzt) {
+    if ((can_id & 0x780) == 0x580 || (can_id & 0x780) == 0x600) zuletzt[can_id & 0x7F] = jetzt ? jetzt : 0xFFFFFFFFu;   // 0 heisst "nie"
+  }
+  bool ruhig(int kn, uint32_t jetzt) const {
+    if (kn < 1 || kn > 127) return false;
+    return zuletzt[kn] == 0 || jetzt - zuletzt[kn] >= RUHE_MS;
+  }
+};
 
 // Laufender Schreibbefehl: starten() -> antwort() je Frame -> weiter() fuer das naechste Teilstueck
 struct CanSchreiben {

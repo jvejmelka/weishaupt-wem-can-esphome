@@ -8,7 +8,7 @@
 #     (0x2933/2, 0x2A20/2), sonst alles wie beim JSON-Weg (Warteschlange, Mindestabstand, Kontrolle).
 #   - "Freies CAN-Schreiben (Experten)": Eingabefeld und ${geraet}/cmd/can_schreiben,
 #     "KN IDX SUB WERT [LAENGE]" oder "KN IDX SUB = B1 B2 ..." (hex), nur 2000-5FFF, ab Werk nur Knoten 01 (WEM).
-#   - "Freies CAN-Schreiben: erlaubte Knoten" (ab v43): Liste der Knoten, an die das freie CAN-Schreiben
+#   - "Freies CAN-Schreiben: erlaubte Knoten" (ab v42): Liste der Knoten, an die das freie CAN-Schreiben
 #     senden darf, hex, z. B. "01 04" (WEM und ein Raumgeraet). Ab Werk "01". Knoten 02 (Kessel) und 00
 #     lassen sich nicht eintragen. Gesendet wird erst, wenn der SDO-Kanal des Knotens 200 ms lang still war.
 #   An einer WTC-GW 15-B (WEM 428.226) bestaetigt; andere Anlagen: auf eigene Gefahr.
@@ -241,7 +241,7 @@ script:
 
   # Freies CAN-Schreiben (ab v35, Schalter "Experten", ab Werk aus): Eingabefeld oder cmd/can_schreiben.
   # Nur Objekte 2000-5FFF, nur freigeschaltete Knoten (ab Werk nur 01 = WEM, nie 02 = Kessel; wc::can_schreib_lesen),
-  # Mindestabstand wie beim Schalten per CAN. Ab v43: gesendet wird in einer Pause des SDO-Verkehrs mit dem Knoten
+  # Mindestabstand wie beim Schalten per CAN. Ab v42: gesendet wird in einer Pause des SDO-Verkehrs mit dem Knoten
   # (200 ms still, sonst nach 3 s Abbruch) - ein fremder Auftrag in Teilstuecken wird so nicht unterbrochen.
   - id: can_frei_senden
     mode: queued
@@ -603,7 +603,7 @@ text:
     max_length: 40
     initial_value: "systable.csv"
     web_server: { sorting_group_id: g_sd, sorting_weight: 2 }
-  # Knoten, an die das freie CAN-Schreiben senden darf (ab v43). Ab Werk nur 01 (WEM); weitere Knoten traegt man
+  # Knoten, an die das freie CAN-Schreiben senden darf (ab v42). Ab Werk nur 01 (WEM); weitere Knoten traegt man
   # ausdruecklich ein, z. B. "01 04". 02 (Kessel) und 00 werden abgelehnt - dann wird gar nicht gesendet.
   - platform: template
     name: "Freies CAN-Schreiben: erlaubte Knoten (hex, ab Werk 01)"

@@ -88,7 +88,8 @@ Die **Korrektur Raumfühler** im RG2-Menü wirkt auf den gesendeten Wert (−0,5
 dabei auf die korrigierte Temperatur umgerechnet. Sie geht nicht über den Bus, ebenso wenig Helligkeit, Nachtmodus,
 Grenzwerte und Leuchtring. Ohne Korrektur lag die Temperatur des gebrauchten RG2 2–4 K über einem Vergleichsfühler im
 selben Raum; in einer geschlossenen Kunststoffbox zusammen mit Board und Spannungswandler stieg die Abweichung langsam
-(Eigenerwärmung vermutet). Ist im WEM kein Raumfühler zugeordnet, regelt er weiter nur nach der Außentemperatur – der
+(Eigenerwärmung vermutet). Am 10.11.2026 waren es über eine Stunde gemessen nur 0,8–1,2 K (das Gerät war erst am selben
+Abend eingeschaltet worden) – ein fester Korrekturwert ist damit noch nicht belegt. Ist im WEM kein Raumfühler zugeordnet, regelt er weiter nur nach der Außentemperatur – der
 Raumwert ändert dann das Vorlaufsoll nicht.
 
 ### Schreiben über 0x5E00
@@ -151,6 +152,78 @@ das RG2 las nur den Montags- (Sub 4–13) und den Samstagsblock (Sub 84–93).
   Bei laufendem WEM behielt es seinen Knoten 4 ohne Eingriff – direkt am Bus wie über den CAN-Tunnel.
 - **Ausfall des RG2:** 30 s nach dem letzten Lebenszeichen meldet der WEM `081: FF FF 01 02 05 DD 01 00` (`0x05DD` = **Warnung 1501**, Verbindung zu RG2 Nr. 1 unterbrochen, s. [PROTOKOLL.md, Abschnitt 10c](PROTOKOLL.md#10c-störmeldungen-am-bus-und-fehlercodes))
   und löscht die Meldung, sobald das RG2 wieder da ist. In der Geräteliste steht es dann unter „Nicht aktive Geräte“.
+
+### Zuordnung als Raumfühler und gemessene Raumtemperatur im WEM
+
+Am 10.11.2026 war das RG2 für elf Minuten dem Heizkreis 1 als Raumfühler zugeordnet (am Systemgerät: Fachmann-Ebene →
+Inbetriebnahme → Zuordnungen) und wurde danach wieder abgemeldet. Am Bus:
+
+- Der WEM schreibt die Zuordnung ins RG2 (Knoten 4, `604`): zuerst `0x2604`/1…5, `0x2605`/1…5 und `0x2606`/0 auf `FF`,
+  dann die neuen Werte. Gesehen: `0x2604`/1 = `00` und `0x2605`/1 = `00` (nach der Anzeige: Bedienzugriff auf Heizkreis 1
+  und Warmwasser 1) sowie `0x2606`/0 = `01` mit Raumfühler auf Heizkreis 1 und `FF` ohne.
+- Danach startet der WEM das RG2 neu (nächster Abschnitt) – beim Zuordnen ebenso wie beim Abmelden.
+- **Gemessene Raumtemperatur im WEM:** Knoten 1 `0x298B`/2, über JSON `02 00 258B 02` (wieder +0x400), 2 Byte mit
+  Vorzeichen, 0,1 °C. Ohne Zuordnung steht dort `0x8000` („kein Wert“), mit Zuordnung `0x00DC` = 22,0 °C – derselbe Wert
+  wie im PDO `0x184` zur selben Zeit. `0x298C`/2 und `0x298D`/2 gibt es auch; sie blieben `0x8000` (vermutlich weitere
+  Raumgeräte). Bei uns per CAN gelesen. **Über JSON bestätigt von PiLLoX** an einer WTC-GB 25-B mit eingebautem
+  WEM-SG und RG2: Antwort `020200258B02000200B0` = 17,6 °C, genau die Anzeige am RG2
+  ([Kommentar vom 10.11.2026](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/issues/4#issuecomment-6781466298)).
+- Auf die Heizung wirkte die Zuordnung nicht: Vorlaufsoll und Heizanforderung liefen unverändert weiter. Die
+  Regelvariante blieb witterungsgeführt; eine Abfrage dazu kam am Display nicht.
+
+### Neustart des RG2 per CAN (`0x2559`)
+
+Nach einer geänderten Zuordnung startet der WEM das RG2 neu – nicht über NMT, sondern mit zwei Schreibbefehlen auf
+`0x2559`/0 des RG2. Zweimal mitgeschnitten (10.11.2026), beide Male gleich:
+
+```
+604: 23 59 25 00 00 00 00 01      0x2559/0 schreiben              584: 60 59 25 00 …   bestätigt
+604: A4 58 25 00 40 40 00 00      0x2558/0 lesen                  584: 43 58 25 00 00 00 00 00
+604: A4 58 25 00 40 40 00 00      0x2558/0 noch einmal lesen      584: 43 58 25 00 FF FF 00 01
+604: 23 59 25 00 01 AA 55 0C      0x2559/0 schreiben (0,7 s       584: 60 59 25 00 …   bestätigt
+                                  nach dem ersten)
+          10 s Stille
+704: 00   und   084: 00 00 00 00 00 00 00 00                      Bootup des RG2
+```
+
+**Von uns nachgestellt** (Tischaufbau: Board B am RG2, Tunnel an, [freies CAN-Schreiben](PROTOKOLL.md#schreiben-per-can-ab-v35-seit-v42-vorgabe)
+mit freigeschaltetem Knoten `04`): nur die beiden Schreibbefehle, im Abstand von 1,1 s, ohne das Lesen von `0x2558`
+dazwischen. Das RG2 hat beide bestätigt und startete genauso neu. Eingabe im Feld „CAN-Schreibbefehl“:
+
+```
+04 2559 00 = 00 00 00 01
+04 2559 00 = 01 AA 55 0C
+```
+
+Der Ablauf danach, verglichen mit einem Kaltstart (Strom aus und wieder an) am selben Abend. Zeiten ab dem Bootup
+`704:00`; Bus aus dem Mitschnitt, Anzeige von einer Kamera mit zwei Bildern pro Sekunde:
+
+| Schritt | Neustart per CAN | Kaltstart |
+|---|---|---|
+| zweiter Schreibbefehl bestätigt | −10,0 s | – |
+| Leuchtring unten gelblich | ab etwa −7,5 s | −6,8 s bis +0,7 s |
+| `704:00` und `084:00…` | 0 | 0 |
+| Logo in der Anzeige | +0,9 s | +1,2 s |
+| RG2 liest am WEM (`6C4`): `0x5F01`/0…3, dann `0x5F03`/0…D | ab +3,1 s | ab +3,1 s |
+| `704:7F` | +9,9 s | +9,9 s |
+| erstes PDO `0x184` | +16,0 s | +11,0 s |
+| `704:05` | +19,8 s | +19,9 s |
+| Anzeige noch einmal dunkel, Leuchtring gelblich | +62 s | +62 s |
+| Hauptbild | +77 s | etwa +83 s |
+
+Ab dem Bootup gleicht der Neustart also dem Kaltstart; das Gerät ist am Bus nach 20 s wieder da, die Anzeige braucht
+gut eine Minute länger. Bei den beiden vom WEM ausgelösten Neustarts kam das PDO schon 9 s nach dem Bootup wieder.
+
+**Offen und zu beachten:**
+- Die Bedeutung der Bytes ist nicht bekannt. `0x2559` ist am RG2 ein Kommando-Objekt, über das der WEM auch Dateien
+  mit dem Gerät austauscht (dann mit anderen Werten); `0x2558` liefert den Stand dazu. Vermutung: `0C` = Neustart,
+  `AA 55` = Schutzmuster gegen ein versehentliches Auslösen.
+- Nicht geprüft: ob der erste Schreibbefehl nötig ist, und andere Raumgeräte oder Softwarestände.
+- **Am WEM und am Kessel nicht versucht.** Der WEM hat beide Objekte: Knoten 1 antwortet beim Lesen von `0x2559`/0 und
+  `0x2558`/0 jeweils mit `00 00 00 00` (10.11.2026). Was ein Schreiben dort auslöst, wissen wir nicht; am Kessel haben
+  wir nicht einmal gelesen. Nicht auf Verdacht an andere Geräte senden. Nicht verwechseln: `0x2959`/2 am WEM (JSON `02 00 2559 02`) ist das
+  Vorlaufsoll des Heizkreises und hat damit nichts zu tun.
+- Gedacht ist das für Versuche am Tisch – den Start eines Raumgeräts mitschneiden, ohne den Stecker zu ziehen.
 
 ## 10b. CAN-Tunnel über WLAN (Versuch, Zweig `can-tunnel`)
 
@@ -219,6 +292,21 @@ Die Einstellungen stehen fest in der Firmware; zur Laufzeit lässt sich nur der 
 Beschreibung stehen im Kopf von [`pakete/can-tunnel.yaml`](https://github.com/jvejmelka/weishaupt-wem-can-esphome/blob/can-tunnel/pakete/can-tunnel.yaml), die UDP-Ports in
 [`can_tunnel.h`](https://github.com/jvejmelka/weishaupt-wem-can-esphome/blob/can-tunnel/components/weishaupt_can/can_tunnel.h) (wer sie ändert, baut beide Boards neu).
 
+**Die beiden Boards im Vergleich** – beide mit demselben Firmware-Stand bauen, nur diese Angaben unterscheiden sich:
+
+| | Board A (an der Therme) | Board B (am Raumgerät) |
+|---|---|---|
+| `tunnel_ziel` | Adresse von Board B | Adresse von Board A |
+| `tunnel_name` | `"A"` | `"B"` |
+| `tunnel_nur_bei_bus` | `"true"` | `"false"` |
+| `tunnel_selbst_ein` | `"false"` – von Hand einschalten | `"true"` ist hier vertretbar: Board B hängt nur für den Versuch am Strom |
+| Schalter „120 Ω CAN“ am Board | aus | ein |
+| Gerätename (`geraet`) | wie im Alltag | **ein anderer Name**, oder Paket `mqtt` weglassen – sonst schreiben beide Boards auf dieselben MQTT-Topics |
+| Freies CAN-Schreiben | aus, erlaubte Knoten `01` | aus; nur für einen Versuch am Raumgerät einschalten und dessen Knoten freischalten (z. B. `04`), danach zurück |
+
+Board A bleibt dabei die normale Brücke zur Heizung mit allen Paketen. Board B braucht Regeln, Zusatzanzeigen und MQTT
+nicht; sie stören aber auch nicht, solange der Gerätename ein anderer ist.
+
 **Ablauf.** Jedes Board schickt jeden Frame, den es auf seinem eigenen Bus empfängt, per UDP (Port 47011) an die
 eingetragene Gegenstelle und sendet, was von dort kommt, auf seinen Bus. Angenommen werden nur Pakete von der Adresse der
 Gegenstelle. Ein Paket ist `'W' 'B' Folge id_lo id_hi(+0x80 = RTR) Länge d0…d7`; aus der Folgenummer zählt das Board
@@ -243,17 +331,25 @@ python3 werkzeuge/tunnel_mitschnitt.py --datei tunnel.txt
 
 14:03:08.009 A 1234 R 184:FA00C201      A hat den Frame auf seinem Bus empfangen und weitergeschickt
 14:03:08.021 B 1250 T 184:FA00C201      B hat ihn erhalten und auf seinen Bus gesendet (X = Senden abgelehnt)
+14:05:33.593 B 9876 E 584:6059250000000000   Antwort auf einen eigenen Schreibbefehl von B – bleibt bei B
 ```
 
 Die Zahl hinter dem Kürzel sind Millisekunden seit dem Start des Boards. Mitschnitte können Seriennummern und
 Gerätekennungen enthalten – nicht roh veröffentlichen.
+
+**Selbst schreiben bei laufendem Tunnel.** Das [freie CAN-Schreiben](PROTOKOLL.md#schreiben-per-can-ab-v35-seit-v42-vorgabe)
+eines Boards geht auch, während der Tunnel läuft. Zwei Dinge sorgen dafür, dass es den Verkehr zwischen WEM und Raumgerät
+nicht stört: Das Board sendet erst, wenn auf dem SDO-Kanal des Zielknotens 200 ms lang nichts lief – auch nichts, was es
+selbst gerade aus dem Tunnel auf den Bus gelegt hat –, und die Antwort auf den eigenen Befehl reicht es nicht ans andere
+Ende weiter (im Mitschnitt `E` statt `R`): Dort hat niemand gefragt.
 
 **Was das Paket sonst ändert:** größerer Eingangspuffer für UDP (64 statt der ESP-IDF-Vorgabe 6), WLAN-Stromsparen aus,
 längere CAN-Warteschlangen (Empfang 64, Senden 32) und ein Anhalten des CAN-Bausteins während eines Firmware-Updates.
 Ohne das Paket verhält sich die Firmware wie in `main`.
 
 **Was geklappt hat:** Aufnahme des RG2, Lesen und Schreiben aller Werte aus Abschnitt 10a, Neustart des RG2 und Neustart
-von Board B jeweils ohne Eingriff.
+von Board B jeweils ohne Eingriff; Neustart des RG2 per CAN von Board B aus bei laufendem Tunnel
+([Abschnitt 10a](#neustart-des-rg2-per-can-0x2559)).
 
 **Bekannte Probleme:**
 - Kaltstart der Therme bei laufendem Tunnel (05.11.2026, ältere Firmware): Das RG2 lief weiter, antwortete nicht auf

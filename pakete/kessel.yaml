@@ -188,7 +188,7 @@ canbus:
         then:
           - lambda: |-
               id(wcan)->frame(millis());
-              id(wcan)->sdo_gesehen(can_id, millis());   // SDO-Verkehr je Knoten (ab v43, freies CAN-Schreiben)
+              id(wcan)->sdo_gesehen(can_id, millis());   // SDO-Verkehr je Knoten (ab v42, freies CAN-Schreiben)
               std::string t;
               bool fertig = id(wcan)->lesen.antwort(can_id, x, t, millis());
               id(wcan)->wem_netz.antwort(can_id, x, millis());   // WEM-Adresse per CAN (ab v42)
