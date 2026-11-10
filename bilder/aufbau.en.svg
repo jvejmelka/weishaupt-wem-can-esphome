@@ -42,9 +42,9 @@
 <text x="458" y="341" font-size="12" fill="#555">Modbus TCP for automation,</text>
 <text x="458" y="359" font-size="12" fill="#555">polls the WEM cyclically</text>
 <rect x="665" y="300" width="190" height="75" rx="6" fill="#efe3f7" stroke="#7d3c98" stroke-width="2"/>
-<text x="678" y="322" font-weight="bold">Phone app (app/)</text>
-<text x="678" y="341" font-size="12" fill="#555">display, switch buttons</text>
-<text x="678" y="359" font-size="12" fill="#555">heating circuit / hot water</text>
+<text x="678" y="322" font-weight="bold">Phone app in Docker</text>
+<text x="678" y="341" font-size="12" fill="#555">like the app on the board,</text>
+<text x="678" y="359" font-size="12" fill="#555">via MQTT · folder app/</text>
 <rect x="900" y="300" width="250" height="75" rx="6" fill="#fff" stroke="#1e8449"/>
 <text x="913" y="322" font-weight="bold">MQTT broker</text>
 <text x="913" y="341" font-size="12" fill="#555">optional: InfluxDB, Grafana,</text>
@@ -105,15 +105,16 @@
 <text x="573" y="886" font-size="12" fill="#555">WEM-RF, WEM-RG · in the living area</text>
 <text x="573" y="904" font-size="12" fill="#555">on the same CAN bus</text>
 
-<rect x="880" y="685" width="270" height="135" rx="6" fill="#efe3f7" stroke="#7d3c98" stroke-width="2"/>
+<rect x="880" y="685" width="270" height="155" rx="6" fill="#efe3f7" stroke="#7d3c98" stroke-width="2"/>
 <text x="895" y="709" font-weight="bold">ESP bridge (WeAct CAN485)</text>
 <text x="895" y="729">• listens to everything</text>
 <text x="895" y="749">• reads single values (SDO)</text>
 <text x="895" y="769">• switches via CAN at the WEM,</text>
 <text x="895" y="787">  verifies the result on the bus</text>
-<text x="895" y="807" font-size="12" fill="#555">fallback: switching via WEM JSON</text>
+<text x="895" y="807">• phone app built in (browser)</text>
+<text x="895" y="827" font-size="12" fill="#555">fallback: switching via WEM JSON</text>
 <line x1="1025" y1="685" x2="1025" y2="378" stroke="#1e8449" stroke-width="2.5" marker-start="url(#pg)" marker-end="url(#pg)"/>
-<text x="1035" y="520" fill="#1e8449" font-size="12">Wi-Fi · MQTT</text>
+<text x="1035" y="520" fill="#1e8449" font-size="12">Wi-Fi · MQTT · HTTP</text>
 <text x="1035" y="536" fill="#1e8449" font-size="11">(IP, same as LAN)</text>
 
 <rect x="30" y="832" width="510" height="104" rx="8" fill="#eafaf1" stroke="#1e8449"/>
