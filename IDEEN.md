@@ -18,6 +18,10 @@ am selben Speicher, PV mit Hauskraftwerk.
 | [Eigene Lese-Regeln in Home Assistant oder Node-RED](#7-eigene-lese-regeln-in-home-assistant-oder-node-red) | gering | gering | geht heute schon |
 | [Speichertemperatur oben](#8-speichertemperatur-oben) | gering bis mittel | gering | nur Näherungen, ohne Eingriff in den Speicher |
 | [Wandgerät für rund 75 € – Ziel: RG-kompatibel](#9-wandgerät-für-rund-75---ziel-rg-kompatibel) | mittel (Anzeige) bis hoch (RG-Nachbau) | gering (Anzeige) bis hoch (RG-Nachbau) | Anzeige und Bedienung machbar, RG-Nachbau erst nach Mitschnitt |
+| [Tragbares Raumgerät nur aus Handy-App und Funkfühlern](#10-tragbares-raumgerät-nur-aus-handy-app-und-funkfühlern) | hoch | hoch – das Board sendet dauernd auf den Bus | das Ziel hinter Idee 3, 4 und 9; Protokoll mitgeschnitten, noch nicht gebaut |
+
+Die Ideen 3, 4, 9 und 10 sind verschiedene Wege zum selben Ziel, einem Raumwert im WEM. Sie stehen am Ende
+nebeneinander: [Alle Wege zum Raumwert im Überblick](#alle-wege-zum-raumwert-im-überblick).
 
 Zuerst aber, womit das alles steht und fällt: den Messdaten.
 
@@ -161,7 +165,7 @@ vom WEM aufgenommen, sendet ein Lebenszeichen und liefert den Raumwert von sich 
 beantwortet nur einzelne Anfragen nach seinen eigenen Werten – darüber kann sich kein Gerät anmelden und nichts laufend
 senden, und regelmäßige Anfragen verträgt der WEM nicht. Einen JSON-Weg, dem WEM einen Raumwert zu liefern, kennen wir
 nicht. Ein Board ohne CAN-Kabel (nur JSON) reicht also zum Abrufen von Werten und zum Schalten von Hand; wer ein
-Raumgerät oder einen Raumfühler am WEM haben will – echt, über den Tunnel (Idee 4) oder nachgebildet (Idee 9, Stufe 2) –,
+Raumgerät oder einen Raumfühler am WEM haben will – echt, über den Tunnel (Idee 4) oder nachgebildet (Idee 9, Stufe 2, und Idee 10) –,
 braucht ein Board **am CAN-Bus**: das WeAct CAN485 oder, für Ethernet, die
 [Olimex-Variante von cg089](OLIMEX-ESP32-EVB.md).
 
@@ -276,7 +280,8 @@ dass viel gezapft wurde – und genau dann springt das Gas an.
 
 Ein Weishaupt-Raumgerät kostet neu rund 300 €. Die Idee: Das **CAN-Board am Kessel** (dieses Projekt)
 übernimmt die Busseite, im Raum hängt nur ein **WLAN-Touchpanel** – kein zweites CAN-Board, kein
-Buskabel, keine 24 V im Zimmer.
+Buskabel, keine 24 V im Zimmer. Wer gar nichts an der Wand haben will, nimmt statt des Panels das Handy:
+[Idee 10](#10-tragbares-raumgerät-nur-aus-handy-app-und-funkfühlern).
 
 ```
 Raum                                   Heizraum
@@ -302,25 +307,113 @@ umschalten über den vorhandenen Weg der Firmware (CAN-Schalten mit Mindestabsta
 Display nachts aus, an bei Berührung.
 
 **Stufe 2 – RG-kompatibel (Ziel, noch nicht belegt):** Das CAN-Board spielt gegenüber dem WEM ein
-Raumgerät und liefert den Raumwert des Panels bzw. Fühlers – echte Raumaufschaltung ohne Weishaupt-Gerät.
-Das geht nur am CAN-Bus, nicht über JSON (s. Idee 3).
-Voraussetzungen und Haken:
+Raumgerät und liefert den Raumwert des Fühlers – echte Raumaufschaltung ohne Weishaupt-Gerät.
+Das geht nur am CAN-Bus, nicht über JSON (s. Idee 3). Der Busteil ist derselbe wie in
+[Idee 10](#10-tragbares-raumgerät-nur-aus-handy-app-und-funkfühlern); dort steht, was das Board nachbilden müsste,
+was offen ist und was zur Sicherheit dazugehört. Für das Panel kommt dazu:
 
-- ~~erst ein Mitschnitt eines echten Raumgeräts~~ – liegt seit November 2026 vor
-  ([VERSUCHE.md, 10a](VERSUCHE.md#10a-raumgerät-wem-rg2-am-bus-mitschnitt-november-2026)). Ein **virtuelles RG2** müsste
-  nachbilden: Lebenszeichen `0x704`, Raumwert per PDO `0x184` (Temperatur und Feuchte), Bestellungen und Schreibaufträge
-  über `0x5E00`, die Antwort auf `0x1018/1` beim Start des WEM und die Quittung auf `0x20F0`. Der Raumwert käme dann aus
-  einem kalibrierten Fühler (z. B. Shelly BLU H&T) statt aus dem Gehäuse eines Geräts. Offen: wie der WEM ein Raumgerät
-  einem Heizkreis zuordnet, ob mehrere an einem Heizkreis gehen und was er mit dem Raumwert macht, sobald ein
-  Raumfühler zugeordnet ist;
-- ein nachgebautes Raumgerät **sendet dauernd** – das widerspricht dem Grundsatz dieser Firmware
-  (keine Schreibserien, nichts aus Regeln heraus). Deshalb nur als eigener, ab Werk **ausgeschalteter**
-  Modus, nie an Knoten 2, mit Rückweg (Schalter aus = Bus wie vorher);
-- **WLAN-Ausfall** muss sauber enden: Das Board darf keinen veralteten Raumwert weiterschicken, sondern
-  verhält sich wie „Raumgerät fehlt“, damit der WEM witterungsgeführt weiterregelt;
-- der Fühler gehört **nicht** in das Panelgehäuse (Eigenwärme von Display und Chip, typ. +1–3 K).
+- der Fühler gehört **nicht** in das Panelgehäuse (Eigenwärme von Display und Chip, typ. +1–3 K);
+- empfängt das Panel den Fühler, gilt bei seinem Ausfall dasselbe wie bei einem stummen Fühler: kein alter
+  Raumwert auf den Bus (Idee 10, Sicherheit). Die Bedienung bleibt über die Handy-App möglich.
 
 Beim Panel auf **ESP32-S3** achten (WLAN + BLE eingebaut); Varianten mit **ESP32-P4** haben kein eigenes
 Funkmodul. Mit „ohne Bodenschale“ ist nur das Panel gemeint (Strom über USB-C); die Variante mit
 Unterteil für 230 V gehört in die Hände einer Elektrofachkraft.
 
+## 10. Tragbares Raumgerät nur aus Handy-App und Funkfühlern
+
+Das ist das Ziel, auf das die Ideen 3, 4 und 9 hinauslaufen: ein Raumgerät, das es als Gerät gar nicht gibt.
+Ein Weishaupt-Raumgerät besteht aus zwei Dingen – **Fühlern** (Raumtemperatur, Raumfeuchte) und einer
+**Bedienoberfläche**. Beides lässt sich ersetzen:
+
+- die Fühler durch **echte Raumfühler**, die dort stehen, wo gemessen werden soll – z. B. Shelly H&T (WLAN) oder
+  Shelly BLU H&T (Bluetooth über ein Shelly-Gateway), ebenso jeder andere Sensor, der seinen Wert per MQTT liefert;
+- die Oberfläche durch die **Handy-App** dieses Projekts, die ohnehin auf dem Board läuft.
+
+Das **CAN-Board am Kessel** meldet sich beim WEM als Raumgerät und liefert ihm den Raumwert. An der Wand hängt nichts,
+im Raum steht nur der Fühler, und tragbar ist das Ganze, weil das Handy die Bedienung ist.
+
+```
+Raum                                   Heizraum
+┌──────────────────────┐   WLAN/MQTT   ┌───────────────────────┐   CAN   ┌─────┐
+│ Funk-Raumfühler      │ ────────────► │ CAN-Board (dieses      │ ◄─────► │ WEM │
+└──────────────────────┘               │ Projekt) am Kesselbus, │         └─────┘
+┌──────────────────────┐     WLAN      │ meldet sich als        │
+│ Handy mit der App    │ ◄───────────► │ Raumgerät              │
+└──────────────────────┘               └───────────────────────┘
+```
+
+**Was man am Schluss braucht:**
+
+| Teil | Wo | ca. Preis |
+|---|---|---|
+| CAN-Board (WeAct CAN485; für Ethernet die [Olimex-Variante von cg089](OLIMEX-ESP32-EVB.md)) | einmal am Kessel | 10–15 € |
+| Funk-Raumfühler mit MQTT (z. B. Shelly H&T oder Shelly BLU H&T mit Gateway) | je Raum | ab ~15 € |
+| USB-Netzteil | Kessel | 5–8 € |
+| MQTT-Broker und WLAN | im Haus | meist vorhanden |
+| Handy | – | vorhanden |
+
+Preise sind grobe Richtwerte (Stand 11/2026), nicht geprüft. Kein Weishaupt-Raumgerät, kein zweites Board, kein Panel,
+kein Buskabel ins Zimmer. Über JSON allein geht es nicht (s. Idee 3) – das eine Board muss am CAN-Bus hängen.
+
+**Was davon schon steht (Stand 11/2026):**
+
+- Das Protokoll eines echten WEM-RG2 ist mitgeschnitten: Aufnahme, Lebenszeichen, Raumwert, Lesen, Schreiben, Ausfall
+  ([VERSUCHE.md, 10a](VERSUCHE.md#10a-raumgerät-wem-rg2-am-bus-mitschnitt-november-2026)). Das echte Raumgerät und der
+  CAN-Tunnel (Idee 4) waren dafür nur das Mittel zum Abschauen.
+- Die Handy-App läuft auf dem Board, schaltet Betriebsart und Warmwasser und zeigt fremde MQTT-Werte (z. B.
+  Raumtemperaturen) als Zusatzanzeige (Pakete `app` und `zusatz`).
+- **Nicht gebaut** ist das virtuelle Raumgerät selbst. Diese Firmware meldet sich bis heute nicht als Raumgerät und
+  sendet keinen Raumwert.
+
+**Was das Board nachbilden müsste** (alles aus dem Mitschnitt 10a):
+
+- einen eigenen Knoten mit Lebenszeichen `0x704` und der Startfolge des RG2;
+- die Antwort auf `0x1018/1` beim Start des WEM – darüber läuft die Aufnahme, bei uns erst nach einem Kaltstart von
+  Therme und Raumgerät gemeinsam;
+- die Quittung auf `0x20F0` (Geräteliste);
+- den **Raumwert per PDO `0x184`**: Temperatur und Feuchte, bei einer Änderung frühestens nach 1 s, sonst etwa einmal
+  pro Minute;
+- für die Bedienung die Werte, die ein RG2 über `0x5E00` schreibt – Raumsoll Absenk/Normal/Komfort, Party, Urlaub,
+  Heizkurve – und die es liest, etwa die Zeitprogramme. Betriebsart und Warmwasser schaltet die Firmware schon heute.
+
+**Offen:**
+
+- das **Menü-Paket**: Nach der Aufnahme schickt der WEM rund 1,6 MB an das Raumgerät (bei uns rund 25 Minuten). Ein
+  Gerät ohne eigene Anzeige braucht den Inhalt nicht. Ob das Board die Übertragung annehmen und verwerfen muss oder
+  ob der WEM sie einem Gerät ohne Bedienteil gar nicht schickt, ist nicht versucht;
+- wie der WEM ein Raumgerät einem Heizkreis zuordnet, ob mehrere an einem Heizkreis gehen und was er mit dem Raumwert
+  macht, sobald ein Raumfühler zugeordnet ist. In unserem Mitschnitt war keiner zugeordnet, der Raumwert änderte das
+  Vorlaufsoll nicht;
+- **welcher Raum zählt**: ein Führungsraum oder ein Mittel aus mehreren Fühlern. Das entscheidet das Board, der WEM
+  sieht nur einen Wert je Raumgerät;
+- die Bedeutung von Byte 4–5 im PDO `0x184`.
+
+**Sicherheit – gehört von Anfang an dazu:**
+
+- Ein nachgebautes Raumgerät **sendet dauernd**. Das widerspricht dem Grundsatz dieser Firmware (keine Schreibserien,
+  nichts aus Regeln heraus). Deshalb nur als eigener, ab Werk **ausgeschalteter** Modus, nie an Knoten 2 (Kessel),
+  mit Rückweg: Schalter aus = das Board ist am Bus wieder nur Zuhörer.
+- **Kein veralteter Raumwert:** Ist der Fühler stumm (Batterie leer, WLAN oder MQTT weg), darf das Board den letzten
+  Wert nicht weiterschicken. Nach einem Höchstalter verhält es sich wie „Raumgerät fehlt“ und stellt das
+  Lebenszeichen ein. Der WEM meldet das nach 30 s als Warnung 1501 (gemessen); wie er dann mit zugeordnetem
+  Raumfühler regelt, ist offen und muss vor dem Dauerbetrieb an der eigenen Anlage geprüft werden.
+- **Grenzen für den Wert:** nur plausible Temperaturen und Feuchten weitergeben, Sprünge begrenzen – ein Fühler in der
+  Sonne oder auf der Heizung darf die Anlage nicht aus dem Tritt bringen.
+- **Bedienung von außen** nur so wie bei der App beschrieben (Login, von außen höchstens hinter einem Reverse Proxy
+  mit TLS). Sollwerte bleiben in den Grenzen, die der WEM selbst vorgibt.
+- Anders als beim CAN-Tunnel, wo das zweite Board nur unter Aufsicht läuft, wäre dieses Board **dauernd** am Bus aktiv.
+  Umso wichtiger sind der Schalter, das Höchstalter und ein Versuchsbetrieb unter Aufsicht, bevor man es allein lässt.
+
+### Alle Wege zum Raumwert im Überblick
+
+| Weg | Im Raum | Am Kessel | Raumwert kommt beim WEM an | Stand 11/2026 |
+|---|---|---|---|---|
+| Weishaupt-Raumgerät am Kabel | Raumgerät, Buskabel | – | ja | Weishaupts eigener Weg; am WEM-RG2 mitgeschnitten ([10a](VERSUCHE.md#10a-raumgerät-wem-rg2-am-bus-mitschnitt-november-2026)) |
+| Weishaupt-Raumgerät per Funk ([Idee 4](#4-weishaupt-raumgerät-per-funk-can-über-wlan)) | Raumgerät, zweites CAN-Board, eigene Versorgung | CAN-Board | ja | läuft als Versuch ([10b](VERSUCHE.md#10b-can-tunnel-über-wlan-versuch-zweig-can-tunnel)) |
+| Eigene Fühler auswerten und grob regeln ([Idee 3](#3-raumtemperatur-aus-eigenen-sensoren)) | Funk-Raumfühler | CAN-Board (zum Regeln) | nein | geht heute |
+| Wandgerät, Stufe 1 ([Idee 9](#9-wandgerät-für-rund-75---ziel-rg-kompatibel)) | Touchpanel, Funk-Raumfühler | CAN-Board | nein | machbar, nicht gebaut |
+| Wandgerät, Stufe 2 ([Idee 9](#9-wandgerät-für-rund-75---ziel-rg-kompatibel)) | Touchpanel, Funk-Raumfühler | CAN-Board als Raumgerät | ja | nicht gebaut |
+| Nur Handy-App und Funkfühler (Idee 10) | Funk-Raumfühler | CAN-Board als Raumgerät | ja | das Ziel; nicht gebaut |
+| Funk-Heizkörperventile ([Idee 5](#5-einzelraumregelung-mit-funk-heizkörperventilen)) | Ventile mit eigenem Fühler | – | nein | eigenständig, ergänzt die Heizung |
+| Nur JSON, ohne Board am CAN-Bus | – | – | nein | für Raumgerät oder Raumfühler kein Weg bekannt (Idee 3) |

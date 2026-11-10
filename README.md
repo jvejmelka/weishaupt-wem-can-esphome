@@ -228,7 +228,8 @@ Die Dokumente im Überblick:
 - [REGELN.md](REGELN.md) – die Regeln R1–R5 und eigene Regeln: wann das Board Betriebsarten nachliest
 - [ANLAGE.md](ANLAGE.md) – Beispielanlage mit Wärmepumpe und PV
 - [IDEEN.md](IDEEN.md) – was sich noch bauen ließe: Datenbank und Grafana, H2-Sperre,
-  Raumsensoren, Raumgerät per Funk, Heizkörperventile, Anlage prüfen
+  Raumsensoren, Raumgerät per Funk, Heizkörperventile, Anlage prüfen, Wandgerät, tragbares Raumgerät
+  nur aus Handy-App und Funkfühlern
 - [CHANGELOG.md](CHANGELOG.md) – Änderungen je Firmware-Stand
 - [LICENSE](LICENSE) – Lizenz
 
