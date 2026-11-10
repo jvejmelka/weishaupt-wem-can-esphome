@@ -49,7 +49,7 @@ class AppServer : public AsyncWebHandler {
   void setup();
   void loop();
 #ifdef USE_WEBSERVER
-  // ab v42: "/" ist die App, die ESPHome-Oberflaeche liegt unter /experten (Admin-Passwort)
+  // ab v42: "/" ist die App, die ESPHome-Oberflaeche liegt unter /experten (Experten-Passwort)
   web_server::WebServer *experten{nullptr};
 #endif
 
@@ -127,7 +127,7 @@ class AppServer : public AsyncWebHandler {
   void einstellungen_sammeln_();
   std::string einstellungen_json_();
   void zugang_speichern_();          // nur in der Hauptschleife
-  void web_passwort_setzen_();       // Weboberflaeche des Boards: Admin-Passwort (bzw. gesperrt)
+  void web_passwort_setzen_();       // ESPHome-Oberflaeche (/experten) und /update: Experten-Passwort (bzw. gesperrt)
   std::string token_laden_(ESPPreferenceObject &pref, uint32_t schluessel, bool neu);
   std::string info_json_();          // Hauptschleife
   std::string sicherung_json_();     // Hauptschleife

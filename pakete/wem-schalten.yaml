@@ -3,9 +3,9 @@
 # WEM-JSON-Schnittstelle (http://<WEM>/ajax/CanApiJson.json; Rueckweg, bis v34 der einzige Weg).
 # Braucht das Paket kessel. In den Kessel (Knoten 2) wird NIE geschrieben.
 #
-# Schalter in der Weboberflaeche, Gruppe "Schreiben per CAN" (ab v35):
+# Schalter auf dem Board, Gruppe "Schreiben per CAN" (ab v35):
 #   - "Schalten per CAN statt JSON": Heizkreis/Warmwasser per SDO-Download an den WEM
-#     (0x2933/2, 0x2A20/2), sonst alles wie beim JSON-Weg (Warteschlange, Sperrminute, Kontrolle).
+#     (0x2933/2, 0x2A20/2), sonst alles wie beim JSON-Weg (Warteschlange, Mindestabstand, Kontrolle).
 #   - "Freies CAN-Schreiben (Experten)": Eingabefeld und ${geraet}/cmd/can_schreiben,
 #     "KN IDX SUB WERT [LAENGE]" oder "KN IDX SUB = B1 B2 ..." (hex), nur Knoten 01, nur 2000-5FFF.
 #   An einer WTC-GW 15-B (WEM 428.226) bestaetigt; andere Anlagen: auf eigene Gefahr.
@@ -14,10 +14,11 @@
 # Abfragen hat sie mehrfach dauerhaft lahmgelegt (nur Stromlos-Machen half), und jede
 # Anfrage an ein Objekt, das die Anlage nicht hat (Antwort CM=05), verbraucht einen von
 # nur zehn Plaetzen bis zum naechsten Neustart der Heizung. Deshalb:
-#   - hoechstens ein Befehl pro Minute (Warteschlange: der NEUESTE Wunsch je Ziel gewinnt)
+#   - Mindestabstand zwischen zwei Befehlen, ueber JSON ab Werk 60 s und nicht kuerzer einstellbar
+#     (per CAN ab Werk 10 s; Warteschlange: der NEUESTE Wunsch je Ziel gewinnt)
 #   - geschrieben wird nur MI 01/02/03 (Systemgeraet), nie der Kessel
 #   - eine CM=05-Antwort wird im Ergebnis gemeldet
-#   - der WEM wird nie von selbst abgefragt, nur wenn jemand schaltet
+#   - die JSON-Schnittstelle wird nie von selbst aufgerufen, nur auf Bedienung
 #
 # Schalten per MQTT (braucht Paket mqtt):
 #   ${geraet}/cmd/heizkreis   Klartext "1".."8", Name ("Zeitprogramm 1", "Standby") oder Kurzform "ZP1"
@@ -70,7 +71,7 @@ esphome:
 
 script:
   # Schaltwunsch annehmen: ziel 1 Heizkreis, 2 Warmwasser; nutzlast Klartext oder JSON (befehle.h).
-  # Nur Buchfuehrung - gesendet wird erst von befehl_pruefen (hoechstens ein Befehl pro Minute).
+  # Nur Buchfuehrung - gesendet wird erst von befehl_pruefen (Mindestabstand zwischen zwei Befehlen).
   - id: befehl_eingang
     mode: queued
     max_runs: 10
@@ -134,7 +135,7 @@ script:
           mqtt::global_mqtt_client->publish("${geraet}/schaltprotokoll", p.lang(), 0, true);
           #endif
 
-  # Warteschlange abarbeiten: laeuft jede Sekunde, sendet hoechstens einen Befehl pro Minute
+  # Warteschlange abarbeiten: laeuft jede Sekunde, sendet erst nach dem Mindestabstand (abstand_can bzw. abstand_json)
   - id: befehl_pruefen
     mode: single
     then:
@@ -230,7 +231,7 @@ script:
       - script.wait: bus_kontrolle
 
   # Freies CAN-Schreiben (ab v35, Schalter "Experten", ab Werk aus): Eingabefeld oder cmd/can_schreiben.
-  # Nur Knoten 01 (WEM), nur Objekte 2000-5FFF (wc::can_schreib_lesen), Sperrminute wie beim Schalten.
+  # Nur Knoten 01 (WEM), nur Objekte 2000-5FFF (wc::can_schreib_lesen), Mindestabstand wie beim Schalten per CAN.
   - id: can_frei_senden
     mode: queued
     max_runs: 5
@@ -273,7 +274,7 @@ script:
                 id(protokoll_eintrag)->execute("CAN-Schreibbefehl: " + t);
                 ESP_LOGI("schreiben", "%s | roh: %s", t.c_str(), w.roh.c_str());
 
-  # Datei von der SD-Karte des WEM holen (ab v36): einmal pro Aufruf, Sperrminute wie beim Schalten
+  # Datei von der SD-Karte des WEM holen (ab v36): einmal pro Aufruf, Mindestabstand wie beim Schalten ueber JSON
   # (die Weboberflaeche des WEM ist empfindlich - nie im Takt). Inhalt per MQTT an
   # ${geraet}/sd/<datei> (ab 4 KB in Stuecken <datei>/1, /2 ...), der Anfang in der Weboberflaeche;
   # systable.csv wird zusaetzlich ausgewertet (Knoten, Firmware, Module).

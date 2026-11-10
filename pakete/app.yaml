@@ -1,14 +1,14 @@
 # Paket APP (ab v38): die Heizungs-App laeuft direkt auf dem Board - kein Server, kein Docker.
 #
 #   http://<board>/ und /app  die App (dieselbe Oberflaeche wie app/ im Repository)
-#   http://<board>/experten   die ESPHome-Weboberflaeche (ab v42; Benutzer admin, Admin-Passwort)
+#   http://<board>/experten   die ESPHome-Weboberflaeche (ab v42; Benutzer admin, Experten-Passwort)
 #
 # Login der App: app_benutzer und app_passwort aus secrets.yaml. 5 Fehlversuche
 # je Adresse in 15 min sperren diese Adresse fuer 15 min. Nach dem Login bleibt man angemeldet
 # (Sitzungs-Token im Flash, uebersteht Updates).
 #
 # Braucht die Pakete wem-schalten und warmwasser-schalten (Schaltbefehle laufen wie per MQTT durch
-# Warteschlange, Sperrminute und Kontrolle am Bus). Zusatzanzeigen (Paket zusatz): das Board
+# Warteschlange, Mindestabstand und Kontrolle am Bus). Zusatzanzeigen (Paket zusatz): das Board
 # abonniert die Topics der Liste selbst, sobald MQTT verbunden ist.
 #
 # Von aussen: nur ueber einen Reverse Proxy mit HTTPS (das Board kann kein HTTPS).
@@ -18,7 +18,7 @@ weishaupt_can:
   app:
     benutzer: !secret app_benutzer
     passwort: !secret app_passwort
-    admin_passwort: !secret web_password   # Einstellungsseite und Weboberflaeche (ab v39)
+    admin_passwort: !secret web_password   # Vorgabe fuer die Einstellungsseite (ab v39); /experten braucht das Experten-Passwort
     proxy: !secret app_proxy               # IP des Reverse Proxys oder "" (ab v42, Login-Sperre hinter Proxy)
     firmware: ${firmware}
 

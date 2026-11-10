@@ -4,7 +4,7 @@
 
 interval:
   # Warmwasser-Betriebsart und -Sollwerte liegen im WEM: gelesen nur bei Anlass (siehe
-  # Paket kessel: nach Start, bei geaenderten Statusbits, nach Schaltbefehlen).
+  # Paket kessel: nach Start, nach Schaltbefehlen, bei geaenderten Statusbits bzw. Regeln R1-R5).
   - interval: 5s
     then:
       - lambda: |-

@@ -1308,7 +1308,7 @@ void AppServer::handleRequest(AsyncWebServerRequest *request) {
     this->datei_(request, ap::datei("/app", 4));          // Startseite = App
   } else if (url == "/experten") {
 #if defined(USE_WEBSERVER) && defined(USE_WEBSERVER_AUTH)
-    // ESPHome-Oberflaeche: dieselbe Anmeldung wie dort (Benutzer admin, Admin-Passwort, Digest)
+    // ESPHome-Oberflaeche: dieselbe Anmeldung wie dort (Benutzer admin, Experten-Passwort, Digest)
     if (this->experten == nullptr) this->antworten_(request, 404, "{\"error\":\"Expertenoberflaeche nicht eingebaut\"}");
     else if (!request->authenticate("admin", this->web_pw_)) request->requestAuthentication();
 #ifdef USE_WC_EXPERTEN

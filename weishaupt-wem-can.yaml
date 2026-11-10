@@ -14,12 +14,12 @@
 #   pakete/warmwasser.yaml           Warmwasserwerte (nur mit Warmwasserspeicher am WTC)
 #   pakete/mqtt.yaml                 Werte und Befehle ueber MQTT
 #   pakete/homeassistant-api.yaml    native Home-Assistant-API (statt oder neben MQTT)
-#   pakete/wem-schalten.yaml         Heizkreis-Betriebsart ueber die WEM-JSON-Schnittstelle
+#   pakete/wem-schalten.yaml         Heizkreis-Betriebsart am WEM schalten (seit v42 ab Werk per CAN, Rueckweg JSON)
 #   pakete/warmwasser-schalten.yaml  Warmwasser Ein/Aus ueber WEM (braucht wem-schalten)
 #   pakete/verdacht.yaml             Regeln: Betriebsarten nur lesen, wenn das Mithoeren eine Aenderung
 #                                    vermuten laesst (R1-R5 einzeln, eigene Regeln experimentell; braucht warmwasser)
 #   pakete/zusatz.yaml               Zusatzanzeigen fuer die Handy-App (Liste fremder MQTT-Topics, braucht mqtt)
-#   pakete/app.yaml                  Heizungs-App direkt auf dem Board (http://<board>/app, ab v38)
+#   pakete/app.yaml                  Heizungs-App direkt auf dem Board (http://<board>/, ab v38)
 #   pakete/json-lesen.yaml           Werte von Hand per WEM-JSON abrufen (ohne CAN-Kabel, ab v42; braucht wem-schalten)
 #   pakete/feste-ip.yaml             feste IP statt DHCP (Empfehlung: DHCP + Router-Reservierung)
 #   pakete/kraiz-per-can.yaml        weitere Werte wie kraiz/hassio-weishaupt, per CAN gelesen; Warmwasser-Push,
@@ -30,8 +30,9 @@ substitutions:
   geraet: weact-can485-weishaupt       # Geraetename = MQTT-Praefix
   anzeigename: Weishaupt WTC-GW 15-B
   firmware: "v42-dev vom 28.10.2026"
-  # Eigene CAN-Leseanfragen beim ersten Start (danach gilt der Schalter in der Weboberflaeche):
-  #   RESTORE_DEFAULT_OFF = nur mithoeren (Vorgabe, wenn die Zeile fehlt)
+  # Eigene CAN-Leseanfragen im Takt beim ersten Start (danach gilt der Schalter auf dem Board):
+  #   RESTORE_DEFAULT_OFF = keine Abfragen im Takt (Vorgabe, wenn die Zeile fehlt); Lesen bei Anlass
+  #                         und Schalten am WEM gibt es trotzdem
   #   RESTORE_DEFAULT_ON  = eigene Leseanfragen im Weishaupt-Takt
   can_anfragen_start: RESTORE_DEFAULT_OFF
   # Sprache der Stoermeldungen (Meldung WEM/Kessel): "false" = Deutsch, "true" = Englisch (fehlercodes.yaml)
@@ -105,7 +106,7 @@ logger:
 ota:
   - platform: esphome
     password: !secret ota_password
-  # Update im Browser (ab v40): Einstellungsseite oder /experten, Benutzer admin + Experten-Passwort (Digest, ab v42)
+  # Update im Browser (ab v40): Einstellungsseite oder /experten, Benutzer admin + Experten-Passwort (Digest ab v41, /experten ab v42)
   - platform: web_server
 
 wifi:
@@ -119,9 +120,12 @@ wifi:
 
 captive_portal:
 
-# Weboberflaeche: http://<IP des Boards>, Benutzer admin.
+# ESPHome-Weboberflaeche (Experten). Mit Paket app: http://<IP des Boards>/experten, Benutzer admin und
+#   das Experten-Passwort von der Einstellungsseite - das Paket app ersetzt das Passwort unten; solange
+#   kein Experten-Passwort gesetzt ist, bleibt die Oberflaeche gesperrt. Ohne Paket app: http://<IP>/,
+#   Benutzer admin, web_password.
 #   local: true bettet JS/CSS ein - die Seite funktioniert ohne Internet.
-#   Basic Auth laeuft unverschluesselt ueber HTTP: nur im LAN betreiben.
+#   HTTP ist unverschluesselt (Digest schuetzt nur das Passwort): nur im LAN betreiben.
 web_server:
   id: experten_oberflaeche   # ab v42 unter /experten, "/" ist die App (Paket app)
   port: 80

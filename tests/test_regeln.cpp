@@ -721,7 +721,7 @@ TEST(status_json_aufbau) {
   PRUEFE(e["schalten"]["warteschlange"].size() == 1 && e["schalten"]["warteschlange"][0]["id"] == 17);
   PRUEFE(e["schalten"]["frei_ab"] == 1790000030u);
   PRUEFE(st.grund_hk.empty());                                // Anlass bei der Lesung verbraucht
-  JsonDocument g;                                             // Sperrminute vorbei: frei_ab null
+  JsonDocument g;                                             // Mindestabstand vorbei: frei_ab null
   PRUEFE(!deserializeJson(g, bf::status_json(st, s, "v27", 1790000031, 1)) && g["schalten"]["frei_ab"].isNull());
 }
 

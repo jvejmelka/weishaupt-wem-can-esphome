@@ -5,7 +5,7 @@
 #   CAN TX = GPIO5   CAN RX = GPIO35 (Olimex ESP32-EVB, siehe Schaltplan)   50 kbps
 #   Dallas-Temperaturfuehler an GPIO16 (UEXT Pin 5)
 #   Geschrieben wird NIE auf den Kessel, nur an den WEM (Knoten 1); "Eigene CAN-Anfragen" sind beim
-#   ersten Start aus (nur Mithoeren).
+#   ersten Start aus (keine Abfragen im Takt).
 #
 # Wie weishaupt-wem-can.yaml waehlt diese Datei nur die Pakete aus und beschreibt das Board:
 #   pakete/kessel.yaml               Pflicht: Kesselwerte lesen, Diagnose (CAN-Pins ueber can_tx_pin/can_rx_pin)
@@ -24,7 +24,7 @@ substitutions:
   geraet: olimex-weishaupt
   anzeigename: Weishaupt Heizung
   firmware: "v42-dev vom 28.10.2026 (Olimex ESP32-EVB)"
-  # RESTORE_DEFAULT_OFF = nur mithoeren, RESTORE_DEFAULT_ON = eigene Leseanfragen im Weishaupt-Takt
+  # RESTORE_DEFAULT_OFF = keine Abfragen im Takt, RESTORE_DEFAULT_ON = eigene Leseanfragen im Weishaupt-Takt
   can_anfragen_start: RESTORE_DEFAULT_OFF
   # Sprache der Stoermeldungen und des Fehler-Klartexts: "false" = Deutsch, "true" = Englisch (fehlercodes.yaml)
   meldungen_englisch: "false"

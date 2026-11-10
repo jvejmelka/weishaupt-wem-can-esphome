@@ -9,7 +9,7 @@
 //   Scan        Objektscan (cmd/scan)
 //   Brenner     Flankenerkennung, Brennerstarts
 //   Protokoll   Schalt- und Regelprotokoll (10 Eintraege)
-//   Schalten    Sperrminute, laufender WEM-Aufruf, Schreibbefehl
+//   Schalten    Mindestabstand, laufender WEM-Aufruf, Schreibbefehl
 //   Verdacht    Laufzeitzustand der Regeln R1-R5 (Datenregeln, regelwerk.h) und der eigenen Regeln
 //   Zusatz      Zusatzanzeigen (Speicherform, Datei-Pruefsumme)
 //
@@ -434,13 +434,13 @@ struct Protokoll {
 // ---------------------------------------------------------------- Schalten ueber den WEM
 
 struct Schalten {
-  uint32_t letzter_befehl = 0;   // millis() des letzten WEM-Aufrufs (Sperrminute)
+  uint32_t letzter_befehl = 0;   // millis() des letzten Befehls an den WEM (Mindestabstand)
   int ziel = 0;                  // laufender Aufruf: 0 keiner, 1 Heizkreis, 2 Warmwasser, 3 Schreibbefehl
   std::string vg;                // VG des laufenden Aufrufs
   bool senden = false;           // in diesem Durchlauf an den WEM senden
   bool pruefen = false;          // Kontroll-Leseanfrage am Bus ist raus
   Protokoll protokoll;
-  uint32_t letzter_gesehen = 0;  // Anzeige: wann die Sperrminute endet
+  uint32_t letzter_gesehen = 0;  // Anzeige: wann der Mindestabstand endet
   std::string frei_ab;
   // Schreiben per CAN (ab v35): Ergebnis des laufenden Schreibbefehls fuer die Skripte
   bool can_fertig = false;
@@ -471,7 +471,7 @@ inline std::string warteschlange_text(const bf::Schaltung &s, bool gesperrt, con
          bf::wert_text(z, s.wunsch[z].wert) + " (" + s.wunsch[z].quelle + ")";
   }
   if (w.empty()) w = "leer";
-  else if (gesperrt) w += frei_ab.empty() ? " - wartet auf die Sperrminute" : " - naechster Befehl ab " + frei_ab;
+  else if (gesperrt) w += frei_ab.empty() ? " - wartet auf den Mindestabstand" : " - naechster Befehl ab " + frei_ab;
   return w;
 }
 
@@ -649,7 +649,8 @@ template<size_t N> inline bool speicher_schreiben(std::array<char, N> &m, const 
 
 // ---------------------------------------------------------------- Schreiben per CAN (ab v35)
 
-// SDO-Download an den WEM. Ab Werk AUS (Schalter in der Weboberflaeche). Erlaubt nur Knoten 1 (WEM)
+// SDO-Download an den WEM: fuer das Schalten per CAN (seit v42 ab Werk AN) und das freie
+// CAN-Schreiben (ab Werk AUS), beides Schalter auf dem Board. Erlaubt nur Knoten 1 (WEM)
 // und nur den Herstellerbereich 0x2000-0x5FFF: nie die Kommunikationsobjekte 0x1000-0x1FFF
 // (Heartbeat, COB-IDs ...), nie den Kessel (dort schreibt der WEM selbst alle ~5 s und teilt sich
 // den SDO-Kanal mit dem Board). Bis 4 Byte in einem Frame, laengere Daten (bis 64 Byte) in

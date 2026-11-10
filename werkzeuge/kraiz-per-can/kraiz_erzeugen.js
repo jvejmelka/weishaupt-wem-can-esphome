@@ -85,7 +85,7 @@ let y = `# ERZEUGT von werkzeuge/kraiz-per-can/kraiz_erzeugen.js aus kraiz/hassi
 # Heizkreis 2/3 und Solar fehlen bewusst: diese Module gibt es an der Anlage nicht.
 # Dazu der Fehlerblock des WEM (0x273F, alle 2 min): Status, Nummer, Modul und Klartext (Texte aus
 # fehlercodes.yaml, wie bei "Meldung WEM"/"Meldung Kessel" im Paket kessel).
-# Braucht die Pakete kessel (wcan, can_anfragen) und wem-schalten (Schreib-Helfer, Sperrminute) und eine
+# Braucht die Pakete kessel (wcan, can_anfragen) und wem-schalten (Schreib-Helfer, Mindestabstand) und eine
 # lokale Kopie des Repos: die beiden .h-Dateien liegen neben diesem Paket (esphome: includes: sucht sie
 # relativ zur Haupt-YAML, als Paket direkt von GitHub geht es deshalb nicht).
 # Abgefragt wird nur bei eingeschaltetem Schalter "Eigene CAN-Anfragen", hoechstens alle 3 s eine Anfrage,
@@ -184,7 +184,8 @@ script:
                 }
                 id(kc_fehler_klartext).publish_state(kt);
 
-  # Schreiben an den WEM per CAN (Knoten 1, 1 Byte) - nur die hier freigegebenen Ziele, Ablauf wie "Freies CAN-Schreiben"
+  # Schreiben an den WEM per CAN (Knoten 1, 1 Byte) - nur die hier freigegebenen Ziele, Ablauf wie "Freies CAN-Schreiben",
+  # aber ohne dessen Schalter: der Knopf schreibt auch, wenn "Freies CAN-Schreiben" aus ist.
   - id: kc_schreiben
     mode: queued
     max_runs: 3

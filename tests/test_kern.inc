@@ -488,7 +488,7 @@ TEST(kern_schalten_sperre_und_warteschlange) {
   sch.annehmen(2, a, 0);
   PRUEFE(wc::warteschlange_text(sch, false, "") == "1. Heizkreis -> Zeitprogramm 2 (App) | 2. Warmwasser -> Aus (MQTT)");
   PRUEFE(wc::warteschlange_text(sch, true, "") ==
-         "1. Heizkreis -> Zeitprogramm 2 (App) | 2. Warmwasser -> Aus (MQTT) - wartet auf die Sperrminute");
+         "1. Heizkreis -> Zeitprogramm 2 (App) | 2. Warmwasser -> Aus (MQTT) - wartet auf den Mindestabstand");
   bf::Befehl b; sch.naechster(b);
   PRUEFE(wc::warteschlange_text(sch, true, "10:01:02") == "1. Warmwasser -> Aus (MQTT) - naechster Befehl ab 10:01:02");
 }
@@ -620,7 +620,7 @@ TEST(kern_warteschlange_reihenfolge_des_eingangs) {
   bf::Anfrage w; w.wert = 2;
   s.annehmen(bf::ZIEL_WW, w, 0);
   s.annehmen(bf::ZIEL_HK, h, 0);
-  PRUEFE(wc::warteschlange_text(s, true, "") == "1. Warmwasser -> Aus (MQTT) | 2. Heizkreis -> Standby (MQTT) - wartet auf die Sperrminute");
+  PRUEFE(wc::warteschlange_text(s, true, "") == "1. Warmwasser -> Aus (MQTT) | 2. Heizkreis -> Standby (MQTT) - wartet auf den Mindestabstand");
   JsonDocument d;
   deserializeJson(d, bf::status_json(bf::status(), s, "x", 0, -1));
   PRUEFE(std::string(d["schalten"]["warteschlange"][0]["ziel"].as<const char *>()) == "warmwasser");

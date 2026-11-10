@@ -12,20 +12,22 @@
 #   Kessel (Knoten 2): Vorlauf-Soll, Volumenstrom, Druck                         alle 60 s
 #   WEM (Knoten 1):    Vorlauf Heizkreis, Vorlaufsoll-Anforderung                alle 60 s
 #   WEM (Knoten 1):    Raumsoll                                                  alle 5 min
-# Betriebsarten: nur nach Start, bei geaenderten Statusbits und nach Schaltbefehlen.
-# Die Statusbits (0x274D) werden nicht abgefragt - der WEM sendet sie bei jeder
-# Aenderung selbst (PDO 0x1C1).
+# Betriebsarten: nur bei Anlass - nach Start, nach Schaltbefehlen, auf Wunsch (Status lesen) und bei
+# geaenderten Statusbits (mit Paket verdacht stattdessen, wenn eine Regel R1-R5 ausloest).
+# Die Statusbits (0x274D) sendet der WEM bei jeder Aenderung selbst (PDO 0x1C1); gelesen werden
+# sie nur einmal nach einem Neustart.
 #
-# Mit dem Schalter "Eigene CAN-Anfragen" lassen sich die Abfragen ganz abschalten.
+# Der Schalter "Eigene CAN-Anfragen" (ab Werk aus) schaltet nur die Abfragen im Takt; das Lesen
+# bei Anlass bleibt.
 # Gesendet wird nur, wenn der Bus lebt (letzter Frame < 30 s), nach einem Board-Start erst nach
 # 1 min, und nach einem Busausfall (Heizung war stromlos) erst nach ${anlaufpause_min} min,
-# nachdem der Bus wieder da ist (Board-Start oder Heizung war stromlos): Nach einem
+# nachdem der Bus wieder da ist: Nach einem
 # Stromzyklus bekommt der WEM Ruhe, das Board hoert solange nur mit.
 
 substitutions:
   anlaufpause_min: "10"
   # Startzustand des Schalters "Eigene CAN-Anfragen", wenn noch nichts gespeichert ist.
-  # RESTORE_DEFAULT_OFF = nur mithoeren (Vorgabe), RESTORE_DEFAULT_ON = eigene Leseanfragen.
+  # RESTORE_DEFAULT_OFF = keine Abfragen im Takt (Vorgabe), RESTORE_DEFAULT_ON = eigene Leseanfragen im Takt.
   can_anfragen_start: RESTORE_DEFAULT_OFF
   # Sprache der Stoermeldungen: "false" = Deutsch (Vorgabe), "true" = Englisch
   meldungen_englisch: "false"
@@ -130,7 +132,8 @@ interval:
   # Betriebsarten (liegen im WEM) werden NICHT periodisch gelesen, sondern nur bei Anlass,
   # unabhaengig vom Schalter "Eigene CAN-Anfragen":
   #   - einmal, wenn die Anlaufpause vorbei ist (Board-Start, Bus wieder da)
-  #   - wenn sich die Statusbits aendern (PDO 0x1C1, z.B. Umstellung am Display/Portal)
+  #   - wenn sich die Statusbits aendern (PDO 0x1C1, z.B. Umstellung am Display/Portal); mit dem Paket
+  #     verdacht stattdessen, wenn eine Regel R1-R5 ausloest (statusbits_anlass: false)
   #   - nach einem eigenen Schaltbefehl (das Schalten-Paket liest dann gezielt nach)
   #   - auf Wunsch: Knopf "Status lesen" bzw. MQTT ${geraet}/cmd/status (Skript status_lesen,
   #     hebt die 2-min-Grenze fuer diese eine Lesung auf, nimmt Wuensche hoechstens alle 10 s an)
@@ -414,9 +417,10 @@ button:
           if (senden) id(wcan)->senden(cid, d);
 
 switch:
-  # Eigene CAN-Anfragen: AUS = das Board hoert nur mit und wertet aus, was ohnehin auf dem
-  # Bus liegt (Kessel-PDOs, Antworten auf Fragen des WEM). Schalten ueber den WEM bleibt
-  # erlaubt, samt der einen Kontroll-Leseanfrage danach; ebenso der Lesebefehl von Hand.
+  # Eigene CAN-Anfragen: AUS = keine Abfragen im Takt; das Board wertet aus, was ohnehin auf dem
+  # Bus liegt (Kessel-PDOs, Antworten auf Fragen des WEM). Es bleiben: Betriebsarten lesen bei
+  # Anlass (Start, Regeln, Status lesen), Schalten am WEM samt der einen Kontroll-Leseanfrage
+  # danach und der Lesebefehl von Hand.
   - platform: template
     name: "Eigene CAN-Anfragen"
     id: can_anfragen
