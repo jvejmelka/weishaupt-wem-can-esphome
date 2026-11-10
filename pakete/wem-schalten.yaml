@@ -7,7 +7,10 @@
 #   - "Schalten per CAN statt JSON": Heizkreis/Warmwasser per SDO-Download an den WEM
 #     (0x2933/2, 0x2A20/2), sonst alles wie beim JSON-Weg (Warteschlange, Mindestabstand, Kontrolle).
 #   - "Freies CAN-Schreiben (Experten)": Eingabefeld und ${geraet}/cmd/can_schreiben,
-#     "KN IDX SUB WERT [LAENGE]" oder "KN IDX SUB = B1 B2 ..." (hex), nur Knoten 01, nur 2000-5FFF.
+#     "KN IDX SUB WERT [LAENGE]" oder "KN IDX SUB = B1 B2 ..." (hex), nur 2000-5FFF, ab Werk nur Knoten 01 (WEM).
+#   - "Freies CAN-Schreiben: erlaubte Knoten" (ab v42): Liste der Knoten, an die das freie CAN-Schreiben
+#     senden darf, hex, z. B. "01 04" (WEM und ein Raumgeraet). Ab Werk "01". Knoten 02 (Kessel) und 00
+#     lassen sich nicht eintragen. Gesendet wird erst, wenn der SDO-Kanal des Knotens 200 ms lang still war.
 #   An einer WTC-GW 15-B (WEM 428.226) bestaetigt; andere Anlagen: auf eigene Gefahr.
 #
 # Warum so vorsichtig: die JSON-Schnittstelle des WEM ist empfindlich. Regelmaessiges
@@ -27,6 +30,12 @@
 #                             angenommen -> vorgemerkt -> gesendet -> pruefe_bus -> bestaetigt | gescheitert
 #   ${geraet}/schaltprotokoll (retained) die letzten 10 Befehle, einer je Zeile (VERALTET, Klartext)
 # Die Buchfuehrung (Warteschlange, Phasen, JSON) steht in befehle.h (getestet in tests/).
+
+# Vorgabe; ueberschrieben wird in der Hauptdatei unter substitutions:
+#   abstand_can_min   kleinster einstellbarer Abstand zwischen zwei Befehlen per CAN in Sekunden (Vorgabe 5).
+#                     Kleiner nur fuer Versuche an einem Tisch-Aufbau - an der Anlage bei 5 lassen.
+substitutions:
+  abstand_can_min: "5"
 
 web_server:
   sorting_groups:
@@ -231,7 +240,9 @@ script:
       - script.wait: bus_kontrolle
 
   # Freies CAN-Schreiben (ab v35, Schalter "Experten", ab Werk aus): Eingabefeld oder cmd/can_schreiben.
-  # Nur Knoten 01 (WEM), nur Objekte 2000-5FFF (wc::can_schreib_lesen), Mindestabstand wie beim Schalten per CAN.
+  # Nur Objekte 2000-5FFF, nur freigeschaltete Knoten (ab Werk nur 01 = WEM, nie 02 = Kessel; wc::can_schreib_lesen),
+  # Mindestabstand wie beim Schalten per CAN. Ab v42: gesendet wird in einer Pause des SDO-Verkehrs mit dem Knoten
+  # (200 ms still, sonst nach 3 s Abbruch) - ein fremder Auftrag in Teilstuecken wird so nicht unterbrochen.
   - id: can_frei_senden
     mode: queued
     max_runs: 5
@@ -240,34 +251,59 @@ script:
     then:
       - lambda: |-
           auto &sc = id(wcan)->schalten;
-          sc.can_frei_gesendet = false;
+          sc.can_frei_gesendet = false; sc.can_frei_wartet = false;
           if (!id(can_frei).state) { id(can_antwort).publish_state("gesperrt - Schalter \"Freies CAN-Schreiben\" ist aus"); return; }
           if (id(wem_senden).is_running() || id(can_senden).is_running() || sc.sperrminute(millis())) {
             id(can_antwort).publish_state("bitte warten - Abstand zum letzten Befehl"); return;
           }
           if (id(wcan)->bus.tot(millis())) { id(can_antwort).publish_state("Bus tot - nicht gesendet"); return; }
-          wc::CanSchreibbefehl c; std::string f;
-          if (!wc::can_schreib_lesen(eingabe, c, f)) { id(can_antwort).publish_state(f); return; }
-          sc.beginnen(millis(), (uint32_t) id(abstand_can).state * 1000); id(wcan)->anlass.eigener_befehl_ms = sc.letzter_befehl;
-          uint32_t u = id(wcan)->unix_zeit();
-          if (u != 0) bf::status().setze(bf::status().frei_ab, u + sc.sperre_s());
-          uint32_t cid = 0; std::vector<uint8_t> d;
-          sc.can_fertig = false; sc.can_text.clear();
-          id(wcan)->schreiben.starten(c, cid, d);
-          id(can_antwort).publish_state("gesendet, warte ...");
-          ESP_LOGW("schreiben", "CAN-Schreibbefehl %s", eingabe.c_str());
-          id(wcan)->senden(cid, d);
-          sc.can_frei_gesendet = true;
+          wc::KnotenFreigabe frei; std::string f;
+          if (!wc::knoten_freigabe_lesen(id(can_frei_knoten).state, frei, f)) {
+            id(can_antwort).publish_state("erlaubte Knoten: " + f + " - nicht gesendet"); return;
+          }
+          wc::CanSchreibbefehl c;
+          if (!wc::can_schreib_lesen(eingabe, c, f, frei)) { id(can_antwort).publish_state(f); return; }
+          id(wcan)->frei_befehl = c;
+          sc.can_frei_wartet = true;
+      - if:
+          condition:
+            lambda: 'return id(wcan)->schalten.can_frei_wartet;'
+          then:
+            - wait_until:
+                condition:
+                  lambda: 'return id(wcan)->sdo_ruhig(id(wcan)->frei_befehl.kn, millis());'
+                timeout: 3s
+            - lambda: |-
+                auto &sc = id(wcan)->schalten;
+                const wc::CanSchreibbefehl &c = id(wcan)->frei_befehl;
+                sc.can_frei_wartet = false;
+                if (!id(can_frei).state) { id(can_antwort).publish_state("gesperrt - Schalter \"Freies CAN-Schreiben\" ist aus"); return; }
+                if (!id(wcan)->sdo_ruhig(c.kn, millis())) {
+                  id(can_antwort).publish_state(str_sprintf("Knoten %02X: SDO-Kanal 3 s lang belegt - nicht gesendet", c.kn)); return;
+                }
+                sc.beginnen(millis(), (uint32_t) id(abstand_can).state * 1000); id(wcan)->anlass.eigener_befehl_ms = sc.letzter_befehl;
+                uint32_t u = id(wcan)->unix_zeit();
+                if (u != 0) bf::status().setze(bf::status().frei_ab, u + sc.sperre_s());
+                uint32_t cid = 0; std::vector<uint8_t> d;
+                sc.can_fertig = false; sc.can_text.clear();
+                id(wcan)->schreiben.starten(c, cid, d);
+                id(can_antwort).publish_state("gesendet, warte ...");
+                ESP_LOGW("schreiben", "CAN-Schreibbefehl %s", eingabe.c_str());
+                id(wcan)->senden(cid, d);
+                sc.can_frei_gesendet = true;
       - if:
           condition:
             lambda: 'return id(wcan)->schalten.can_frei_gesendet;'
           then:
-            - delay: 2s
+            - wait_until:
+                condition:
+                  lambda: 'return id(wcan)->schalten.can_fertig;'
+                timeout: 2s
             - lambda: |-
                 auto &sc = id(wcan)->schalten;
                 auto &w = id(wcan)->schreiben;
                 sc.can_frei_gesendet = false;
-                std::string t = sc.can_fertig ? sc.can_text : "keine Antwort vom WEM";
+                std::string t = sc.can_fertig ? sc.can_text : str_sprintf("keine Antwort von Knoten %02X", w.kn);
                 if (!sc.can_fertig) w.aktiv = false;
                 id(can_antwort).publish_state(t);
                 id(can_roh).publish_state(w.roh);
@@ -567,6 +603,22 @@ text:
     max_length: 40
     initial_value: "systable.csv"
     web_server: { sorting_group_id: g_sd, sorting_weight: 2 }
+  # Knoten, an die das freie CAN-Schreiben senden darf (ab v42). Ab Werk nur 01 (WEM); weitere Knoten traegt man
+  # ausdruecklich ein, z. B. "01 04". 02 (Kessel) und 00 werden abgelehnt - dann wird gar nicht gesendet.
+  - platform: template
+    name: "Freies CAN-Schreiben: erlaubte Knoten (hex, ab Werk 01)"
+    id: can_frei_knoten
+    optimistic: true
+    restore_value: true
+    mode: text
+    max_length: 40
+    initial_value: "01"
+    web_server: { sorting_group_id: g_can_schreiben, sorting_weight: 2.5 }
+    on_value:
+      - lambda: |-
+          wc::KnotenFreigabe frei; std::string f;
+          if (wc::knoten_freigabe_lesen(x, frei, f)) ESP_LOGW("schreiben", "Freies CAN-Schreiben: erlaubte Knoten %s", frei.text().c_str());
+          else ESP_LOGW("schreiben", "Freies CAN-Schreiben: erlaubte Knoten ungueltig (%s) - es wird nichts gesendet", f.c_str());
   - platform: template
     name: "CAN-Schreibbefehl (KN IDX SUB WERT [LAENGE] hex)"
     id: can_eingabe
@@ -626,7 +678,7 @@ number:
   - platform: template
     id: abstand_can
     name: "Abstand zwischen Befehlen per CAN (s)"
-    min_value: 5
+    min_value: ${abstand_can_min}
     max_value: 300
     step: 1
     initial_value: 10

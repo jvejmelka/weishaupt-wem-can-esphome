@@ -72,7 +72,7 @@ ten slots from [PROTOKOLL.en.md, section 8](PROTOKOLL.en.md#8-when-the-wem-locks
 ### Further groups
 
 - **Schreiben per CAN:** the switches “Schalten per CAN statt JSON” and “Freies CAN-Schreiben”, the
-  field for the free write command and the interval via CAN – described under [Writing via CAN](PROTOKOLL.en.md#writing-via-can-from-v35-default-since-v42).
+  field for the free write command, the list of nodes permitted for it (by default `01` only) and the interval via CAN – described under [Writing via CAN](PROTOKOLL.en.md#writing-via-can-from-v35-default-since-v42).
 - **SD-Karte des WEM (Dateien lesen):** fetch a file, system table – described under
   [Nodes and modules](PROTOKOLL.en.md#nodes-and-modules).
 - Package `json-lesen` (group “Einstellungen”): button “Werte per JSON abrufen”, message “JSON-Abruf”

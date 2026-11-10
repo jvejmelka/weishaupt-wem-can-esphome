@@ -80,7 +80,8 @@ Bytes 0–1 room temperature (0.1 °C, signed), bytes 2–3 room humidity (0.1 %
 The **room sensor correction** in the RG2 menu applies to the transmitted value (−0.5 K → bytes 0–1 lower by 5), and the
 humidity is recalculated for the corrected temperature. It does not use the bus, nor do brightness, night mode, limits and
 the light ring. Without correction the used RG2 read 2–4 K above a reference sensor in the same room; inside a closed
-plastic box together with the board and the voltage converter the offset rose slowly (self-heating suspected). If no room
+plastic box together with the board and the voltage converter the offset rose slowly (self-heating suspected). On 10 Nov 2026 it was only 0.8–1.2 K, measured over
+an hour (the unit had been switched on that same evening) – a fixed correction value is not established yet. If no room
 sensor is assigned in the WEM, it keeps controlling by outdoor temperature only – the room value then does not change the
 flow setpoint.
 
@@ -145,6 +146,78 @@ only the Monday (sub 4–13) and the Saturday block (sub 84–93).
   WEM running it kept node 4 without intervention – directly on the bus and over the CAN tunnel.
 - **RG2 failure:** 30 s after the last heartbeat the WEM reports `081: FF FF 01 02 05 DD 01 00` (`0x05DD` = **warning 1501**, connection to RG2 no. 1 lost, see [PROTOKOLL.en.md, section 10c](PROTOKOLL.en.md#10c-fault-messages-on-the-bus-and-error-codes)) and
   clears it as soon as the RG2 is back. The device list then shows it under "inactive devices".
+
+### Assignment as room sensor and measured room temperature in the WEM
+
+On 10 Nov 2026 the RG2 was assigned to heating circuit 1 as room sensor for eleven minutes (on the system device:
+expert level → commissioning → assignments) and then removed again. On the bus:
+
+- The WEM writes the assignment into the RG2 (node 4, `604`): first `0x2604`/1…5, `0x2605`/1…5 and `0x2606`/0 to `FF`,
+  then the new values. Seen: `0x2604`/1 = `00` and `0x2605`/1 = `00` (going by the display: operating access to heating
+  circuit 1 and DHW 1) and `0x2606`/0 = `01` with the room sensor on heating circuit 1, `FF` without.
+- After that the WEM restarts the RG2 (next section) – when assigning as well as when removing.
+- **Measured room temperature in the WEM:** node 1 `0x298B`/2, via JSON `02 00 258B 02` (+0x400 again), 2 bytes signed,
+  0.1 °C. Without an assignment it holds `0x8000` ("no value"), with the assignment `0x00DC` = 22.0 °C – the same value
+  as in PDO `0x184` at that moment. `0x298C`/2 and `0x298D`/2 exist too; they stayed `0x8000` (probably further room
+  units). Read via CAN here. **Confirmed via JSON by PiLLoX** on a WTC-GB 25-B with built-in WEM-SG and RG2:
+  response `020200258B02000200B0` = 17.6 °C, exactly what the RG2 displayed
+  ([comment of 10 Nov 2026](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/issues/4#issuecomment-6781466298)).
+- The assignment had no effect on the heating: flow setpoint and heat demand carried on unchanged. The control variant
+  stayed weather-compensated; the display did not ask about it.
+
+### Restarting the RG2 via CAN (`0x2559`)
+
+After a changed assignment the WEM restarts the RG2 – not via NMT, but with two write commands to `0x2559`/0 of the
+RG2. Captured twice (10 Nov 2026), identical both times:
+
+```
+604: 23 59 25 00 00 00 00 01      write 0x2559/0                  584: 60 59 25 00 …   confirmed
+604: A4 58 25 00 40 40 00 00      read 0x2558/0                   584: 43 58 25 00 00 00 00 00
+604: A4 58 25 00 40 40 00 00      read 0x2558/0 again             584: 43 58 25 00 FF FF 00 01
+604: 23 59 25 00 01 AA 55 0C      write 0x2559/0 (0.7 s after     584: 60 59 25 00 …   confirmed
+                                  the first)
+          10 s of silence
+704: 00   and   084: 00 00 00 00 00 00 00 00                      boot-up of the RG2
+```
+
+**Reproduced by us** (bench setup: board B at the RG2, tunnel on, [free CAN writing](PROTOKOLL.en.md#writing-via-can-from-v35-default-since-v42)
+with node `04` released): only the two write commands, 1.1 s apart, without reading `0x2558` in between. The RG2
+confirmed both and restarted in the same way. Input in the field “CAN-Schreibbefehl”:
+
+```
+04 2559 00 = 00 00 00 01
+04 2559 00 = 01 AA 55 0C
+```
+
+What follows, compared with a cold start (power off and on again) the same evening. Times from the boot-up `704:00`;
+bus from the capture, display from a camera at two frames per second:
+
+| Step | Restart via CAN | Cold start |
+|---|---|---|
+| second write command confirmed | −10.0 s | – |
+| light ring yellowish at the bottom | from about −7.5 s | −6.8 s to +0.7 s |
+| `704:00` and `084:00…` | 0 | 0 |
+| logo on the display | +0.9 s | +1.2 s |
+| RG2 reads from the WEM (`6C4`): `0x5F01`/0…3, then `0x5F03`/0…D | from +3.1 s | from +3.1 s |
+| `704:7F` | +9.9 s | +9.9 s |
+| first PDO `0x184` | +16.0 s | +11.0 s |
+| `704:05` | +19.8 s | +19.9 s |
+| display dark once more, light ring yellowish | +62 s | +62 s |
+| main screen | +77 s | about +83 s |
+
+From the boot-up on, the restart matches the cold start; the unit is back on the bus after 20 s, the display takes a
+good minute longer. On the two restarts triggered by the WEM the PDO was back as early as 9 s after the boot-up.
+
+**Open points and cautions:**
+- The meaning of the bytes is not known. On the RG2, `0x2559` is a command object the WEM also uses to exchange files
+  with the unit (with other values then); `0x2558` returns the state. Guess: `0C` = restart, `AA 55` = guard pattern
+  against triggering it by accident.
+- Not checked: whether the first write command is needed, and other room units or software versions.
+- **Not tried on the WEM or the boiler.** The WEM has both objects: node 1 answers a read of `0x2559`/0 and of
+  `0x2558`/0 with `00 00 00 00` each (10 Nov 2026). What a write would trigger there we do not know; on the boiler we
+  have not even read them. Do not send it to other devices on a guess. Do not confuse: `0x2959`/2 on the WEM (JSON `02 00 2559 02`) is the flow setpoint
+  of the heating circuit and has nothing to do with this.
+- It is meant for bench experiments – capturing the start of a room unit without pulling the plug.
 
 ## 10b. CAN tunnel over WLAN (experiment, branch `can-tunnel`)
 
@@ -211,6 +284,21 @@ The settings are fixed in the firmware; at runtime only the switch can be operat
 are in the header of [`pakete/can-tunnel.yaml`](https://github.com/jvejmelka/weishaupt-wem-can-esphome/blob/can-tunnel/pakete/can-tunnel.yaml), the UDP ports in
 [`can_tunnel.h`](https://github.com/jvejmelka/weishaupt-wem-can-esphome/blob/can-tunnel/components/weishaupt_can/can_tunnel.h) (if you change them, rebuild both boards).
 
+**The two boards side by side** – build both from the same firmware state; only these settings differ:
+
+| | Board A (at the boiler) | Board B (at the room unit) |
+|---|---|---|
+| `tunnel_ziel` | address of board B | address of board A |
+| `tunnel_name` | `"A"` | `"B"` |
+| `tunnel_nur_bei_bus` | `"true"` | `"false"` |
+| `tunnel_selbst_ein` | `"false"` – switch on by hand | `"true"` is acceptable here: board B is only powered for the experiment |
+| switch “120 Ω CAN” on the board | off | on |
+| device name (`geraet`) | as in everyday use | **a different name**, or leave out the `mqtt` package – otherwise both boards write to the same MQTT topics |
+| free CAN writing | off, permitted nodes `01` | off; switch on only for an experiment at the room unit and release its node (e.g. `04`), then back |
+
+Board A remains the normal bridge to the heating with all packages. Board B does not need rules, extra displays or
+MQTT; they do no harm either, as long as the device name is a different one.
+
 **How it works.** Each board sends every frame it receives on its own bus via UDP (port 47011) to the configured peer
 and puts what arrives from there on its own bus. Only packets from the peer's address are accepted. A packet is
 `'W' 'B' seq id_lo id_hi(+0x80 = RTR) len d0…d7`; the board counts lost packets from the sequence number. The round
@@ -234,17 +322,25 @@ python3 werkzeuge/tunnel_mitschnitt.py --datei tunnel.txt
 
 14:03:08.009 A 1234 R 184:FA00C201      A received the frame on its bus and forwarded it
 14:03:08.021 B 1250 T 184:FA00C201      B got it and sent it on its bus (X = sending refused)
+14:05:33.593 B 9876 E 584:6059250000000000   reply to a write command of B's own – stays at B
 ```
 
 The number after the tag is milliseconds since the board started. Captures can contain serial numbers and device
 identifiers – do not publish them raw.
+
+**Writing yourself while the tunnel runs.** [Free CAN writing](PROTOKOLL.en.md#writing-via-can-from-v35-default-since-v42)
+from a board also works while the tunnel is running. Two things keep it from disturbing the traffic between WEM and
+room unit: the board only sends once the SDO channel of the target node has been quiet for 200 ms – including anything
+it has just put on the bus from the tunnel itself – and it does not forward the reply to its own command to the other
+end (`E` instead of `R` in the capture): nobody asked there.
 
 **What else the package changes:** a larger receive buffer for UDP (64 instead of the ESP-IDF default 6), WLAN power
 saving off, longer CAN queues (receive 64, send 32) and stopping the CAN controller during a firmware update. Without
 the package the firmware behaves as in `main`.
 
 **What worked:** commissioning the RG2, reading and writing all values from section 10a, restarting the RG2 and
-restarting board B, each without intervention.
+restarting board B, each without intervention; restarting the RG2 via CAN from board B with the tunnel running
+([section 10a](#restarting-the-rg2-via-can-0x2559)).
 
 **Known problems:**
 - Cold start of the boiler with the tunnel running (5 Nov 2026, older firmware): the RG2 kept running, did not answer

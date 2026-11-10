@@ -391,6 +391,24 @@ TEST(kern_can_schreiben) {
   PRUEFE(!wc::can_schreib_lesen("01 2933", c, f));
   PRUEFE(!wc::can_schreib_lesen("01 2933 02 =", c, f));
   PRUEFE(!wc::can_schreib_lesen("01 2933 02 = 100", c, f));
+  // ab v42: andere Knoten nur nach ausdruecklicher Freigabe, der Kessel nie
+  PRUEFE(!wc::can_schreib_lesen("04 2559 00 = 00 00 00 01", c, f) && f.find("nicht freigeschaltet (erlaubt: 01)") != std::string::npos);
+  PRUEFE(!wc::can_schreib_lesen("80 2559 00 01", c, f) && !wc::can_schreib_lesen("00 2559 00 01", c, f));
+  wc::KnotenFreigabe frei;
+  PRUEFE(frei.darf(1) && !frei.darf(2) && !frei.darf(4) && !frei.darf(0) && !frei.darf(128) && frei.text() == "01");
+  PRUEFE(wc::knoten_freigabe_lesen("01 04", frei, f) && frei.darf(1) && frei.darf(4) && !frei.darf(2) && frei.text() == "01 04");
+  PRUEFE(wc::can_schreib_lesen("04 2559 00 = 00 00 00 01", c, f, frei) && c.kn == 4 && c.idx == 0x2559 && c.daten == (F{0, 0, 0, 1}));
+  PRUEFE(!wc::can_schreib_lesen("02 2532 00 01", c, f, frei) && f.find("Kessel") != std::string::npos);
+  PRUEFE(!wc::can_schreib_lesen("04 1017 00 00", c, f, frei));                                       // Bereich gilt fuer jeden Knoten
+  PRUEFE(!wc::can_schreib_lesen("05 2559 00 01", c, f, frei) && f.find("erlaubt: 01 04") != std::string::npos);
+  PRUEFE(wc::knoten_freigabe_lesen("4", frei, f) && frei.darf(4) && !frei.darf(1) && frei.text() == "04");   // nur das Raumgeraet
+  PRUEFE(wc::knoten_freigabe_lesen(" 1,4;7f ", frei, f) && frei.text() == "01 04 7F");
+  wc::KnotenFreigabe vorher = frei;
+  PRUEFE(!wc::knoten_freigabe_lesen("01 02", frei, f) && f.find("Kessel") != std::string::npos);    // Kessel nie
+  PRUEFE(!wc::knoten_freigabe_lesen("00", frei, f) && !wc::knoten_freigabe_lesen("80", frei, f));
+  PRUEFE(!wc::knoten_freigabe_lesen("", frei, f) && !wc::knoten_freigabe_lesen("  ", frei, f));
+  PRUEFE(!wc::knoten_freigabe_lesen("1 x", frei, f) && !wc::knoten_freigabe_lesen("104", frei, f) && !wc::knoten_freigabe_lesen("1-4", frei, f));
+  PRUEFE(frei.text() == vorher.text());                                                              // Fehler aendert nichts
 
   // einfach: 1 Byte -> 2F, bestaetigt
   wc::CanSchreiben w;
@@ -418,6 +436,57 @@ TEST(kern_can_schreiben) {
   PRUEFE(w.weiter(cid, d, 1060) && d == (F{0x1B, 8, 9, 0, 0, 0, 0, 0}));                         // toggle 1, n = 5, letztes
   PRUEFE(w.antwort(0x581, F{0x30, 0, 0, 0, 0, 0, 0, 0}, t, 1070) && t == "01 2A38/02: geschrieben, 9 Byte in Teilstuecken, bestaetigt");
   PRUEFE(wc::hex_bytes(F{0x2F, 0x33}) == "2F33");
+}
+
+// Der CAN-Tunnel reicht die Antwort auf den eigenen Schreibbefehl nicht weiter (Mitschnitt: E)
+TEST(kern_can_schreiben_eigene_antwort) {
+  wc::CanSchreibbefehl c; std::string f, t; uint32_t cid = 0; F d;
+  wc::KnotenFreigabe frei;
+  PRUEFE(wc::knoten_freigabe_lesen("01 04", frei, f));
+  wc::CanSchreiben w;
+  F quittung{0x60, 0x59, 0x25, 0x00, 0, 0, 0, 0};
+  PRUEFE(!w.eigene_antwort(0x584, quittung, 0));                                       // kein Befehl unterwegs
+  PRUEFE(wc::can_schreib_lesen("04 2559 00 = 00 00 00 01", c, f, frei));
+  w.starten(c, cid, d);
+  PRUEFE(cid == 0x604 && d == (F{0x23, 0x59, 0x25, 0x00, 0x00, 0x00, 0x00, 0x01}));    // Byte-Folge wie eingegeben
+  PRUEFE(w.eigene_antwort(0x584, quittung, 1000));
+  PRUEFE(!w.eigene_antwort(0x581, quittung, 1000));                                    // anderer Knoten
+  PRUEFE(!w.eigene_antwort(0x584, F{0x60, 0x58, 0x25, 0x00, 0, 0, 0, 0}, 1000));       // anderes Objekt
+  PRUEFE(!w.eigene_antwort(0x584, F{0x60, 0x59, 0x25, 0x01, 0, 0, 0, 0}, 1000));       // anderer Subindex
+  PRUEFE(!w.eigene_antwort(0x584, F{0x43, 0x59, 0x25, 0x00, 1, 2, 3, 4}, 1000));       // Lese-Antwort an jemand anderen
+  PRUEFE(!w.eigene_antwort(0x584, F{0x60, 0x59, 0x25}, 1000));                         // zu kurz
+  PRUEFE(w.eigene_antwort(0x584, F{0x80, 0x59, 0x25, 0x00, 0, 0, 1, 6}, 1000));        // Abbruch zum eigenen Befehl
+  // nach dem Abschluss gilt derselbe Frame noch EIGEN_MS lang als eigener (Reihenfolge der on_frame-Bloecke)
+  PRUEFE(w.antwort(0x584, quittung, t, 1000) && !w.aktiv);
+  PRUEFE(w.eigene_antwort(0x584, quittung, 1000) && w.eigene_antwort(0x584, quittung, 1000 + wc::CanSchreiben::EIGEN_MS));
+  PRUEFE(!w.eigene_antwort(0x584, quittung, 1001 + wc::CanSchreiben::EIGEN_MS));       // danach wieder fremd
+  PRUEFE(!w.eigene_antwort(0x584, F{0x60, 0x59, 0x25, 0x00, 0, 0, 0, 1}, 1000));       // anderer Inhalt
+  // Teilstuecke: Quittungen 20/30 gehoeren dazu, sobald das erste Teilstueck raus ist
+  PRUEFE(wc::can_schreib_lesen("04 255A 00 = 1 2 3 4 5 6 7 8 9", c, f, frei));
+  w.starten(c, cid, d);
+  PRUEFE(!w.eigene_antwort(0x584, F{0x20, 0, 0, 0, 0, 0, 0, 0}, 2000));                // vor dem ersten Teilstueck: fremd
+  PRUEFE(w.eigene_antwort(0x584, F{0x60, 0x5A, 0x25, 0x00, 0, 0, 0, 0}, 2000));
+  PRUEFE(!w.antwort(0x584, F{0x60, 0x5A, 0x25, 0x00, 0, 0, 0, 0}, t, 2000) && w.weiter(cid, d, 2050));
+  PRUEFE(w.eigene_antwort(0x584, F{0x20, 0, 0, 0, 0, 0, 0, 0}, 2060) && w.eigene_antwort(0x584, F{0x30, 0, 0, 0, 0, 0, 0, 0}, 2060));
+  PRUEFE(!w.eigene_antwort(0x584, F{0x60, 0x5A, 0x25, 0x00, 0, 0, 0, 0}, 2060));       // erste Quittung kommt nicht zweimal
+}
+
+// Senden nur in einer Pause des SDO-Verkehrs mit dem Zielknoten
+TEST(kern_sdo_verkehr) {
+  wc::SdoVerkehr s;
+  PRUEFE(s.ruhig(1, 0) && s.ruhig(4, 123456) && s.ruhig(127, 5));                      // nie etwas gesehen
+  PRUEFE(!s.ruhig(0, 1000) && !s.ruhig(128, 1000) && !s.ruhig(-1, 1000));              // kein gueltiger Knoten
+  s.gesehen(0x604, 1000);                                                              // Anfrage an Knoten 4
+  PRUEFE(!s.ruhig(4, 1000) && !s.ruhig(4, 1000 + wc::SdoVerkehr::RUHE_MS - 2));
+  PRUEFE(s.ruhig(4, 1001 + wc::SdoVerkehr::RUHE_MS) && s.ruhig(1, 1000));              // andere Knoten bleiben frei
+  s.gesehen(0x584, 1150);                                                              // Antwort von Knoten 4 verlaengert
+  PRUEFE(!s.ruhig(4, 1300) && s.ruhig(4, 1351));
+  s.gesehen(0x184, 2000); s.gesehen(0x704, 2000); s.gesehen(0x6C4, 2000); s.gesehen(0x684, 2000); s.gesehen(0x084, 2000);
+  PRUEFE(s.ruhig(4, 2000));                                                            // PDO, Herzschlag, zweiter Kanal, EMCY zaehlen nicht
+  s.gesehen(0x601, 0);                                                                 // Zeit 0 heisst nicht "nie"
+  PRUEFE(!s.ruhig(1, 100) && s.ruhig(1, 201));
+  s.gesehen(0x581, 0xFFFFFFF0u);                                                       // Ueberlauf von millis()
+  PRUEFE(!s.ruhig(1, 0x00000010u) && s.ruhig(1, 0x000000C8u));
 }
 
 TEST(kern_sd_dateien) {

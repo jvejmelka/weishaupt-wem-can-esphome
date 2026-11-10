@@ -22,7 +22,7 @@ added one). **This table is the one place for it**; README, INSTALL and the othe
 > | **CAN listening** | PDOs and the answers to requests the WEM sends to the boiler. The board sends nothing. | always on |
 > | **CAN reading** (SDO, command byte `0x40`) | own read requests to the WEM (node 1) and the boiler (node 2): on a schedule, on occasion (operating modes, WEM only), for verification after switching, by hand | schedule <!--ab-werk:can_anfragen-->off<!--/ab-werk--> (switch “Eigene CAN-Anfragen”), everything else on |
 > | **CAN writing to the WEM** (SDO, node 1) | switching heating circuit (`0x2933`/2) and hot water (`0x2A20`/2) – directly on the bus, without JSON | **<!--ab-werk:can_schalten-->on<!--/ab-werk-->** since v42 (v35–v41: could be enabled) |
-> | **Free CAN writing** (experts) | single objects by hand, on the WEM (node 1) only, `0x2000`–`0x5FFF` only | <!--ab-werk:can_frei-->off<!--/ab-werk--> |
+> | **Free CAN writing** (experts) | single objects by hand, by default on the WEM (node 1) only – further nodes only after explicit release, never the boiler; `0x2000`–`0x5FFF` only | <!--ab-werk:can_frei-->off<!--/ab-werk--> |
 > | **DHW push** (“Warmwasser-Push”; Olimex variant only, package `kraiz-per-can` by cg089) | one button writes `1` to `0x2A49`/2 of the WEM (node 1): fixed target, fixed value, with minimum interval and verification on the bus. The switch “Freies CAN-Schreiben” does not apply to this button ([OLIMEX-ESP32-EVB.md](OLIMEX-ESP32-EVB.md#warmwasser-push), German). | not included in the main file (WeAct); in the Olimex variant on button press only |
 > | **JSON writing** (HTTP to the WEM) | fallback for switching when “Schalten per CAN statt JSON” is off. Up to v34 this was the only way. Also the field “Schreibbefehl über WEM (Experten)”, which always goes via JSON. | unused as long as nobody uses the fallback or the write field |
 > | **JSON reading** (HTTP to the WEM) | by hand only: “Werte per JSON abrufen” (one request, from v42), files on the SD card. Never on a schedule – the WEM does not tolerate polling. | on button press only |
@@ -591,6 +591,11 @@ manual, converted, read singly on the bus):
 | `02 00 2559 02` | node 1 `0x2959`/2 | current flow setpoint heating circuit | 35.3 °C |
 | `03 00 2569 02` | node 1 `0x2A69`/2 | "DHW status" (gateway: 0 warning / 1 fault pending) | 1 – does not match the empty fault block, **meaning unclear** |
 
+Added on 10 Nov 2026: `02 00 258B 02` = node 1 `0x298B`/2, the **measured room temperature of the assigned room
+unit** (0.1 °C, signed; `0x8000` without an assignment) – read via CAN here, confirmed via JSON by PiLLoX on a
+WTC-GB 25-B ([comment](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/issues/4#issuecomment-6781466298)), see
+[VERSUCHE.en.md](VERSUCHE.en.md#assignment-as-room-sensor-and-measured-room-temperature-in-the-wem).
+
 Guess at the origin of the offsets: the JSON object number is **module-relative** (`0x2533` is the
 operating mode in the heating circuit, the VPT return temperature in the boiler); in a node's CAN
 object dictionary each module is shifted by a fixed amount. Slots +0x200/+0x300 on the WEM probably
@@ -611,8 +616,23 @@ interface stays untouched. JSON is the fallback (switch off). Three switches in 
 | Switch | default | effect |
 |---|---|---|
 | Schalten per CAN statt JSON (Heizkreis, Warmwasser) | **<!--ab-werk:can_schalten-->on<!--/ab-werk-->** (since v42; v35–v41 off) | app buttons, `cmd/heizkreis`, `cmd/warmwasser` write via SDO download to the WEM: `0x2933`/2 or `0x2A20`/2, 1 byte. Queue and bus verification as on the JSON path; interval to the previous command <!--ab-werk:abstand_can-->10<!--/ab-werk--> s by default (via JSON <!--ab-werk:abstand_json-->60<!--/ab-werk--> s); WEM abort = “rejected” |
-| Freies CAN-Schreiben (Experten) | <!--ab-werk:can_frei-->off<!--/ab-werk--> | input field and `cmd/can_schreiben`: `NODE IDX SUB VALUE [LENGTH]` or `NODE IDX SUB = B1 B2 …` (hex, up to 64 bytes, from 5 bytes segmented with a 50 ms pause). **Node 01 only, 2000–5FFF only** – never the boiler, never communication objects (0x1000–0x1FFF) |
+| Freies CAN-Schreiben (Experten) | <!--ab-werk:can_frei-->off<!--/ab-werk--> | input field and `cmd/can_schreiben`: `NODE IDX SUB VALUE [LENGTH]` or `NODE IDX SUB = B1 B2 …` (hex, up to 64 bytes, from 5 bytes segmented with a 50 ms pause). **By default node 01 only, 2000–5FFF only** – never the boiler, never communication objects (0x1000–0x1FFF). Further nodes: see below |
 | Lange Lesebefehle auch am Kessel | **<!--ab-werk:lang_am_kessel-->on<!--/ab-werk-->** | segmented/block reads also on node 2 (there the board shares the channel with the WEM) |
+
+**Releasing further nodes (from v42).** The text field “Freies CAN-Schreiben: erlaubte Knoten (hex, ab Werk 01)” in
+the same group lists the nodes free CAN writing may send to – for example `01 04` for the WEM and a room unit, or just
+`04`. The list survives a restart.
+
+- Nodes `02` (boiler) and `00` (all) cannot be entered. With an invalid list the board sends nothing.
+- The object range 2000–5FFF applies to every node, and the switch “Freies CAN-Schreiben” remains the second barrier.
+- Switching heating circuit and DHW always goes to the WEM, regardless of this list.
+- The board only sends once the SDO channel of the target node has been quiet for 200 ms; if it is busy for 3 s, the
+  board reports “nicht gesendet” (not sent). This keeps the command from landing between another participant's request
+  and its reply.
+- The field is in the expert interface. With the `mqtt` package it can, like every switch and input field, also be
+  reached through the broker – so keep write permissions there tight. After an experiment enter `01` again.
+
+Tried on the bench with an RG2 (node 4): [VERSUCHE.en.md, restarting the RG2 via CAN](VERSUCHE.en.md#restarting-the-rg2-via-can-0x2559).
 
 **Confirmed on the WTC-GW 15-B (WEM 428.226) on 2026-10-26:**
 

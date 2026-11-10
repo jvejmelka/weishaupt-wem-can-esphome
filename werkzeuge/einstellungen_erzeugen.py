@@ -124,7 +124,7 @@ def sammeln():
                     if "initial_value" not in e:
                         continue
                     d["wert"] = zahl(einsetzen(e["initial_value"], subst, wo))
-                    d["von"], d["bis"] = zahl(e["min_value"]), zahl(e["max_value"])
+                    d["von"], d["bis"] = zahl(einsetzen(e["min_value"], subst, wo)), zahl(einsetzen(e["max_value"], subst, wo))
                 if d["id"]:
                     if d["id"] in ids:
                         fehler(f"{wo}: id {d['id']} gibt es schon in {ids[d['id']]}")

@@ -22,7 +22,7 @@ hierher. Die Angaben „an“/„aus“ in der Spalte „Ab Werk“ werden aus d
 > | **CAN mithören** | PDOs und die Antworten auf Fragen, die der WEM dem Kessel stellt. Das Board sendet dabei nichts. | immer an |
 > | **CAN lesen** (SDO, Kommandobyte `0x40`) | eigene Leseanfragen an den WEM (Knoten 1) und den Kessel (Knoten 2): im Takt, bei Anlass (Betriebsarten, nur WEM), zur Kontrolle nach dem Schalten, von Hand | Takt <!--ab-werk:can_anfragen-->aus<!--/ab-werk--> (Schalter „Eigene CAN-Anfragen“), alles andere an |
 > | **CAN schreiben an den WEM** (SDO, Knoten 1) | Heizkreis (`0x2933`/2) und Warmwasser (`0x2A20`/2) schalten – direkt am Bus, ohne JSON | **<!--ab-werk:can_schalten-->an<!--/ab-werk-->** seit v42 (v35–v41 einschaltbar) |
-> | **Freies CAN-Schreiben** (Experten) | einzelne Objekte von Hand, nur am WEM (Knoten 1), nur `0x2000`–`0x5FFF` | <!--ab-werk:can_frei-->aus<!--/ab-werk--> |
+> | **Freies CAN-Schreiben** (Experten) | einzelne Objekte von Hand, ab Werk nur am WEM (Knoten 1) – weitere Knoten nur nach ausdrücklicher Freigabe, nie der Kessel; nur `0x2000`–`0x5FFF` | <!--ab-werk:can_frei-->aus<!--/ab-werk--> |
 > | **Warmwasser-Push** (nur Olimex-Variante, Paket `kraiz-per-can` von cg089) | ein Knopf schreibt `1` auf `0x2A49`/2 des WEM (Knoten 1): festes Ziel, fester Wert, mit Mindestabstand und Kontrolle am Bus. Der Schalter „Freies CAN-Schreiben“ gilt für diesen Knopf nicht ([OLIMEX-ESP32-EVB.md](OLIMEX-ESP32-EVB.md#warmwasser-push)). | in der Hauptdatei (WeAct) nicht eingebunden; in der Olimex-Variante nur auf Knopfdruck |
 > | **JSON schreiben** (HTTP an den WEM) | Rückweg fürs Schalten, wenn „Schalten per CAN statt JSON“ aus ist. Bis v34 war das der einzige Weg. Dazu das Feld „Schreibbefehl über WEM (Experten)“, das immer über JSON geht. | ungenutzt, solange niemand den Rückweg oder das Schreibfeld benutzt |
 > | **JSON lesen** (HTTP an den WEM) | nur von Hand: „Werte per JSON abrufen“ (eine Anfrage, ab v42), Dateien der SD-Karte. Nie im Takt – der WEM verträgt kein Polling. | nur auf Knopfdruck |
@@ -572,6 +572,11 @@ Gateway-Anleitung umgerechnet, am Bus einzeln gelesen):
 | `02 00 2559 02` | Knoten 1 `0x2959`/2 | Vorlaufsoll Heizkreis aktuell | 35,3 °C |
 | `03 00 2569 02` | Knoten 1 `0x2A69`/2 | „Status Warmwasser“ (Gateway: 0 Warnung / 1 Fehler anstehend) | 1 – passt nicht zum leeren Fehlerblock, **Bedeutung unklar** |
 
+Am 10.11.2026 kam dazu: `02 00 258B 02` = Knoten 1 `0x298B`/2, die **gemessene Raumtemperatur des zugeordneten
+Raumgeräts** (0,1 °C, mit Vorzeichen; ohne Zuordnung `0x8000`) – bei uns per CAN gelesen, über JSON bestätigt von PiLLoX an einer
+WTC-GB 25-B ([Kommentar](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/issues/4#issuecomment-6781466298)), s.
+[VERSUCHE.md](VERSUCHE.md#zuordnung-als-raumfühler-und-gemessene-raumtemperatur-im-wem).
+
 Vermutung zur Herkunft der Versätze: Die JSON-Objektnummer ist **modulrelativ** (`0x2533` ist im
 Heizkreis die Betriebsart, im Kessel der Rücklauf VPT); im CAN-Objektverzeichnis eines Knotens liegt
 jedes Modul um einen festen Betrag verschoben. Die Plätze +0x200/+0x300 am WEM gehören vermutlich zu
@@ -592,8 +597,22 @@ der Gruppe „Schreiben per CAN“, der dritte unter „Lesebefehl (nur lesen)�
 | Schalter | ab Werk | Wirkung |
 |---|---|---|
 | Schalten per CAN statt JSON (Heizkreis, Warmwasser) | **<!--ab-werk:can_schalten-->an<!--/ab-werk-->** (seit v42; v35–v41 aus) | App-Knöpfe, `cmd/heizkreis`, `cmd/warmwasser` schreiben per SDO-Download an den WEM: `0x2933`/2 bzw. `0x2A20`/2, 1 Byte. Warteschlange und Kontrolle am Bus wie beim JSON-Weg; Abstand zum vorigen Befehl ab Werk <!--ab-werk:abstand_can-->10<!--/ab-werk--> s (über JSON <!--ab-werk:abstand_json-->60<!--/ab-werk--> s); Abbruch des WEM = „abgelehnt“ |
-| Freies CAN-Schreiben (Experten) | <!--ab-werk:can_frei-->aus<!--/ab-werk--> | Eingabefeld und `cmd/can_schreiben`: `KN IDX SUB WERT [LÄNGE]` oder `KN IDX SUB = B1 B2 …` (hex, bis 64 Byte, ab 5 Byte in Teilstücken mit 50 ms Pause). **Nur Knoten 01, nur 2000–5FFF** – nie der Kessel, nie Kommunikationsobjekte (0x1000–0x1FFF) |
+| Freies CAN-Schreiben (Experten) | <!--ab-werk:can_frei-->aus<!--/ab-werk--> | Eingabefeld und `cmd/can_schreiben`: `KN IDX SUB WERT [LÄNGE]` oder `KN IDX SUB = B1 B2 …` (hex, bis 64 Byte, ab 5 Byte in Teilstücken mit 50 ms Pause). **Ab Werk nur Knoten 01, nur 2000–5FFF** – nie der Kessel, nie Kommunikationsobjekte (0x1000–0x1FFF). Weitere Knoten: s. unten |
 | Lange Lesebefehle auch am Kessel | **<!--ab-werk:lang_am_kessel-->an<!--/ab-werk-->** | Teilstücke/Block beim Lesen auch an Knoten 2 (dort teilt sich das Board den Kanal mit dem WEM) |
+
+**Weitere Knoten freischalten (ab v42).** Das Textfeld „Freies CAN-Schreiben: erlaubte Knoten (hex, ab Werk 01)“ in
+derselben Gruppe nennt die Knoten, an die das freie CAN-Schreiben senden darf – zum Beispiel `01 04` für den WEM und ein
+Raumgerät, oder nur `04`. Die Liste übersteht einen Neustart.
+
+- Knoten `02` (Kessel) und `00` (alle) lassen sich nicht eintragen. Bei einer ungültigen Liste sendet das Board nichts.
+- Der Objektbereich 2000–5FFF gilt für jeden Knoten, und der Schalter „Freies CAN-Schreiben“ bleibt die zweite Hürde.
+- Das Schalten von Heizkreis und Warmwasser geht unabhängig davon immer an den WEM.
+- Gesendet wird erst, wenn auf dem SDO-Kanal des Zielknotens 200 ms lang nichts lief; ist er 3 s lang belegt, meldet
+  das Board „nicht gesendet“. So gerät der Befehl nicht zwischen Anfrage und Antwort eines anderen Teilnehmers.
+- Das Feld steht in der Experten-Oberfläche. Mit dem Paket `mqtt` ist es, wie jeder Schalter und jedes Eingabefeld,
+  auch über den Broker erreichbar – Schreibrechte dort deshalb eng fassen. Nach einem Versuch wieder `01` eintragen.
+
+Erprobt am Tisch an einem RG2 (Knoten 4): [VERSUCHE.md, Neustart des RG2 per CAN](VERSUCHE.md#neustart-des-rg2-per-can-0x2559).
 
 **An der WTC-GW 15-B (WEM 428.226) am 26.10.2026 bestätigt:**
 

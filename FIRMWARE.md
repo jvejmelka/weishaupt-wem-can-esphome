@@ -71,7 +71,7 @@ zehn Plätze aus [PROTOKOLL.md, Abschnitt 8](PROTOKOLL.md#8-wann-sich-der-wem-au
 ### Weitere Gruppen
 
 - **Schreiben per CAN:** die Schalter „Schalten per CAN statt JSON“ und „Freies CAN-Schreiben“, das
-  Feld für den freien Schreibbefehl und der Abstand per CAN – beschrieben unter [Schreiben per CAN](PROTOKOLL.md#schreiben-per-can-ab-v35-seit-v42-vorgabe).
+  Feld für den freien Schreibbefehl, die Liste der dafür erlaubten Knoten (ab Werk nur `01`) und der Abstand per CAN – beschrieben unter [Schreiben per CAN](PROTOKOLL.md#schreiben-per-can-ab-v35-seit-v42-vorgabe).
 - **SD-Karte des WEM (Dateien lesen):** Datei holen und Systemtabelle – beschrieben unter
   [Knoten und Module](PROTOKOLL.md#knoten-und-module).
 - Paket `json-lesen` (Gruppe „Einstellungen“): Knopf „Werte per JSON abrufen“, Meldung „JSON-Abruf“
