@@ -190,7 +190,8 @@ In `weishaupt-wem-can.yaml`, comment out the lines you do not need under `packag
 | extra displays in the app (room temperatures, "heat pump running") | `zusatz` (requires `mqtt`) |
 | to fetch values manually via JSON when the bus is silent | `json_lesen` (requires `schalten`, `warmwasser`) |
 
-In the template everything is enabled except `api`, `feste_ip` and `kraiz`.
+In the template everything is enabled except `api`, `feste_ip`, `kraiz` and `can_tunnel` (experiment, only in branch
+`can-tunnel`: [VERSUCHE.en.md, 10b](VERSUCHE.en.md#10b-can-tunnel-over-wlan-experiment-branch-can-tunnel)).
 
 `warmwasser` only if a DHW storage tank is connected to the unit.
 `warmwasser_schalten` requires `schalten` and `warmwasser`.
