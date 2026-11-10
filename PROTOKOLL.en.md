@@ -3,11 +3,16 @@
 # Protocol: CAN bus and WEM JSON
 
 What happens on the CAN bus of a Weishaupt condensing boiler with a WEM system unit, what this
-firmware picks up by passive listening, what it requests itself, and how it switches via the WEM's
-JSON interface. Measured on a **WTC-GW 15-B** with WEM system unit; where a statement comes only
+firmware picks up by passive listening, what it requests itself, and how it switches at the WEM – via CAN
+and via its JSON interface. Measured on a **WTC-GW 15-B** with WEM system unit; where a statement comes only
 from third-party sources or is merely plausible, this is noted.
 
-> **The ways the firmware talks to the heating system** (as of v42 – every version added one):
+## Ways to the heating system
+
+The ways the firmware talks to the heating system and which of them are on by default (as of v42 – every version
+added one). **This table is the one place for it**; README, INSTALL and the other sections point here. The
+“on”/“off” values in the “Default” column are generated from the code.
+
 >
 > | Way | What | Default |
 > |---|---|---|
@@ -24,6 +29,9 @@ from third-party sources or is merely plausible, this is noted.
 > [Writing via CAN](#writing-via-can-from-v35-default-since-v42). The measured installation has been
 > switching via CAN since 26 Oct 2026.
 
+## Contents
+
+- [Ways to the heating system](#ways-to-the-heating-system)
 - [1. Overview](#1-overview)
 - [2. Passive listening and on-demand reading](#2-passive-listening-and-on-demand-reading)
 - [3. What is picked up by passive listening](#3-what-is-picked-up-by-passive-listening)

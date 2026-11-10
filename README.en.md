@@ -33,12 +33,11 @@ that listens passively on the CAN bus of a Weishaupt condensing boiler with a **
 ## Safety rules – please read
 
 1. **The boiler (node 2) is never written to.** Only read requests go there.
-2. **Writing goes to the WEM (node 1) only.** **Since v42 the firmware switches** heating circuit
-   and hot water **directly via CAN by default**, without JSON – confirmed only on a WTC-GW 15-B,
-   at your own risk on other installations ([PROTOKOLL.en.md – Writing via CAN](PROTOKOLL.en.md#writing-via-can-from-v35-default-since-v42)).
-   The older way through the WEM's JSON interface remains as a fallback (switch “Schalten per CAN
-   statt JSON” off); the write field there only allows the modules SYSTEM0 (MI 01), heating circuit
-   HZK0 (MI 02) and DHW WW0 (MI 03). All ways at a glance: [PROTOKOLL.en.md](PROTOKOLL.en.md).
+2. **Writing goes to the WEM (node 1) only.** Since v42 the firmware switches heating circuit and hot
+   water directly via CAN, without JSON (switch “Schalten per CAN statt JSON”, default <!--ab-werk:can_schalten-->on<!--/ab-werk-->) – confirmed
+   only on a WTC-GW 15-B, at your own risk on other installations. Which ways exist (listening, reading,
+   writing via CAN, JSON as the fallback) and which are on by default is described in **one** place:
+   [PROTOKOLL.en.md – Ways to the heating system](PROTOKOLL.en.md#ways-to-the-heating-system).
 3. **The WEM is fragile.** Frequent JSON requests, requests for non-existent objects or
    several clients at the same time can knock out its JSON interface until the next power cycle.
    Hence: via JSON <!--ab-werk:abstand_json-->60<!--/ab-werk--> s between two commands by default (it cannot be set shorter),

@@ -5,7 +5,8 @@ Rechne mit einer Stunde, die meiste Zeit geht aufs erste Kompilieren.
 
 > **Vorher lesen:** die [Sicherheitsregeln im README](README.md#sicherheitsregeln--bitte-lesen).
 > Die Firmware schreibt nie auf den Kessel und ruft die JSON-Schnittstelle des WEM nie von selbst auf –
-> daran bitte auch beim Anpassen nichts ändern.
+> daran bitte auch beim Anpassen nichts ändern. Auf welchen Wegen sie mit der Heizung spricht und was ab
+> Werk an ist: [PROTOKOLL.md – Wege zur Heizung](PROTOKOLL.md#wege-zur-heizung).
 
 ## Kurzweg ohne ESPHome: fertiges Release-Image (ab v42)
 
@@ -197,7 +198,7 @@ Optional anpassen unter `substitutions:`:
 - `can_anfragen_start` – **beim ersten Mal auf `RESTORE_DEFAULT_OFF` lassen**: das Board fragt
   dann nichts im Takt ab. Ganz still ist es damit nicht: die Betriebsarten liest es nach dem Start und bei
   Anlass mit einzelnen Leseanfragen, und geschaltet wird ab Werk per CAN am WEM
-  ([alle Wege](PROTOKOLL.md)).
+  ([alle Wege](PROTOKOLL.md#wege-zur-heizung)).
 
 Prüfen, ohne etwas zu bauen:
 

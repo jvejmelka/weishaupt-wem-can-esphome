@@ -3,11 +3,16 @@
 > 🇬🇧 English version: [PROTOKOLL.en.md](PROTOKOLL.en.md)
 
 Was auf dem CAN-Bus einer Weishaupt-Brennwertheizung mit WEM-Systemgerät passiert, was diese
-Firmware davon mithört, was sie selbst anfragt und wie sie über die JSON-Schnittstelle des WEM
-schaltet. Gemessen an einer **WTC-GW 15-B** mit WEM-Systemgerät; wo eine Angabe nur aus fremden
+Firmware davon mithört, was sie selbst anfragt und wie sie am WEM schaltet – per CAN und über dessen
+JSON-Schnittstelle. Gemessen an einer **WTC-GW 15-B** mit WEM-Systemgerät; wo eine Angabe nur aus fremden
 Quellen stammt oder nur plausibel ist, steht das dabei.
 
-> **Auf welchen Wegen die Firmware mit der Heizung spricht** (Stand v42 – mit jeder Fassung kam ein Weg dazu):
+## Wege zur Heizung
+
+Auf welchen Wegen die Firmware mit der Heizung spricht und was davon ab Werk an ist (Stand v42 – mit jeder Fassung
+kam ein Weg dazu). **Diese Tabelle ist die eine Stelle dafür**; README, INSTALL und die übrigen Abschnitte verweisen
+hierher. Die Angaben „an“/„aus“ in der Spalte „Ab Werk“ werden aus dem Code erzeugt.
+
 >
 > | Weg | Was | Ab Werk |
 > |---|---|---|
@@ -24,6 +29,9 @@ Quellen stammt oder nur plausibel ist, steht das dabei.
 > [Schreiben per CAN](#schreiben-per-can-ab-v35-seit-v42-vorgabe). Die gemessene Anlage schaltet seit
 > dem 26.10.2026 per CAN.
 
+## Inhalt
+
+- [Wege zur Heizung](#wege-zur-heizung)
 - [1. Überblick](#1-überblick)
 - [2. Mithören und Lesen auf Anforderung](#2-mithören-und-lesen-auf-anforderung)
 - [3. Was mitgehört wird](#3-was-mitgehört-wird)
