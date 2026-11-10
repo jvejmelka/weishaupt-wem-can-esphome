@@ -7,8 +7,11 @@ Firmware davon mithört, was sie selbst anfragt und wie sie über die JSON-Schni
 schaltet. Gemessen an einer **WTC-GW 15-B** mit WEM-Systemgerät; wo eine Angabe nur aus fremden
 Quellen stammt oder nur plausibel ist, steht das dabei.
 
-> Die Firmware schreibt **nie** auf den Bus. Am Bus stellt sie ausschließlich Lese-Anfragen
-> (SDO, Kommandobyte `0x40`). Geschaltet wird nur über die JSON-Schnittstelle des WEM.
+> **Ab Werk** schreibt die Firmware nie auf den Bus: Am Bus stellt sie nur Lese-Anfragen (SDO,
+> Kommandobyte `0x40`), geschaltet wird über die JSON-Schnittstelle des WEM. Ab v35 lässt sich das
+> Schalten von Heizkreis und Warmwasser auf CAN umstellen ([Schreiben per CAN](#schreiben-per-can-ab-v35-ab-werk-aus)) –
+> dann schreibt sie per SDO an den WEM (Knoten 1), ohne JSON. So läuft die gemessene Anlage seit dem
+> 26.10.2026. **An den Kessel (Knoten 2) schreibt die Firmware nie.**
 
 - [1. Überblick](#1-überblick)
 - [2. Mithören und Lesen auf Anforderung](#2-mithören-und-lesen-auf-anforderung)
@@ -19,6 +22,7 @@ Quellen stammt oder nur plausibel ist, steht das dabei.
 - [6a. Regeln: Betriebsarten bei Verdacht lesen](#6a-regeln-betriebsarten-bei-verdacht-lesen)
 - [6b. Zusatzanzeigen für die Handy-App](#6b-zusatzanzeigen-für-die-handy-app)
 - [7. Neue Objekte finden: Scan und Differenz](#7-neue-objekte-finden-scan-und-differenz)
+- [7a. Übernommene Objekte aus anderen Projekten (ungeprüft)](#7a-übernommene-objekte-aus-anderen-projekten-ungeprüft)
 - [8. Wann sich der WEM aufhängt](#8-wann-sich-der-wem-aufhängt)
 - [9. Beispiel: Heizkreis auf „Zeitprogramm 1“](#9-beispiel-heizkreis-auf-zeitprogramm-1)
 - [10. Beispiel: Warmwasser aus](#10-beispiel-warmwasser-aus)
@@ -711,6 +715,128 @@ Ergebnis an der gemessenen Anlage: Standby → Zeitprogramm 1 änderte Knoten 1 
 Ein Scan erzeugt viel Busverkehr (40 Anfragen pro Sekunde). Bereiche klein halten und nur scannen,
 wenn nötig.
 
+## 7a. Übernommene Objekte aus anderen Projekten (ungeprüft)
+
+Andere haben an ihren Anlagen Objekte gefunden, die in den Tabellen oben fehlen. Sie stehen hier, damit
+niemand sie ein zweites Mal suchen muss – mit eigenen Bezeichnungen und der Quelle je Objekt.
+**Stand aller Zeilen: übernommen, ungeprüft.** An der gemessenen Anlage ist keines davon gelesen und
+verglichen; Skalierung und Bedeutung sind die der Quelle. Wird eines geprüft, wandert es mit Beleg in die
+Tabellen der Abschnitte 3 und 4.
+
+- Aufgenommen sind nur Objekte der Module, die es an der gemessenen Anlage gibt (Kessel, System,
+  Heizkreis 1, Warmwasser). Objekte für einen zweiten Heizkreis, Erweiterungsmodule und Solar stehen in
+  den Quellen.
+- Nennt die Quelle eine JSON-Adresse, ist der CAN-Index mit den Versätzen aus
+  [Abschnitt 5](#abbildung-json-objekt--can-objekt) umgerechnet. Die Versätze sind an einer WTC-GW 15-B
+  gemessen; ob sie für jedes Objekt eines Moduls gelten, ist nur an den dort genannten Beispielen geprüft.
+- Zum Systemmodul gehören auch Objekte für Pufferspeicher, Kaskade, Plattenwärmetauscher und Zirkulation.
+  Ob sie an einer Anlage ohne diese Funktionen einen Wert liefern, ist ungeprüft.
+- Viele Kesselobjekte sind Einstellwerte der Fachmann-Ebene. Hier geht es nur ums Lesen: Die Firmware
+  schreibt nie an den Kessel (Knoten 2), auch nicht beim Schalten per CAN – das geht an den WEM.
+- Gepflegt wird die Liste in [`register-uebernommen.yaml`](register-uebernommen.yaml).
+
+<!-- REGISTER:BEGIN uebernommen -->
+<!-- erzeugt aus register-uebernommen.yaml von werkzeuge/register_erzeugen.py - nicht von Hand aendern -->
+
+**Kessel (Knoten 2)**
+
+| Objekt | Bedeutung | Skalierung | JSON (MI MX OX OS) | Modbus | Quelle | Hinweis |
+|---|---|---|---|---|---|---|
+| `0x2503`/2 | Schaltdifferenz des Reglers bei Warmwasserladung | 0,1 K | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x250A`/0 | Taktsperre des Brenners im Heizbetrieb | 1 min | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x250D`/2 | Schaltdifferenz des Reglers im Heizbetrieb | 0,1 K | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x2513`/0 | Dauer der Zwangsteillast im Heizbetrieb | 0,1 s | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x2516`/2 | Betriebsart der internen Pumpe bei Warmwasserladung | Code | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x2523`/2 | Größte Leistung im Heizbetrieb | 0,01 % | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x2528`/2 | Größte Leistung bei Warmwasserladung | 0,01 % | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x253D`/0 | Offset des Gasventils | 0,01 % | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x2542`/0 | Sollleistung des Kessels | 0,01 % | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x256B`/2 | Kleinste Pumpenleistung im Heizbetrieb | 1 % | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x256C`/2 | Größte Pumpenleistung im Heizbetrieb | 1 % | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x256E`/2 | Kleinste Pumpenleistung bei Warmwasserladung | 1 % | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x2579`/0 | Ionisationssignal, Sollwert | 1 Punkte | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x257A`/0 | Ionisationssignal beim Start | 1 Punkte | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x257D`/0 | Gas-Luft-Verhältnis, aktueller Wert | 0,01 % | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x257E`/0 | Ansteuersignal des Gebläses, aktueller Wert | 0,01 % | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x2581`/2 | Korrektur der Gasmenge beim Start | 1 % | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x258B`/2 | Korrektur der kleinsten Leistung | 1 % | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x259B`/2 | Höchste Abgastemperatur (Grenzwert) | 1 °C | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x2715`/2 | Vorlauftemperatur am VPT-Fühler | 0,1 °C | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x2716`/2 | Anlagendruck, Schwelle für die Warnmeldung | 0,01 bar | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x2717`/2 | Anlagendruck, Schwelle für die Brennersperre | 0,01 bar | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x2719`/2 | Interne Pumpe, Sollleistung | 1 % | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x271B`/2 | Interne Pumpe, elektrische Leistung | 1 W | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x2729`/2 | Größter Volumenstrom | 1 l/h | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x272A`/2 | Volumenstrom-Faktor im Heizbetrieb | 1 % | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x272B`/2 | Volumenstrom-Faktor bei Warmwasserladung | 1 % | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x2741`/0 | Zeit bis zur nächsten Wartung | 1 h | `09 01 2641 00` | – | [kraiz](https://github.com/kraiz/hassio-weishaupt) | – |
+| `0x2742`/0 | Wartungsintervall | 1 h | `09 01 2642 00` | – | [kraiz](https://github.com/kraiz/hassio-weishaupt) | – |
+| `0x274E`/0 | Ausgangstest | Code | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x274F`/2 | Ausgang MFA1 | Code | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x2763`/2 | Gasdruckwächter | Code | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x276A`/2 | Betriebsart der internen Pumpe im Heizbetrieb | Code | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x2A01`/0 | Brennerstarts, Gesamtzähler | Zähler | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x2A21`/0 | Betriebsstunden des Brenners | 1 h | `09 01 2921 00` | – | [geronet1](https://github.com/geronet1/wem-python), [kraiz](https://github.com/kraiz/hassio-weishaupt) | geronet1: Zähler seit dem Rücksetzen; kraiz: gesamt |
+
+**Heizkreis 1 (Knoten 1, JSON-Modul MI 02 + 0x400)**
+
+| Objekt | Bedeutung | Skalierung | JSON (MI MX OX OS) | Modbus | Quelle | Hinweis |
+|---|---|---|---|---|---|---|
+| `0x291B`/2 | Untere Grenze des Vorlaufsolls | 0,1 °C | `02 00 251B 02` | – | [ChristophKomenda](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/pull/10) | – |
+| `0x291C`/2 | Obere Grenze des Vorlaufsolls | 0,1 °C | `02 00 251C 02` | – | [ChristophKomenda](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/pull/10) | – |
+| `0x292C`/2 | Vorlaufsoll im Sonderniveau | 0,1 °C | `02 00 252C 02` | 113 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | liest das Paket `kraiz-per-can` |
+| `0x293A`/2 | Raumsoll Normal | 0,1 °C | `02 00 253A 02` | 107 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | JSON-Adresse am RG2 mitgeschnitten (Abschnitt 10a); liest das Paket `kraiz-per-can` |
+| `0x293B`/2 | Raumsoll Komfort | 0,1 °C | `02 00 253B 02` | 106 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | JSON-Adresse am RG2 mitgeschnitten (Abschnitt 10a); liest das Paket `kraiz-per-can` |
+| `0x2954`/2 | Frostschutzgrenze der Außentemperatur | 0,1 °C | `02 00 2554 02` | – | [ChristophKomenda](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/pull/10) | – |
+| `0x2969`/2 | Vorlaufsoll Absenk | 0,1 °C | `02 00 2569 02` | 112 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | liest das Paket `kraiz-per-can` |
+| `0x296A`/2 | Vorlaufsoll Normal | 0,1 °C | `02 00 256A 02` | 111 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | liest das Paket `kraiz-per-can` |
+| `0x296B`/2 | Vorlaufsoll Komfort | 0,1 °C | `02 00 256B 02` | 110 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | liest das Paket `kraiz-per-can` |
+| `0x296E`/2 | Bauweise des Gebäudes | Code | `02 00 256E 02` | – | [ChristophKomenda](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/pull/10) | – |
+| `0x297C`/2 | Heizgrenze nach Raumsoll | Code | `02 00 257C 02` | – | [ChristophKomenda](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/pull/10) | – |
+| `0x297E`/4 | Aktuelle Betriebsart des Heizkreises | Code | `02 00 257E 04` | 102 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | liest das Paket `kraiz-per-can` |
+| `0x297E`/5 | Status des Heizkreises | Code | `02 00 257E 05` | 103 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | liest das Paket `kraiz-per-can` |
+| `0x2981`/2 | Niveauanhebung nach Außentemperatur | 0,1 °C | `02 00 2581 02` | – | [ChristophKomenda](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/pull/10) | – |
+| `0x29A3`/2 | Aufheizoptimierung | Code | `02 00 25A3 02` | – | [ChristophKomenda](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/pull/10) | – |
+| `0x29C7`/2 | Heizgrenze nach Vorlauftemperatur | 0,1 °C | `02 00 25C7 02` | – | [ChristophKomenda](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/pull/10) | – |
+
+**System (Knoten 1, JSON-Modul MI 01 + 0x100)**
+
+| Objekt | Bedeutung | Skalierung | JSON (MI MX OX OS) | Modbus | Quelle | Hinweis |
+|---|---|---|---|---|---|---|
+| `0x2660`/2 | Pufferspeicher, Temperatur oben | 0,1 °C | `01 00 2560 02` | 118 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | liest das Paket `kraiz-per-can` |
+| `0x2661`/2 | Pufferspeicher, Temperatur unten | 0,1 °C | `01 00 2561 02` | 119 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | liest das Paket `kraiz-per-can` |
+| `0x2712`/0 | Kaskade, Sollwert Heizen | 0,1 °C | `01 00 2612 00` | 145 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | liest das Paket `kraiz-per-can` |
+| `0x271C`/0 | Kaskade, Soll-Modulation Heizen | 0,01 % | `01 00 261C 00` | 143 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | liest das Paket `kraiz-per-can` |
+| `0x271D`/0 | Kaskade, Soll-Modulation Warmwasser | 0,01 % | `01 00 261D 00` | 144 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | liest das Paket `kraiz-per-can` |
+| `0x271F`/2 | Temperatur am Plattenwärmetauscher (Fühler B2) | 0,1 °C | `01 00 261F 02` | 117 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | liest das Paket `kraiz-per-can` |
+| `0x27E4`/2 | Folgewechsel der Kessel | Code | `01 00 26E4 02` | 140 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | liest das Paket `kraiz-per-can` |
+| `0x27E6`/2 | Wechselzeit der Kesselfolge | 1 h | `01 00 26E6 02` | 141 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | liest das Paket `kraiz-per-can` |
+| `0x27FE`/2 | Kaskade, Abgleichtemperatur | 0,1 °C | `01 00 26FE 02` | 142 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | liest das Paket `kraiz-per-can` |
+| `0x28F9`/2 | Leistungsvorgabe für Eingang N1 über Ethernet (0–100 %) | 0,01 % | `01 00 27F9 02` | 114 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | liest das Paket `kraiz-per-can` |
+
+**Warmwasser (Knoten 1, JSON-Modul MI 03 + 0x500)**
+
+| Objekt | Bedeutung | Skalierung | JSON (MI MX OX OS) | Modbus | Quelle | Hinweis |
+|---|---|---|---|---|---|---|
+| `0x2A38`/2 | Warmwasser-Soll Absenk | 0,1 °C | `03 00 2538 02` | 133 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | liest das Paket `kraiz-per-can` |
+| `0x2A51`/2 | Warmwasserpumpe | 0 aus, 1 ein | `03 00 2551 02` | 137 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | liest das Paket `kraiz-per-can` |
+| `0x2A57`/2 | Rücklauftemperatur der Zirkulation | 0,1 °C | `03 00 2557 02` | 136 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | liest das Paket `kraiz-per-can` |
+
+**In der Quelle ohne Bezeichnung**
+
+- Knoten 2, Antworten des Kessels ([geronet1](https://github.com/geronet1/wem-python)): `0x2503`/1, `0x250D`/1, `0x2516`/1, `0x2523`/1, `0x2528`/1, `0x252E`/0, `0x2569`/1, `0x2569`/2, `0x256B`/1, `0x256C`/1, `0x256E`/1, `0x2574`/1, `0x2574`/2, `0x2581`/1, `0x258B`/1, `0x258C`/0, `0x2594`/1, `0x2594`/2, `0x259B`/1, `0x2716`/1, `0x2717`/1, `0x271A`/2, `0x2729`/1, `0x272A`/1, `0x272B`/1, `0x272C`/2, `0x2732`/2, `0x273B`/2, `0x273D`/1, `0x273D`/2, `0x2754`/1, `0x2754`/2, `0x2764`/2, `0x2765`/1, `0x2766`/2, `0x276A`/1, `0x2770`/2, `0x2772`/1, `0x2772`/2, `0x2778`/1, `0x2778`/2, `0x2A22`/0
+- Schreibtelegramme auf `0x602` ([geronet1](https://github.com/geronet1/wem-python)): `0x2528`/2, `0x252E`/0, `0x2705`/1
+- Schreibtelegramme auf `0x6C2` ([geronet1](https://github.com/geronet1/wem-python)): `0x251F`/1, `0x251F`/2
+
+**Quellen**
+
+- [geronet1/wem-python](https://github.com/geronet1/wem-python) – Objektliste des Mitschnitts (`wem_codes.py`)
+- [BorgNumberOne/Weishaupt_CanApiJson](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) – Adresstabelle der JSON-Schnittstelle mit Modbus-Registern
+- [kraiz/hassio-weishaupt](https://github.com/kraiz/hassio-weishaupt) – Sensorliste der Home-Assistant-Integration (MIT-Lizenz)
+- [BorgNumberOne/Weishaupt_CanApiJson, Pull Request #10 (ChristophKomenda)](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/pull/10) – Heizkreis-Parameter der JSON-Schnittstelle
+
+<!-- REGISTER:END uebernommen -->
+
 ## 8. Wann sich der WEM aufhängt
 
 ### Symptome
@@ -1128,7 +1254,8 @@ Kommunikationswarnungen und an [kraiz](https://github.com/kraiz/hassio-weishaupt
 - [MenkeC/Weishaupt-C3supermini](https://github.com/MenkeC/Weishaupt-C3supermini) – 50 kbit/s,
   Kessel = Knoten 2, SDO `0x602`/`0x582`, PDOs `0x201`/`0x241`.
 - [geronet1/wem-python](https://github.com/geronet1/wem-python) – Objektbedeutungen, u. a. die
-  Schreibtelegramme auf `0x6C2`.
+  Schreibtelegramme auf `0x6C2`; weitere Kesselobjekte in
+  [Abschnitt 7a](#7a-übernommene-objekte-aus-anderen-projekten-ungeprüft).
 - [BorgNumberOne/Weishaupt_CanApiJson](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) –
   Registertabelle der JSON-Schnittstelle mit MI/MX/OX/OS, Faktoren und Aktualisierungsklassen;
   Hinweis auf `/sd/systable.csv`.

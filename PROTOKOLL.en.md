@@ -7,8 +7,11 @@ firmware picks up by passive listening, what it requests itself, and how it swit
 JSON interface. Measured on a **WTC-GW 15-B** with WEM system unit; where a statement comes only
 from third-party sources or is merely plausible, this is noted.
 
-> The firmware **never** writes to the bus. On the bus it only issues read requests
-> (SDO, command byte `0x40`). Switching is done exclusively via the WEM's JSON interface.
+> **By default** the firmware never writes to the bus: on the bus it only issues read requests (SDO,
+> command byte `0x40`), and switching goes through the WEM's JSON interface. From v35, switching the
+> heating circuit and hot water can be moved to CAN ([Writing via CAN](#writing-via-can-from-v35-off-by-default)) –
+> the firmware then writes via SDO to the WEM (node 1), without JSON. The measured installation has been
+> running this way since 26 Oct 2026. **The firmware never writes to the boiler (node 2).**
 
 - [1. Overview](#1-overview)
 - [2. Passive listening and on-demand reading](#2-passive-listening-and-on-demand-reading)
@@ -19,6 +22,7 @@ from third-party sources or is merely plausible, this is noted.
 - [6a. Rules: reading operating modes on suspicion](#6a-rules-reading-operating-modes-on-suspicion)
 - [6b. Additional displays for the phone app](#6b-additional-displays-for-the-phone-app)
 - [7. Finding new objects: scan and diff](#7-finding-new-objects-scan-and-diff)
+- [7a. Objects taken from other projects (unverified)](#7a-objects-taken-from-other-projects-unverified)
 - [8. When the WEM locks up](#8-when-the-wem-locks-up)
 - [9. Example: heating circuit to “Time program 1”](#9-example-heating-circuit-to-time-program-1)
 - [10. Example: DHW off](#10-example-dhw-off)
@@ -733,6 +737,128 @@ changed `0x2A20`/2 from 1 to 2 – an object that is not in any published list.
 
 A scan generates a lot of bus traffic (40 requests per second). Keep ranges small and only scan
 when necessary.
+
+## 7a. Objects taken from other projects (unverified)
+
+Others have found objects on their installations that are missing from the tables above. They are listed
+here so that nobody has to search for them a second time – with our own wording and the source for each
+object. **Status of every row: taken over, unverified.** None of them has been read and compared on the
+measured installation; scaling and meaning are those of the source. Once an object is verified, it moves
+with its evidence into the tables of sections 3 and 4.
+
+- Only objects of modules that exist on the measured installation are included (boiler, system, heating
+  circuit 1, hot water). Objects for a second heating circuit, extension modules and solar are in the
+  sources.
+- Where the source gives a JSON address, the CAN index is converted with the offsets from
+  [section 5](#mapping-json-object--can-object). The offsets were measured on a WTC-GW 15-B; whether they
+  hold for every object of a module has only been checked for the examples listed there.
+- The system module also contains objects for buffer tank, cascade, plate heat exchanger and circulation.
+  Whether they return a value on an installation without these functions is unverified.
+- Many boiler objects are installer-level settings. This is about reading only: the firmware never
+  writes to the boiler (node 2), not even when switching via CAN – that goes to the WEM.
+- The list is maintained in [`register-uebernommen.yaml`](register-uebernommen.yaml).
+
+<!-- REGISTER:BEGIN uebernommen -->
+<!-- erzeugt aus register-uebernommen.yaml von werkzeuge/register_erzeugen.py - nicht von Hand aendern -->
+
+**Boiler (node 2)**
+
+| Object | Meaning | Scaling | JSON (MI MX OX OS) | Modbus | Source | Note |
+|---|---|---|---|---|---|---|
+| `0x2503`/2 | Controller switching differential, hot water charging | 0.1 K | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x250A`/0 | Burner cycle lock, heating | 1 min | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x250D`/2 | Controller switching differential, heating | 0.1 K | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x2513`/0 | Duration of forced partial load, heating | 0.1 s | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x2516`/2 | Internal pump mode, hot water charging | code | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x2523`/2 | Maximum output, heating | 0.01 % | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x2528`/2 | Maximum output, hot water charging | 0.01 % | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x253D`/0 | Gas valve offset | 0.01 % | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x2542`/0 | Boiler output setpoint | 0.01 % | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x256B`/2 | Minimum pump output, heating | 1 % | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x256C`/2 | Maximum pump output, heating | 1 % | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x256E`/2 | Minimum pump output, hot water charging | 1 % | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x2579`/0 | Ionisation signal, setpoint | 1 points | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x257A`/0 | Ionisation signal at start | 1 points | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x257D`/0 | Gas/air ratio, current value | 0.01 % | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x257E`/0 | Fan control signal, current value | 0.01 % | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x2581`/2 | Gas quantity correction at start | 1 % | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x258B`/2 | Correction of minimum output | 1 % | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x259B`/2 | Maximum flue gas temperature (limit) | 1 °C | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x2715`/2 | Flow temperature at the VPT sensor | 0.1 °C | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x2716`/2 | System pressure, warning threshold | 0.01 bar | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x2717`/2 | System pressure, burner lock threshold | 0.01 bar | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x2719`/2 | Internal pump, output setpoint | 1 % | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x271B`/2 | Internal pump, electrical power | 1 W | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x2729`/2 | Maximum flow rate | 1 l/h | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x272A`/2 | Flow rate factor, heating | 1 % | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x272B`/2 | Flow rate factor, hot water charging | 1 % | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x2741`/0 | Time until next service | 1 h | `09 01 2641 00` | – | [kraiz](https://github.com/kraiz/hassio-weishaupt) | – |
+| `0x2742`/0 | Service interval | 1 h | `09 01 2642 00` | – | [kraiz](https://github.com/kraiz/hassio-weishaupt) | – |
+| `0x274E`/0 | Output test | code | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x274F`/2 | Output MFA1 | code | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x2763`/2 | Gas pressure switch | code | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x276A`/2 | Internal pump mode, heating | code | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x2A01`/0 | Burner starts, total counter | counter | – | – | [geronet1](https://github.com/geronet1/wem-python) | – |
+| `0x2A21`/0 | Burner operating hours | 1 h | `09 01 2921 00` | – | [geronet1](https://github.com/geronet1/wem-python), [kraiz](https://github.com/kraiz/hassio-weishaupt) | geronet1: counter since reset; kraiz: total |
+
+**Heating circuit 1 (node 1, JSON module MI 02 + 0x400)**
+
+| Object | Meaning | Scaling | JSON (MI MX OX OS) | Modbus | Source | Note |
+|---|---|---|---|---|---|---|
+| `0x291B`/2 | Flow setpoint, lower limit | 0.1 °C | `02 00 251B 02` | – | [ChristophKomenda](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/pull/10) | – |
+| `0x291C`/2 | Flow setpoint, upper limit | 0.1 °C | `02 00 251C 02` | – | [ChristophKomenda](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/pull/10) | – |
+| `0x292C`/2 | Flow setpoint, special level | 0.1 °C | `02 00 252C 02` | 113 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | read by the package `kraiz-per-can` |
+| `0x293A`/2 | Room setpoint, normal | 0.1 °C | `02 00 253A 02` | 107 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | JSON address seen on the RG2 (section 10a); read by the package `kraiz-per-can` |
+| `0x293B`/2 | Room setpoint, comfort | 0.1 °C | `02 00 253B 02` | 106 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | JSON address seen on the RG2 (section 10a); read by the package `kraiz-per-can` |
+| `0x2954`/2 | Frost protection limit, outdoor temperature | 0.1 °C | `02 00 2554 02` | – | [ChristophKomenda](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/pull/10) | – |
+| `0x2969`/2 | Flow setpoint, setback | 0.1 °C | `02 00 2569 02` | 112 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | read by the package `kraiz-per-can` |
+| `0x296A`/2 | Flow setpoint, normal | 0.1 °C | `02 00 256A 02` | 111 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | read by the package `kraiz-per-can` |
+| `0x296B`/2 | Flow setpoint, comfort | 0.1 °C | `02 00 256B 02` | 110 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | read by the package `kraiz-per-can` |
+| `0x296E`/2 | Building construction type | code | `02 00 256E 02` | – | [ChristophKomenda](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/pull/10) | – |
+| `0x297C`/2 | Heating limit by room setpoint | code | `02 00 257C 02` | – | [ChristophKomenda](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/pull/10) | – |
+| `0x297E`/4 | Current mode of the heating circuit | code | `02 00 257E 04` | 102 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | read by the package `kraiz-per-can` |
+| `0x297E`/5 | Status of the heating circuit | code | `02 00 257E 05` | 103 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | read by the package `kraiz-per-can` |
+| `0x2981`/2 | Level boost by outdoor temperature | 0.1 °C | `02 00 2581 02` | – | [ChristophKomenda](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/pull/10) | – |
+| `0x29A3`/2 | Heat-up optimisation | code | `02 00 25A3 02` | – | [ChristophKomenda](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/pull/10) | – |
+| `0x29C7`/2 | Heating limit by flow temperature | 0.1 °C | `02 00 25C7 02` | – | [ChristophKomenda](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/pull/10) | – |
+
+**System (node 1, JSON module MI 01 + 0x100)**
+
+| Object | Meaning | Scaling | JSON (MI MX OX OS) | Modbus | Source | Note |
+|---|---|---|---|---|---|---|
+| `0x2660`/2 | Buffer tank, top temperature | 0.1 °C | `01 00 2560 02` | 118 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | read by the package `kraiz-per-can` |
+| `0x2661`/2 | Buffer tank, bottom temperature | 0.1 °C | `01 00 2561 02` | 119 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | read by the package `kraiz-per-can` |
+| `0x2712`/0 | Cascade, heating setpoint | 0.1 °C | `01 00 2612 00` | 145 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | read by the package `kraiz-per-can` |
+| `0x271C`/0 | Cascade, target modulation heating | 0.01 % | `01 00 261C 00` | 143 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | read by the package `kraiz-per-can` |
+| `0x271D`/0 | Cascade, target modulation hot water | 0.01 % | `01 00 261D 00` | 144 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | read by the package `kraiz-per-can` |
+| `0x271F`/2 | Plate heat exchanger temperature (sensor B2) | 0.1 °C | `01 00 261F 02` | 117 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | read by the package `kraiz-per-can` |
+| `0x27E4`/2 | Boiler sequence change | code | `01 00 26E4 02` | 140 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | read by the package `kraiz-per-can` |
+| `0x27E6`/2 | Sequence change time | 1 h | `01 00 26E6 02` | 141 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | read by the package `kraiz-per-can` |
+| `0x27FE`/2 | Cascade, balancing temperature | 0.1 °C | `01 00 26FE 02` | 142 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | read by the package `kraiz-per-can` |
+| `0x28F9`/2 | Output demand for input N1 via Ethernet (0–100 %) | 0.01 % | `01 00 27F9 02` | 114 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | read by the package `kraiz-per-can` |
+
+**Hot water (node 1, JSON module MI 03 + 0x500)**
+
+| Object | Meaning | Scaling | JSON (MI MX OX OS) | Modbus | Source | Note |
+|---|---|---|---|---|---|---|
+| `0x2A38`/2 | Hot water setpoint, setback | 0.1 °C | `03 00 2538 02` | 133 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | read by the package `kraiz-per-can` |
+| `0x2A51`/2 | Hot water pump | 0 off, 1 on | `03 00 2551 02` | 137 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | read by the package `kraiz-per-can` |
+| `0x2A57`/2 | Circulation return temperature | 0.1 °C | `03 00 2557 02` | 136 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | read by the package `kraiz-per-can` |
+
+**Listed in the source without a meaning**
+
+- node 2, replies of the boiler ([geronet1](https://github.com/geronet1/wem-python)): `0x2503`/1, `0x250D`/1, `0x2516`/1, `0x2523`/1, `0x2528`/1, `0x252E`/0, `0x2569`/1, `0x2569`/2, `0x256B`/1, `0x256C`/1, `0x256E`/1, `0x2574`/1, `0x2574`/2, `0x2581`/1, `0x258B`/1, `0x258C`/0, `0x2594`/1, `0x2594`/2, `0x259B`/1, `0x2716`/1, `0x2717`/1, `0x271A`/2, `0x2729`/1, `0x272A`/1, `0x272B`/1, `0x272C`/2, `0x2732`/2, `0x273B`/2, `0x273D`/1, `0x273D`/2, `0x2754`/1, `0x2754`/2, `0x2764`/2, `0x2765`/1, `0x2766`/2, `0x276A`/1, `0x2770`/2, `0x2772`/1, `0x2772`/2, `0x2778`/1, `0x2778`/2, `0x2A22`/0
+- write telegrams on `0x602` ([geronet1](https://github.com/geronet1/wem-python)): `0x2528`/2, `0x252E`/0, `0x2705`/1
+- write telegrams on `0x6C2` ([geronet1](https://github.com/geronet1/wem-python)): `0x251F`/1, `0x251F`/2
+
+**Sources**
+
+- [geronet1/wem-python](https://github.com/geronet1/wem-python) – object list of the bus logger (`wem_codes.py`)
+- [BorgNumberOne/Weishaupt_CanApiJson](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) – address table of the JSON interface with Modbus registers
+- [kraiz/hassio-weishaupt](https://github.com/kraiz/hassio-weishaupt) – sensor list of the Home Assistant integration (MIT licence)
+- [BorgNumberOne/Weishaupt_CanApiJson, Pull Request #10 (ChristophKomenda)](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/pull/10) – heating circuit parameters of the JSON interface
+
+<!-- REGISTER:END uebernommen -->
 
 ## 8. When the WEM locks up
 

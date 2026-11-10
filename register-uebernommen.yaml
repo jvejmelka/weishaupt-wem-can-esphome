@@ -1,0 +1,196 @@
+# Objekte aus anderen Projekten - uebernommen, an der eigenen Anlage NICHT geprueft.
+#
+# Hier stehen nur Tatsachen ueber das Protokoll (Objektnummer, Skalierung, Einheit, Bedeutung) mit
+# eigenen Bezeichnungen und der Quelle je Objekt. Kein Code und keine Tabellen oder Texte aus den
+# Quellen. Daraus erzeugt werkzeuge/register_erzeugen.py die Tabellen im Abschnitt
+# "Uebernommene Objekte" von PROTOKOLL.md und PROTOKOLL.en.md.
+#
+# Sobald ein Objekt an der Anlage gelesen und verglichen ist, wandert es mit Beleg nach
+# register.yaml und wird hier geloescht (der Generator meldet doppelte Eintraege als Fehler).
+#
+# Felder je Objekt:
+#   index, sub        CAN-Objekt am Knoten der Gruppe. Bei Quellen mit JSON-Adresse ist der Index mit
+#                     den Versaetzen aus PROTOKOLL.md ("Abbildung JSON-Objekt -> CAN-Objekt") umgerechnet.
+#   name, name_en     eigene Bezeichnung (deutsch, englisch)
+#   faktor, einheit   Skalierung des Rohwerts; ohne faktor ist der Wert ein Code oder Zaehler
+#   werte, werte_en   stattdessen: Text fuer die Spalte Skalierung (z. B. "Code")
+#   json              Adresse an der JSON-Schnittstelle "MI MX OX OS", wenn die Quelle sie nennt
+#   modbus            Register am WEM-Modbus-Gateway, wenn die Quelle es nennt
+#   quelle            Liste von Kuerzeln aus "quellen"
+#   hinweis, hinweis_en   optional
+
+quellen:
+  geronet1:
+    kurz: geronet1
+    name: "geronet1/wem-python"
+    url: "https://github.com/geronet1/wem-python"
+    was: "Objektliste des Mitschnitts (`wem_codes.py`)"
+    was_en: "object list of the bus logger (`wem_codes.py`)"
+  borg:
+    kurz: BorgNumberOne
+    name: "BorgNumberOne/Weishaupt_CanApiJson"
+    url: "https://github.com/BorgNumberOne/Weishaupt_CanApiJson"
+    was: "Adresstabelle der JSON-Schnittstelle mit Modbus-Registern"
+    was_en: "address table of the JSON interface with Modbus registers"
+  kraiz:
+    kurz: kraiz
+    name: "kraiz/hassio-weishaupt"
+    url: "https://github.com/kraiz/hassio-weishaupt"
+    was: "Sensorliste der Home-Assistant-Integration (MIT-Lizenz)"
+    was_en: "sensor list of the Home Assistant integration (MIT licence)"
+  komenda:
+    kurz: ChristophKomenda
+    name: "BorgNumberOne/Weishaupt_CanApiJson, Pull Request #10 (ChristophKomenda)"
+    url: "https://github.com/BorgNumberOne/Weishaupt_CanApiJson/pull/10"
+    was: "Heizkreis-Parameter der JSON-Schnittstelle"
+    was_en: "heating circuit parameters of the JSON interface"
+
+gruppen:
+  - titel: "Kessel (Knoten 2)"
+    titel_en: "Boiler (node 2)"
+    knoten: 2
+    objekte:
+      - {index: 0x2503, sub: 2, name: "Schaltdifferenz des Reglers bei Warmwasserladung", name_en: "Controller switching differential, hot water charging", faktor: 0.1, einheit: K, quelle: [geronet1]}
+      - {index: 0x250A, sub: 0, name: "Taktsperre des Brenners im Heizbetrieb", name_en: "Burner cycle lock, heating", faktor: 1, einheit: min, quelle: [geronet1]}
+      - {index: 0x250D, sub: 2, name: "Schaltdifferenz des Reglers im Heizbetrieb", name_en: "Controller switching differential, heating", faktor: 0.1, einheit: K, quelle: [geronet1]}
+      - {index: 0x2513, sub: 0, name: "Dauer der Zwangsteillast im Heizbetrieb", name_en: "Duration of forced partial load, heating", faktor: 0.1, einheit: s, quelle: [geronet1]}
+      - {index: 0x2516, sub: 2, name: "Betriebsart der internen Pumpe bei Warmwasserladung", name_en: "Internal pump mode, hot water charging", werte: "Code", werte_en: "code", quelle: [geronet1]}
+      - {index: 0x2523, sub: 2, name: "Größte Leistung im Heizbetrieb", name_en: "Maximum output, heating", faktor: 0.01, einheit: "%", quelle: [geronet1]}
+      - {index: 0x2528, sub: 2, name: "Größte Leistung bei Warmwasserladung", name_en: "Maximum output, hot water charging", faktor: 0.01, einheit: "%", quelle: [geronet1]}
+      - {index: 0x253D, sub: 0, name: "Offset des Gasventils", name_en: "Gas valve offset", faktor: 0.01, einheit: "%", quelle: [geronet1]}
+      - {index: 0x2542, sub: 0, name: "Sollleistung des Kessels", name_en: "Boiler output setpoint", faktor: 0.01, einheit: "%", quelle: [geronet1]}
+      - {index: 0x256B, sub: 2, name: "Kleinste Pumpenleistung im Heizbetrieb", name_en: "Minimum pump output, heating", faktor: 1, einheit: "%", quelle: [geronet1]}
+      - {index: 0x256C, sub: 2, name: "Größte Pumpenleistung im Heizbetrieb", name_en: "Maximum pump output, heating", faktor: 1, einheit: "%", quelle: [geronet1]}
+      - {index: 0x256E, sub: 2, name: "Kleinste Pumpenleistung bei Warmwasserladung", name_en: "Minimum pump output, hot water charging", faktor: 1, einheit: "%", quelle: [geronet1]}
+      - {index: 0x2579, sub: 0, name: "Ionisationssignal, Sollwert", name_en: "Ionisation signal, setpoint", faktor: 1, einheit: Punkte, einheit_en: points, quelle: [geronet1]}
+      - {index: 0x257A, sub: 0, name: "Ionisationssignal beim Start", name_en: "Ionisation signal at start", faktor: 1, einheit: Punkte, einheit_en: points, quelle: [geronet1]}
+      - {index: 0x257D, sub: 0, name: "Gas-Luft-Verhältnis, aktueller Wert", name_en: "Gas/air ratio, current value", faktor: 0.01, einheit: "%", quelle: [geronet1]}
+      - {index: 0x257E, sub: 0, name: "Ansteuersignal des Gebläses, aktueller Wert", name_en: "Fan control signal, current value", faktor: 0.01, einheit: "%", quelle: [geronet1]}
+      - {index: 0x2581, sub: 2, name: "Korrektur der Gasmenge beim Start", name_en: "Gas quantity correction at start", faktor: 1, einheit: "%", quelle: [geronet1]}
+      - {index: 0x258B, sub: 2, name: "Korrektur der kleinsten Leistung", name_en: "Correction of minimum output", faktor: 1, einheit: "%", quelle: [geronet1]}
+      - {index: 0x259B, sub: 2, name: "Höchste Abgastemperatur (Grenzwert)", name_en: "Maximum flue gas temperature (limit)", faktor: 1, einheit: "°C", quelle: [geronet1]}
+      - {index: 0x2715, sub: 2, name: "Vorlauftemperatur am VPT-Fühler", name_en: "Flow temperature at the VPT sensor", faktor: 0.1, einheit: "°C", quelle: [geronet1]}
+      - {index: 0x2716, sub: 2, name: "Anlagendruck, Schwelle für die Warnmeldung", name_en: "System pressure, warning threshold", faktor: 0.01, einheit: bar, quelle: [geronet1]}
+      - {index: 0x2717, sub: 2, name: "Anlagendruck, Schwelle für die Brennersperre", name_en: "System pressure, burner lock threshold", faktor: 0.01, einheit: bar, quelle: [geronet1]}
+      - {index: 0x2719, sub: 2, name: "Interne Pumpe, Sollleistung", name_en: "Internal pump, output setpoint", faktor: 1, einheit: "%", quelle: [geronet1]}
+      - {index: 0x271B, sub: 2, name: "Interne Pumpe, elektrische Leistung", name_en: "Internal pump, electrical power", faktor: 1, einheit: W, quelle: [geronet1]}
+      - {index: 0x2729, sub: 2, name: "Größter Volumenstrom", name_en: "Maximum flow rate", faktor: 1, einheit: "l/h", quelle: [geronet1]}
+      - {index: 0x272A, sub: 2, name: "Volumenstrom-Faktor im Heizbetrieb", name_en: "Flow rate factor, heating", faktor: 1, einheit: "%", quelle: [geronet1]}
+      - {index: 0x272B, sub: 2, name: "Volumenstrom-Faktor bei Warmwasserladung", name_en: "Flow rate factor, hot water charging", faktor: 1, einheit: "%", quelle: [geronet1]}
+      - {index: 0x2741, sub: 0, name: "Zeit bis zur nächsten Wartung", name_en: "Time until next service", faktor: 1, einheit: h, json: "09 01 2641 00", quelle: [kraiz]}
+      - {index: 0x2742, sub: 0, name: "Wartungsintervall", name_en: "Service interval", faktor: 1, einheit: h, json: "09 01 2642 00", quelle: [kraiz]}
+      - {index: 0x274E, sub: 0, name: "Ausgangstest", name_en: "Output test", werte: "Code", werte_en: "code", quelle: [geronet1]}
+      - {index: 0x274F, sub: 2, name: "Ausgang MFA1", name_en: "Output MFA1", werte: "Code", werte_en: "code", quelle: [geronet1]}
+      - {index: 0x2763, sub: 2, name: "Gasdruckwächter", name_en: "Gas pressure switch", werte: "Code", werte_en: "code", quelle: [geronet1]}
+      - {index: 0x276A, sub: 2, name: "Betriebsart der internen Pumpe im Heizbetrieb", name_en: "Internal pump mode, heating", werte: "Code", werte_en: "code", quelle: [geronet1]}
+      - {index: 0x2A01, sub: 0, name: "Brennerstarts, Gesamtzähler", name_en: "Burner starts, total counter", werte: "Zähler", werte_en: "counter", quelle: [geronet1]}
+      - {index: 0x2A21, sub: 0, name: "Betriebsstunden des Brenners", name_en: "Burner operating hours", faktor: 1, einheit: h, json: "09 01 2921 00", quelle: [geronet1, kraiz],
+         hinweis: "geronet1: Zähler seit dem Rücksetzen; kraiz: gesamt", hinweis_en: "geronet1: counter since reset; kraiz: total"}
+
+  - titel: "Heizkreis 1 (Knoten 1, JSON-Modul MI 02 + 0x400)"
+    titel_en: "Heating circuit 1 (node 1, JSON module MI 02 + 0x400)"
+    knoten: 1
+    objekte:
+      - {index: 0x291B, sub: 2, name: "Untere Grenze des Vorlaufsolls", name_en: "Flow setpoint, lower limit", faktor: 0.1, einheit: "°C", json: "02 00 251B 02", quelle: [komenda]}
+      - {index: 0x291C, sub: 2, name: "Obere Grenze des Vorlaufsolls", name_en: "Flow setpoint, upper limit", faktor: 0.1, einheit: "°C", json: "02 00 251C 02", quelle: [komenda]}
+      - {index: 0x292C, sub: 2, name: "Vorlaufsoll im Sonderniveau", name_en: "Flow setpoint, special level", faktor: 0.1, einheit: "°C", json: "02 00 252C 02", modbus: 113, quelle: [kraiz, borg]}
+      - {index: 0x293A, sub: 2, name: "Raumsoll Normal", name_en: "Room setpoint, normal", faktor: 0.1, einheit: "°C", json: "02 00 253A 02", modbus: 107, quelle: [kraiz, borg],
+         hinweis: "JSON-Adresse am RG2 mitgeschnitten (Abschnitt 10a)", hinweis_en: "JSON address seen on the RG2 (section 10a)"}
+      - {index: 0x293B, sub: 2, name: "Raumsoll Komfort", name_en: "Room setpoint, comfort", faktor: 0.1, einheit: "°C", json: "02 00 253B 02", modbus: 106, quelle: [kraiz, borg],
+         hinweis: "JSON-Adresse am RG2 mitgeschnitten (Abschnitt 10a)", hinweis_en: "JSON address seen on the RG2 (section 10a)"}
+      - {index: 0x2954, sub: 2, name: "Frostschutzgrenze der Außentemperatur", name_en: "Frost protection limit, outdoor temperature", faktor: 0.1, einheit: "°C", json: "02 00 2554 02", quelle: [komenda]}
+      - {index: 0x2969, sub: 2, name: "Vorlaufsoll Absenk", name_en: "Flow setpoint, setback", faktor: 0.1, einheit: "°C", json: "02 00 2569 02", modbus: 112, quelle: [kraiz, borg]}
+      - {index: 0x296A, sub: 2, name: "Vorlaufsoll Normal", name_en: "Flow setpoint, normal", faktor: 0.1, einheit: "°C", json: "02 00 256A 02", modbus: 111, quelle: [kraiz, borg]}
+      - {index: 0x296B, sub: 2, name: "Vorlaufsoll Komfort", name_en: "Flow setpoint, comfort", faktor: 0.1, einheit: "°C", json: "02 00 256B 02", modbus: 110, quelle: [kraiz, borg]}
+      - {index: 0x296E, sub: 2, name: "Bauweise des Gebäudes", name_en: "Building construction type", werte: "Code", werte_en: "code", json: "02 00 256E 02", quelle: [komenda]}
+      - {index: 0x297C, sub: 2, name: "Heizgrenze nach Raumsoll", name_en: "Heating limit by room setpoint", werte: "Code", werte_en: "code", json: "02 00 257C 02", quelle: [komenda]}
+      - {index: 0x297E, sub: 4, name: "Aktuelle Betriebsart des Heizkreises", name_en: "Current mode of the heating circuit", werte: "Code", werte_en: "code", json: "02 00 257E 04", modbus: 102, quelle: [kraiz, borg]}
+      - {index: 0x297E, sub: 5, name: "Status des Heizkreises", name_en: "Status of the heating circuit", werte: "Code", werte_en: "code", json: "02 00 257E 05", modbus: 103, quelle: [kraiz, borg]}
+      - {index: 0x2981, sub: 2, name: "Niveauanhebung nach Außentemperatur", name_en: "Level boost by outdoor temperature", faktor: 0.1, einheit: "°C", json: "02 00 2581 02", quelle: [komenda]}
+      - {index: 0x29A3, sub: 2, name: "Aufheizoptimierung", name_en: "Heat-up optimisation", werte: "Code", werte_en: "code", json: "02 00 25A3 02", quelle: [komenda]}
+      - {index: 0x29C7, sub: 2, name: "Heizgrenze nach Vorlauftemperatur", name_en: "Heating limit by flow temperature", faktor: 0.1, einheit: "°C", json: "02 00 25C7 02", quelle: [komenda]}
+
+  - titel: "System (Knoten 1, JSON-Modul MI 01 + 0x100)"
+    titel_en: "System (node 1, JSON module MI 01 + 0x100)"
+    knoten: 1
+    objekte:
+      - {index: 0x2660, sub: 2, name: "Pufferspeicher, Temperatur oben", name_en: "Buffer tank, top temperature", faktor: 0.1, einheit: "°C", json: "01 00 2560 02", modbus: 118, quelle: [kraiz, borg]}
+      - {index: 0x2661, sub: 2, name: "Pufferspeicher, Temperatur unten", name_en: "Buffer tank, bottom temperature", faktor: 0.1, einheit: "°C", json: "01 00 2561 02", modbus: 119, quelle: [kraiz, borg]}
+      - {index: 0x2712, sub: 0, name: "Kaskade, Sollwert Heizen", name_en: "Cascade, heating setpoint", faktor: 0.1, einheit: "°C", json: "01 00 2612 00", modbus: 145, quelle: [kraiz, borg]}
+      - {index: 0x271C, sub: 0, name: "Kaskade, Soll-Modulation Heizen", name_en: "Cascade, target modulation heating", faktor: 0.01, einheit: "%", json: "01 00 261C 00", modbus: 143, quelle: [kraiz, borg]}
+      - {index: 0x271D, sub: 0, name: "Kaskade, Soll-Modulation Warmwasser", name_en: "Cascade, target modulation hot water", faktor: 0.01, einheit: "%", json: "01 00 261D 00", modbus: 144, quelle: [kraiz, borg]}
+      - {index: 0x271F, sub: 2, name: "Temperatur am Plattenwärmetauscher (Fühler B2)", name_en: "Plate heat exchanger temperature (sensor B2)", faktor: 0.1, einheit: "°C", json: "01 00 261F 02", modbus: 117, quelle: [kraiz, borg]}
+      - {index: 0x27E4, sub: 2, name: "Folgewechsel der Kessel", name_en: "Boiler sequence change", werte: "Code", werte_en: "code", json: "01 00 26E4 02", modbus: 140, quelle: [kraiz, borg]}
+      - {index: 0x27E6, sub: 2, name: "Wechselzeit der Kesselfolge", name_en: "Sequence change time", faktor: 1, einheit: h, json: "01 00 26E6 02", modbus: 141, quelle: [kraiz, borg]}
+      - {index: 0x27FE, sub: 2, name: "Kaskade, Abgleichtemperatur", name_en: "Cascade, balancing temperature", faktor: 0.1, einheit: "°C", json: "01 00 26FE 02", modbus: 142, quelle: [kraiz, borg]}
+      - {index: 0x28F9, sub: 2, name: "Leistungsvorgabe für Eingang N1 über Ethernet (0–100 %)", name_en: "Output demand for input N1 via Ethernet (0–100 %)", faktor: 0.01, einheit: "%", json: "01 00 27F9 02", modbus: 114, quelle: [kraiz, borg]}
+
+  - titel: "Warmwasser (Knoten 1, JSON-Modul MI 03 + 0x500)"
+    titel_en: "Hot water (node 1, JSON module MI 03 + 0x500)"
+    knoten: 1
+    objekte:
+      - {index: 0x2A38, sub: 2, name: "Warmwasser-Soll Absenk", name_en: "Hot water setpoint, setback", faktor: 0.1, einheit: "°C", json: "03 00 2538 02", modbus: 133, quelle: [kraiz, borg]}
+      - {index: 0x2A51, sub: 2, name: "Warmwasserpumpe", name_en: "Hot water pump", werte: "0 aus, 1 ein", werte_en: "0 off, 1 on", json: "03 00 2551 02", modbus: 137, quelle: [kraiz, borg]}
+      - {index: 0x2A57, sub: 2, name: "Rücklauftemperatur der Zirkulation", name_en: "Circulation return temperature", faktor: 0.1, einheit: "°C", json: "03 00 2557 02", modbus: 136, quelle: [kraiz, borg]}
+
+# Objektnummern, die in der Quelle ohne Bezeichnung stehen (Liste [Index, Sub])
+ohne_bezeichnung:
+  - stelle: "Knoten 2, Antworten des Kessels"
+    stelle_en: "node 2, replies of the boiler"
+    quelle: geronet1
+    objekte:
+      - [0x2503, 1]
+      - [0x250D, 1]
+      - [0x2516, 1]
+      - [0x2523, 1]
+      - [0x2528, 1]
+      - [0x252E, 0]
+      - [0x2569, 1]
+      - [0x2569, 2]
+      - [0x256B, 1]
+      - [0x256C, 1]
+      - [0x256E, 1]
+      - [0x2574, 1]
+      - [0x2574, 2]
+      - [0x2581, 1]
+      - [0x258B, 1]
+      - [0x258C, 0]
+      - [0x2594, 1]
+      - [0x2594, 2]
+      - [0x259B, 1]
+      - [0x2716, 1]
+      - [0x2717, 1]
+      - [0x271A, 2]
+      - [0x2729, 1]
+      - [0x272A, 1]
+      - [0x272B, 1]
+      - [0x272C, 2]
+      - [0x2732, 2]
+      - [0x273B, 2]
+      - [0x273D, 1]
+      - [0x273D, 2]
+      - [0x2754, 1]
+      - [0x2754, 2]
+      - [0x2764, 2]
+      - [0x2765, 1]
+      - [0x2766, 2]
+      - [0x276A, 1]
+      - [0x2770, 2]
+      - [0x2772, 1]
+      - [0x2772, 2]
+      - [0x2778, 1]
+      - [0x2778, 2]
+      - [0x2A22, 0]
+  - stelle: "Schreibtelegramme auf `0x602`"
+    stelle_en: "write telegrams on `0x602`"
+    quelle: geronet1
+    objekte:
+      - [0x2528, 2]
+      - [0x252E, 0]
+      - [0x2705, 1]
+  - stelle: "Schreibtelegramme auf `0x6C2`"
+    stelle_en: "write telegrams on `0x6C2`"
+    quelle: geronet1
+    objekte:
+      - [0x251F, 1]
+      - [0x251F, 2]

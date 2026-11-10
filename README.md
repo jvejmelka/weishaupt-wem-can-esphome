@@ -488,7 +488,9 @@ python3 tests/links.py                           # relative Links und Anker in a
 **Registertabelle:** alle CAN-Objekte stehen nur in [`register.yaml`](register.yaml); daraus
 erzeugt [`werkzeuge/register_erzeugen.py`](werkzeuge/register_erzeugen.py) die C++-Konstanten
 (`components/weishaupt_can/register_gen.h`) und die Tabellen in PROTOKOLL.md und hier. Ablauf zum Ändern:
-[INSTALL.md, Abschnitt 14](INSTALL.md#14-register-ändern).
+[INSTALL.md, Abschnitt 14](INSTALL.md#14-register-ändern). Objekte aus anderen Projekten, die an der eigenen Anlage
+noch nicht geprüft sind, stehen getrennt in [`register-uebernommen.yaml`](register-uebernommen.yaml) – mit Quelle je
+Objekt, ohne Firmware-Konstanten ([PROTOKOLL, Abschnitt 7a](PROTOKOLL.md#7a-übernommene-objekte-aus-anderen-projekten-ungeprüft)).
 
 Bei jedem Push laufen alle drei in [GitHub Actions](https://github.com/jvejmelka/weishaupt-wem-can-esphome/actions/workflows/ci.yml), dazu wird die
 Firmware mit ESPHome 2026.9.0 und einer Dummy-`secrets.yaml` (aus `secrets.yaml.example`)

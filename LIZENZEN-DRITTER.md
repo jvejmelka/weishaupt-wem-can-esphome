@@ -70,5 +70,12 @@ Aus [MenkeC/Weishaupt-C3supermini](https://github.com/MenkeC/Weishaupt-C3supermi
 stammen nur Protokollangaben – Adressen, Faktoren, Bedeutungen; Code ist von dort nicht übernommen. Die Herkunft je
 Objekt steht in [`register.yaml`](register.yaml) (`quelle:`), die Projekte unter „Quellen“ in der [README](README.md).
 
+Dasselbe gilt für die ungeprüft übernommenen Objekte in [`register-uebernommen.yaml`](register-uebernommen.yaml)
+([PROTOKOLL, Abschnitt 7a](PROTOKOLL.md#7a-übernommene-objekte-aus-anderen-projekten-ungeprüft)): Objektnummer,
+Skalierung, Einheit und Bedeutung mit eigenen Bezeichnungen und der Quelle je Objekt – aus den drei genannten
+Projekten, aus [kraiz/hassio-weishaupt](https://github.com/kraiz/hassio-weishaupt) (MIT) und aus dem
+[Pull Request #10](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/pull/10) von ChristophKomenda.
+Tabellen, Texte und Code aus diesen Quellen sind nicht übernommen.
+
 Texte und Unterlagen von Weishaupt (Anleitungen, Fehlertexte, Firmware-Dateien) sind **nicht** im Repository; die
 eigenen Kurztexte der Warn- und Fehlercodes stehen in [`fehlercodes.yaml`](fehlercodes.yaml).
