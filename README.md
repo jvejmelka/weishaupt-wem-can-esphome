@@ -29,12 +29,13 @@ das am CAN-Bus einer Weishaupt-Brennwertheizung mit **WEM-Systemgerät** (z. B. 
 
 ## Sicherheitsregeln – bitte lesen
 
-1. **Auf den Kessel (Knoten 2) wird nie geschrieben.** Ab Werk schickt die Firmware am Bus nur
-   Lese-Anfragen.
-2. **Schreiben geht ab Werk ausschließlich über den WEM** (JSON). Das Schreibfeld erlaubt nur die
-   Module SYSTEM0 (MI 01), Heizkreis HZK0 (MI 02) und Warmwasser WW0 (MI 03). **Schreiben per CAN**
-   an den WEM gibt es ab v35 als Schalter, **ab Werk aus** – bestätigt nur an einer WTC-GW 15-B,
-   auf eigene Gefahr ([PROTOKOLL.md – Schreiben per CAN](PROTOKOLL.md#schreiben-per-can-ab-v35-ab-werk-aus)).
+1. **Auf den Kessel (Knoten 2) wird nie geschrieben.** Dorthin gehen nur Lese-Anfragen.
+2. **Geschrieben wird nur am WEM (Knoten 1).** Heizkreis und Warmwasser schaltet die Firmware
+   **seit v42 ab Werk direkt per CAN**, ohne JSON – bestätigt nur an einer WTC-GW 15-B, an anderen
+   Anlagen auf eigene Gefahr ([PROTOKOLL.md – Schreiben per CAN](PROTOKOLL.md#schreiben-per-can-ab-v35-seit-v42-vorgabe)).
+   Der ältere Weg über die JSON-Schnittstelle des WEM bleibt als Rückweg (Schalter „Schalten per CAN
+   statt JSON“ aus); das Schreibfeld dort erlaubt nur die Module SYSTEM0 (MI 01), Heizkreis HZK0
+   (MI 02) und Warmwasser WW0 (MI 03). Alle Wege im Überblick: [PROTOKOLL.md](PROTOKOLL.md).
 3. **Der WEM ist empfindlich.** Häufige JSON-Anfragen, Anfragen an nicht vorhandene Objekte oder
    mehrere Clients gleichzeitig können seine JSON-Schnittstelle bis zum nächsten Stromlos-Machen
    lahmlegen. Deshalb: mindestens eine Minute zwischen zwei Befehlen, kein Polling über JSON.

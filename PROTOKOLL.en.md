@@ -7,19 +7,22 @@ firmware picks up by passive listening, what it requests itself, and how it swit
 JSON interface. Measured on a **WTC-GW 15-B** with WEM system unit; where a statement comes only
 from third-party sources or is merely plausible, this is noted.
 
-> **By default** the firmware never writes to the bus: on the bus it only issues read requests (SDO,
-> command byte `0x40`), and switching goes through the WEM's JSON interface. Writing on the bus only
-> happens once it is switched on:
+> **The ways the firmware talks to the heating system** (as of v42 – every version added one):
 >
-> - **Switching via CAN** (from v35): heating circuit and hot water go via SDO to the WEM (node 1),
->   without JSON. The measured installation has been running this way since 26 Oct 2026
->   ([Writing via CAN](#writing-via-can-from-v35-off-by-default)).
-> - **Free CAN writing** (experts): single objects, on the WEM (node 1) only.
-> - **CAN tunnel** (experiment, branch `can-tunnel`): forwards unfiltered whatever the device at the
->   other end sends – including write requests, for example those of a room unit
->   ([section 10b](#10b-can-tunnel-over-wlan-experiment-branch-can-tunnel)).
+> | Way | What | Default |
+> |---|---|---|
+> | **CAN listening** | PDOs and the answers to requests the WEM sends to the boiler. The board sends nothing. | always on |
+> | **CAN reading** (SDO, command byte `0x40`) | own read requests to the WEM (node 1) and the boiler (node 2): on a schedule, on occasion (operating modes, WEM only), for verification after switching, by hand | schedule off (switch “Eigene CAN-Anfragen”), everything else on |
+> | **CAN writing to the WEM** (SDO, node 1) | switching heating circuit (`0x2933`/2) and hot water (`0x2A20`/2) – directly on the bus, without JSON | **on** since v42 (v35–v41: could be enabled) |
+> | **Free CAN writing** (experts) | single objects by hand, on the WEM (node 1) only, `0x2000`–`0x5FFF` only | off |
+> | **JSON writing** (HTTP to the WEM) | fallback for switching when “Schalten per CAN statt JSON” is off. Up to v34 this was the only way. | unused |
+> | **JSON reading** (HTTP to the WEM) | by hand only: “Werte per JSON abrufen” (one request, from v42), files on the SD card. Never on a schedule – the WEM does not tolerate polling. | on button press only |
+> | **CAN tunnel** (experiment, branch `can-tunnel`) | forwards unfiltered whatever the device at the other end sends – including the write requests of a room unit ([section 10b](#10b-can-tunnel-over-wlan-experiment-branch-can-tunnel)) | not included |
 >
-> The firmware has no write commands of its own to the boiler (node 2).
+> **The firmware never writes to the boiler (node 2)** – only read requests go there. Writing goes to the
+> WEM. Details: [Listening and reading](#2-passive-listening-and-on-demand-reading),
+> [Writing via CAN](#writing-via-can-from-v35-default-since-v42). The measured installation has been
+> switching via CAN since 26 Oct 2026.
 
 - [1. Overview](#1-overview)
 - [2. Passive listening and on-demand reading](#2-passive-listening-and-on-demand-reading)
@@ -163,8 +166,8 @@ scans over `0x602` made the WEM portal stall until the scan stopped. Nobody else
 (`0x601`) – long dialogues are harmless there.
 
 Conversely, **only the WEM** writes to the boiler: seven values every ~5 s (`0x2709`, `0x270A`,
-`0x252B`–`0x252F`: demand, flow and DHW setpoint). By default the board never writes on the bus
-(writing via CAN to the WEM can be enabled from v35, see [Writing via CAN](#writing-via-can-from-v35-off-by-default)).
+`0x252B`–`0x252F`: demand, flow and DHW setpoint). The board never writes to the boiler;
+it writes to the WEM when it switches (from v35, default since v42, see [Writing via CAN](#writing-via-can-from-v35-default-since-v42)).
 
 ### Start-up, system table and identity
 
@@ -553,15 +556,19 @@ belong to modules that the measured installation does not have. **Help wanted:**
 heating circuit, solar or room units can check with single read commands on the WEM (`0x601`) where
 their objects are.
 
-### Writing via CAN (from v35, off by default)
+<a name="writing-via-can-from-v35-off-by-default"></a>
 
-By default the firmware **never** writes via SDO on the bus; switching goes through JSON, the bus
-serves for verification. From v35 there are three switches in the web interface (group “Schreiben per
-CAN”):
+### Writing via CAN (from v35, default since v42)
+
+Up to v34 the firmware never wrote via SDO on the bus: switching went through JSON, the bus served
+for verification. Since v35 it can switch heating circuit and hot water directly via CAN on the WEM,
+and **since v42 this is the default** – the WEM accepts the command at once, and its fragile JSON
+interface stays untouched. JSON is the fallback (switch off). Three switches in the web interface
+(group “Schreiben per CAN”):
 
 | Switch | default | effect |
 |---|---|---|
-| Schalten per CAN statt JSON (Heizkreis, Warmwasser) | off | app buttons, `cmd/heizkreis`, `cmd/warmwasser` write via SDO download to the WEM: `0x2933`/2 or `0x2A20`/2, 1 byte. Queue, lock minute and bus verification as on the JSON path; WEM abort = “rejected” |
+| Schalten per CAN statt JSON (Heizkreis, Warmwasser) | **on** (since v42; v35–v41 off) | app buttons, `cmd/heizkreis`, `cmd/warmwasser` write via SDO download to the WEM: `0x2933`/2 or `0x2A20`/2, 1 byte. Queue, lock minute and bus verification as on the JSON path; WEM abort = “rejected” |
 | Freies CAN-Schreiben (Experten) | off | input field and `cmd/can_schreiben`: `NODE IDX SUB VALUE [LENGTH]` or `NODE IDX SUB = B1 B2 …` (hex, up to 64 bytes, from 5 bytes segmented with a 50 ms pause). **Node 01 only, 2000–5FFF only** – never the boiler, never communication objects (0x1000–0x1FFF) |
 | Lange Lesebefehle auch am Kessel | **on** | segmented/block reads also on node 2 (there the board shares the channel with the WEM) |
 

@@ -1,8 +1,9 @@
-# Paket WEM-SCHALTEN: Heizkreis-Betriebsart ueber die WEM-JSON-Schnittstelle
-# (http://<WEM>/ajax/CanApiJson.json), Kontrolle danach am CAN-Bus.
-# Braucht das Paket kessel. Ab Werk wird NIE auf den Bus geschrieben, nur ueber den WEM.
+# Paket WEM-SCHALTEN: Heizkreis-Betriebsart am WEM schalten, Kontrolle danach am CAN-Bus.
+# Zwei Wege: per CAN direkt an den WEM (Knoten 1; ab v35, seit v42 ab Werk AN) oder ueber die
+# WEM-JSON-Schnittstelle (http://<WEM>/ajax/CanApiJson.json; Rueckweg, bis v34 der einzige Weg).
+# Braucht das Paket kessel. In den Kessel (Knoten 2) wird NIE geschrieben.
 #
-# Ab v35, ab Werk AUS (Schalter in der Weboberflaeche, Gruppe "Schreiben per CAN"):
+# Schalter in der Weboberflaeche, Gruppe "Schreiben per CAN" (ab v35):
 #   - "Schalten per CAN statt JSON": Heizkreis/Warmwasser per SDO-Download an den WEM
 #     (0x2933/2, 0x2A20/2), sonst alles wie beim JSON-Weg (Warteschlange, Sperrminute, Kontrolle).
 #   - "Freies CAN-Schreiben (Experten)": Eingabefeld und ${geraet}/cmd/can_schreiben,
@@ -35,7 +36,7 @@ web_server:
       name: "Schreibbefehl ueber WEM (Experten)"
       sorting_weight: 45
     - id: g_can_schreiben
-      name: "Schreiben per CAN (experimentell, ab Werk aus)"
+      name: "Schreiben per CAN"
       sorting_weight: 46
     - id: g_sd
       name: "SD-Karte des WEM (Dateien lesen)"
@@ -185,7 +186,7 @@ script:
                       id: wem_senden
                       vg: !lambda 'return id(wcan)->schalten.vg;'
 
-  # Schalten per CAN (ab v35, Schalter, ab Werk aus): Betriebsart per SDO-Download an den WEM
+  # Schalten per CAN (ab v35, Schalter, seit v42 ab Werk an): Betriebsart per SDO-Download an den WEM
   # (Knoten 1, 0x2933/2 bzw. 0x2A20/2, 1 Byte). Antwort 0x60 = bestaetigt, 0x80 = abgelehnt.
   # Danach wie beim JSON-Weg: der Bus entscheidet (Kontroll-Lesung nach 3 s).
   - id: can_senden

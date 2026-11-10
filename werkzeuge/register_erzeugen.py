@@ -206,7 +206,7 @@ def header(objekte):
         "",
         "constexpr uint16_t anfrage_id(const Sdo &o) { return 0x600 + o.knoten; }",
         "constexpr uint16_t antwort_id(const Sdo &o) { return 0x580 + o.knoten; }",
-        "// Lese-Anfrage (SDO-Upload, Kommandobyte 0x40) - ab Werk das Einzige, was die Firmware auf den Bus schickt",
+        "// Lese-Anfrage (SDO-Upload, Kommandobyte 0x40)",
         "inline std::vector<uint8_t> lese(const Sdo &o) {",
         "  return {0x40, (uint8_t) (o.index & 0xFF), (uint8_t) (o.index >> 8), o.sub, 0, 0, 0, 0};",
         "}",

@@ -7,19 +7,22 @@ Firmware davon mithört, was sie selbst anfragt und wie sie über die JSON-Schni
 schaltet. Gemessen an einer **WTC-GW 15-B** mit WEM-Systemgerät; wo eine Angabe nur aus fremden
 Quellen stammt oder nur plausibel ist, steht das dabei.
 
-> **Ab Werk** schreibt die Firmware nie auf den Bus: Am Bus stellt sie nur Lese-Anfragen (SDO,
-> Kommandobyte `0x40`), geschaltet wird über die JSON-Schnittstelle des WEM. Geschrieben wird am Bus
-> erst, wenn man es einschaltet:
+> **Auf welchen Wegen die Firmware mit der Heizung spricht** (Stand v42 – mit jeder Fassung kam ein Weg dazu):
 >
-> - **Schalten per CAN** (ab v35): Heizkreis und Warmwasser gehen per SDO an den WEM (Knoten 1), ohne
->   JSON. So läuft die gemessene Anlage seit dem 26.10.2026
->   ([Schreiben per CAN](#schreiben-per-can-ab-v35-ab-werk-aus)).
-> - **Freies CAN-Schreiben** (Experten): einzelne Objekte, nur am WEM (Knoten 1).
-> - **CAN-Tunnel** (Versuch, Zweig `can-tunnel`): reicht ungefiltert weiter, was das Gerät am anderen
->   Ende sendet – auch Schreibaufträge, etwa die eines Raumgeräts
->   ([Abschnitt 10b](#10b-can-tunnel-über-wlan-versuch-zweig-can-tunnel)).
+> | Weg | Was | Ab Werk |
+> |---|---|---|
+> | **CAN mithören** | PDOs und die Antworten auf Fragen, die der WEM dem Kessel stellt. Das Board sendet dabei nichts. | immer an |
+> | **CAN lesen** (SDO, Kommandobyte `0x40`) | eigene Leseanfragen an den WEM (Knoten 1) und den Kessel (Knoten 2): im Takt, bei Anlass (Betriebsarten, nur WEM), zur Kontrolle nach dem Schalten, von Hand | Takt aus (Schalter „Eigene CAN-Anfragen“), alles andere an |
+> | **CAN schreiben an den WEM** (SDO, Knoten 1) | Heizkreis (`0x2933`/2) und Warmwasser (`0x2A20`/2) schalten – direkt am Bus, ohne JSON | **an** seit v42 (v35–v41 einschaltbar) |
+> | **Freies CAN-Schreiben** (Experten) | einzelne Objekte von Hand, nur am WEM (Knoten 1), nur `0x2000`–`0x5FFF` | aus |
+> | **JSON schreiben** (HTTP an den WEM) | Rückweg fürs Schalten, wenn „Schalten per CAN statt JSON“ aus ist. Bis v34 war das der einzige Weg. | ungenutzt |
+> | **JSON lesen** (HTTP an den WEM) | nur von Hand: „Werte per JSON abrufen“ (eine Anfrage, ab v42), Dateien der SD-Karte. Nie im Takt – der WEM verträgt kein Polling. | nur auf Knopfdruck |
+> | **CAN-Tunnel** (Versuch, Zweig `can-tunnel`) | reicht ungefiltert weiter, was das Gerät am anderen Ende sendet – auch die Schreibaufträge eines Raumgeräts ([Abschnitt 10b](#10b-can-tunnel-über-wlan-versuch-zweig-can-tunnel)) | nicht enthalten |
 >
-> Eigene Schreibbefehle an den Kessel (Knoten 2) hat die Firmware nicht.
+> **In den Kessel (Knoten 2) schreibt die Firmware nie** – dorthin gehen nur Leseanfragen. Geschrieben wird
+> am WEM. Einzelheiten: [Mithören und Lesen](#2-mithören-und-lesen-auf-anforderung),
+> [Schreiben per CAN](#schreiben-per-can-ab-v35-seit-v42-vorgabe). Die gemessene Anlage schaltet seit
+> dem 26.10.2026 per CAN.
 
 - [1. Überblick](#1-überblick)
 - [2. Mithören und Lesen auf Anforderung](#2-mithören-und-lesen-auf-anforderung)
@@ -161,8 +164,8 @@ Anlage ließen Scans über `0x602` das WEM-Portal stocken, bis der Scan aufhört
 sonst niemand – dort sind auch lange Dialoge unkritisch.
 
 Umgekehrt schreibt **nur der WEM** in den Kessel: alle ~5 s sieben Werte (`0x2709`, `0x270A`,
-`0x252B`–`0x252F`: Anforderung, Vorlauf- und Warmwasser-Soll). Das Board schreibt ab Werk nie auf den Bus
-(Schreiben per CAN an den WEM ist ab v35 einschaltbar, siehe [Schreiben per CAN](#schreiben-per-can-ab-v35-ab-werk-aus)).
+`0x252B`–`0x252F`: Anforderung, Vorlauf- und Warmwasser-Soll). Das Board schreibt nie in den Kessel;
+es schreibt an den WEM, wenn es schaltet (ab v35, seit v42 Vorgabe, siehe [Schreiben per CAN](#schreiben-per-can-ab-v35-seit-v42-vorgabe)).
 
 ### Anlauf, Systemtabelle und Kennung
 
@@ -534,14 +537,19 @@ Modulen, die es an der gemessenen Anlage nicht gibt. **Mithilfe gesucht:** Wer e
 Heizkreis, Solar oder Raumgeräte hat, kann mit einzelnen Lesebefehlen am WEM (`0x601`) prüfen,
 wo deren Objekte liegen.
 
-### Schreiben per CAN (ab v35, ab Werk aus)
+<a name="schreiben-per-can-ab-v35-ab-werk-aus"></a>
 
-Ab Werk schreibt die Firmware **nie** per SDO auf den Bus; geschaltet wird über JSON, der Bus dient
-zur Kontrolle. Ab v35 gibt es drei Schalter in der Weboberfläche (Gruppe „Schreiben per CAN“):
+### Schreiben per CAN (ab v35, seit v42 Vorgabe)
+
+Bis v34 schrieb die Firmware nie per SDO auf den Bus: Geschaltet wurde über JSON, der Bus diente zur
+Kontrolle. Seit v35 kann sie Heizkreis und Warmwasser direkt per CAN am WEM schalten, **seit v42 ist
+das die Vorgabe** – der WEM nimmt den Befehl sofort an, und seine empfindliche JSON-Schnittstelle
+bleibt unberührt. JSON ist der Rückweg (Schalter aus). Drei Schalter in der Weboberfläche (Gruppe
+„Schreiben per CAN“):
 
 | Schalter | ab Werk | Wirkung |
 |---|---|---|
-| Schalten per CAN statt JSON (Heizkreis, Warmwasser) | aus | App-Knöpfe, `cmd/heizkreis`, `cmd/warmwasser` schreiben per SDO-Download an den WEM: `0x2933`/2 bzw. `0x2A20`/2, 1 Byte. Warteschlange, Sperrminute und Kontrolle am Bus wie beim JSON-Weg; Abbruch des WEM = „abgelehnt“ |
+| Schalten per CAN statt JSON (Heizkreis, Warmwasser) | **an** (seit v42; v35–v41 aus) | App-Knöpfe, `cmd/heizkreis`, `cmd/warmwasser` schreiben per SDO-Download an den WEM: `0x2933`/2 bzw. `0x2A20`/2, 1 Byte. Warteschlange, Sperrminute und Kontrolle am Bus wie beim JSON-Weg; Abbruch des WEM = „abgelehnt“ |
 | Freies CAN-Schreiben (Experten) | aus | Eingabefeld und `cmd/can_schreiben`: `KN IDX SUB WERT [LÄNGE]` oder `KN IDX SUB = B1 B2 …` (hex, bis 64 Byte, ab 5 Byte in Teilstücken mit 50 ms Pause). **Nur Knoten 01, nur 2000–5FFF** – nie der Kessel, nie Kommunikationsobjekte (0x1000–0x1FFF) |
 | Lange Lesebefehle auch am Kessel | **an** | Teilstücke/Block beim Lesen auch an Knoten 2 (dort teilt sich das Board den Kanal mit dem WEM) |
 
