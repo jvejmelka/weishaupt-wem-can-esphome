@@ -509,6 +509,10 @@ cheaper, but **without** galvanic isolation.
   - [Varitras/weishaupt_modbus](https://github.com/Varitras/weishaupt_modbus) – Home Assistant via the WEM-Modbus gateway
   - [Home Assistant forum: Weishaupt WTC, CAPI VG, CanApiJson](https://community.home-assistant.io/t/weishaupt-wtc-weishaupt-capi-vg-canapijson/997400) – structure of the VG field (CM MI MX OX OS VS VA)
   - [geronet1/wem-python Issue #1](https://github.com/geronet1/wem-python/issues/1)
+  - [Homebridge plugin “Weishaupt Local” by PiLLoX](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/issues/4#issuecomment-6782046640) – boiler and room temperature (RG2, `258B/02`),
+    DHW charging and operating modes in Apple Home via the JSON interface; source as a ZIP in the comment
+    (instructions in French, no licence stated). Polls every 30 s by default – the notes from the
+    kraiz issues above apply there as well.
 - ESPHome documentation: [CAN bus / esp32_can](https://esphome.io/components/canbus/esp32/),
   [Packages](https://esphome.io/components/packages/),
   [Wi-Fi incl. `wifi.configure`](https://esphome.io/components/wifi/),
