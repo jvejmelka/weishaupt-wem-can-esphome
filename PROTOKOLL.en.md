@@ -254,7 +254,7 @@ bus by themselves. They are read even when “Eigene CAN-Anfragen” is off, but
   with package `verdacht` (included in the main file) through the rules R3 and R5 instead,
 - when another rule triggers ([section 6a](#6a-rules-reading-operating-modes-on-suspicion)),
 - after the firmware's own DHW switching command,
-- on request: button “Status lesen” (“read status”; web interface, phone app) or MQTT `<gerät>/cmd/status`.
+- on request: button “Status lesen” (“read status”; expert interface, phone app) or MQTT `<gerät>/cmd/status`.
   Requests are accepted at most every 10 s and are only sent while the bus is alive.
 
 The heating circuit operating mode is read at most every 2 min – except on explicit request and when a rule triggers (then the minimum interval of the rule applies). Known gap: a change
@@ -506,7 +506,7 @@ Sommer, Komfort, Normal, Absenk; DHW: Ein, Aus.)
 The heating circuit codes are listed this way in the Weishaupt register table. The DHW operating mode
 is not listed there; it was found by scan and diff (see [section 7](#7-finding-new-objects-scan-and-diff)).
 
-Further objects can be written via the write field of the web interface, but only in the
+Further objects can be written via the write field of the expert interface, but only in the
 modules MI 01, 02 and 03 (see [section 6](#6-web-interface-reading-and-writing)).
 
 ### Verified read objects: heat quantities
@@ -743,7 +743,7 @@ Disabled rules keep running in **shadow mode** (they report “would have trigge
 All rules rest for 2 min after the firmware's own switching command; R1 also rests for 5 min after a
 restart of the WEM (heartbeat `0x701` = `00`), and R5 does not read when R3 is already reading at the
 same moment. Custom rules (short form “CAN ID + mask + pattern”, from v30 also sequences, edges and
-conditions) are experimental and have their own master switch. Configure via the web interface, file `<gerät>/cmd/regeln` or command
+conditions) are experimental and have their own master switch. Configure via the expert interface, file `<gerät>/cmd/regeln` or command
 `<gerät>/cmd/regel`; state under `<gerät>/regeln/stand`, log under
 `<gerät>/verdacht/protokoll`, events under `<gerät>/verdacht/ereignis`.
 
@@ -808,8 +808,10 @@ Result on the measured installation: standby → time program 1 changed node 1 `
 2 – the JSON value `0x2533`/2 plus `0x400`. DHW on → off in the range `0x2A00`–`0x2AFF`
 changed `0x2A20`/2 from 1 to 2 – an object that is not in any published list.
 
-> **Scan only on the bus, never via JSON.** On the bus, read scans with many abort responses showed
-> no impairment on the measured installation. Via JSON, by contrast, every request to a
+> **Scan only on the bus, never via JSON – and on the bus only on the WEM (node 1).** There, read scans with
+> many abort responses showed no impairment on the measured installation. On the boiler (node 2, `0x602`),
+> by contrast, the portal stalled for as long as a scan was running
+> ([failure no. 10](#observed-failures-wtc-gw-15-b)) – only single read commands there. Via JSON, every request to a
 > non-existent object consumes one of ten slots until the next power cycle
 > (see [section 8](#8-when-the-wem-locks-up)). A JSON scan will reliably disable the interface.
 
@@ -1000,9 +1002,11 @@ single preceding `CM 05` response, after an empty response and an immediate retr
 2. **At least one minute between two JSON commands**, preferably more.
 3. **No polling via JSON.** Read values on the bus.
 4. **One client** on the JSON interface. If you have several users (app, automation), route all of them
-   through **one** point with a lock (mutex). This firmware only addresses the WEM when
-   someone switches something.
-5. **At most six registers per request** – more sporadically produces `CM 05`
+   through **one** point with a lock (mutex). This firmware never calls the JSON
+   interface unprompted, only on user action: switching via JSON (fallback), write field, manual refresh.
+5. **Few registers per request.** On the measured installation the WEM answers at most seven, the eighth
+   always gets `CM 05` ([Why JSON is never polled](#why-json-is-never-polled)); another report mentions
+   sporadic `CM 05` already with more than six
    ([kraiz #15](https://github.com/kraiz/hassio-weishaupt/issues/15)).
 6. After an empty response or a pure `CM 05`, **do not retry immediately**, but back off in
    stages: 2 → 4 → 8 → 16 → 30 min; the first healthy response resets the backoff.
@@ -1011,14 +1015,15 @@ single preceding `CM 05` response, after an empty response and an immediate retr
 
 ## 9. Example: heating circuit to “Time program 1”
 
-**1. Command.** The “ZP 1” button (TP 1) in the phone app sends via the app
+**1. Command.** The “ZP 1” button (TP 1) in the Docker app sends
 
 ```
 MQTT  <gerät>/cmd/heizkreis   {"id":"app-mg3k2-1","wert":2,"quelle":"App"}
 ```
 
-Equivalent: `2` or `Zeitprogramm 1` as text via MQTT (the board then assigns the ID), or
-“Heizkreis Betriebsart setzen” in the web interface or in Home Assistant. On
+The app on the board (package `app`) hands the same request to the firmware directly, without MQTT, also with
+source `App`. Equivalent: `2` or `Zeitprogramm 1` as text via MQTT (the board then assigns the ID), or
+“Heizkreis Betriebsart setzen” in the expert interface or in Home Assistant. On
 `<gerät>/befehl/status`, `angenommen` (accepted) and `vorgemerkt` (queued, with `warten_s`) appear, later
 `gesendet` (sent), `pruefe_bus` (checking bus) and `bestaetigt` (confirmed) – see [TOPICS.md](TOPICS.md#gerätbefehlstatus) (German).
 The board additionally reports (deprecated) in “Ergebnis letzter Schaltbefehl”:
@@ -1027,11 +1032,24 @@ The board additionally reports (deprecated) in “Ergebnis letzter Schaltbefehl�
 vorgemerkt (App): Heizkreis Zeitprogramm 1
 ```
 
-**2. Queue.** If the lock-out minute is still running, “Warteschlange” shows something like
-`1. Heizkreis -> Zeitprogramm 1 (MQTT) - naechster Befehl ab 14:03:12`. If another
+**2. Queue.** If the minimum interval to the previous command is still running (via CAN <!--ab-werk:abstand_can-->10<!--/ab-werk--> s by default,
+via JSON <!--ab-werk:abstand_json-->60<!--/ab-werk--> s), “Warteschlange” shows something like
+`1. Heizkreis -> Zeitprogramm 1 (App) - naechster Befehl ab 14:03:12`. If another
 heating circuit request arrives before that, it replaces this one.
 
-**3. JSON to the WEM.** After the lock-out minute has expired:
+**3. Command to the WEM.** After the interval has expired, via CAN (default since v42):
+
+```
+CAN-ID 0x601   2F 33 29 02 02 00 00 00      Schreib-Anfrage Knoten 1, 0x2933/2, 1 Byte, Wert 2
+Antwort 0x581  60 33 29 02 …                Quittung
+```
+
+(`Schreib-Anfrage Knoten 1` = write request node 1; `Quittung` = acknowledgement.)
+
+Status: `sende per CAN an WEM ...` (sending to WEM via CAN), then
+`WEM hat per CAN bestaetigt, pruefe am Bus ...` (WEM confirmed via CAN, checking on the bus).
+
+Via JSON (switch “Schalten per CAN statt JSON” off) instead:
 
 ```
 POST http://<WEM>/ajax/CanApiJson.json
@@ -1046,7 +1064,7 @@ VG = 03 02 00 2533 02 0001 02
 Status: `sende an WEM ...` (sending to WEM), then for a response with `CM 04`:
 `WEM hat bestaetigt, pruefe am Bus ...` (WEM confirmed, checking on the bus).
 
-**4. Verification on the bus.** 3 s later the board reads:
+**4. Verification on the bus.** 3 s after sending (via JSON: 3 s after the response) the board reads:
 
 ```
 CAN-ID 0x601   40 33 29 02 00 00 00 00      Lese-Anfrage Knoten 1, 0x2933/2
@@ -1061,14 +1079,16 @@ Antwort 0x581  4F 33 29 02 02 00 00 00      1 Byte, Wert 2 = Zeitprogramm 1
 |---|---|
 | Bus reports 2 | `14:03:16 OK: Heizkreis steht auf Zeitprogramm 1` (heating circuit is set to time program 1) |
 | Bus reports a different value | `14:03:16 NICHT uebernommen, Heizkreis steht auf Standby` (NOT applied, heating circuit is on standby) |
-| WEM responds `CM 05` | `14:03 abgelehnt (CM=05) - VG 05…` (rejected) – no verification read |
-| no response on the bus within 10 s | `keine Rueckmeldung vom Bus - Ergebnis unbekannt` (no feedback from the bus – result unknown) |
-| WEM unreachable | `WEM nicht erreichbar, pruefe trotzdem am Bus ...` (WEM unreachable, checking on the bus anyway), then as above |
+| WEM aborts via CAN (`80`) | `14:03 per CAN 01 2933/02: abgelehnt, Abbruch …` (rejected, abort) – no verification read |
+| via JSON: WEM responds `CM 05` | `14:03 abgelehnt (CM=05) - VG 05…` (rejected) – no verification read |
+| no response to the verification read within 10 s | `keine Rueckmeldung vom Bus - Ergebnis unbekannt` (no feedback from the bus – result unknown) |
+| WEM does not acknowledge via CAN | `keine CAN-Antwort vom WEM, pruefe trotzdem am Bus ...` (no CAN response from the WEM, checking on the bus anyway), then as above |
+| via JSON: WEM unreachable | `WEM nicht erreichbar, pruefe trotzdem am Bus ...` (WEM unreachable, checking on the bus anyway), then as above |
 
 The switching log gets a line like
 `27.09. 14:03 Heizkreis -> Zeitprogramm 1 (App): ok`. From v27 onwards, the phone app only evaluates the
 phase from `befehl/status` or `status/json` and shows it for three minutes – green for
-`bestaetigt` (confirmed), red for `gescheitert` (failed: not applied, rejected CM=05, no feedback) or
+`bestaetigt` (confirmed), red for `gescheitert` (failed: not applied, rejected by the WEM, no feedback) or
 `abgelehnt` (rejected: invalid value).
 
 On the bus, the status bits in PDO `0x1C1` then change (bit `0x1000` heating circuit standby is cleared);
@@ -1076,17 +1096,26 @@ On the bus, the status bits in PDO `0x1C1` then change (bit `0x1000` heating cir
 
 ## 10. Example: DHW off
 
-**1. Command.** “AUS” (OFF) button in the phone app:
+**1. Command.** As plain text via MQTT:
 
 ```
 MQTT  <gerät>/cmd/warmwasser   Aus
 ```
 
-`aus`, `2`, `OFF`, `off` are also accepted; in the web interface “Warmwasser setzen” → Aus.
-Status: `vorgemerkt (MQTT): Warmwasser Aus` (queued: DHW off). Queue and lock-out minute as for the heating circuit;
-if a heating circuit request is pending at the same time, it goes first.
+`aus`, `2`, `OFF`, `off`, `false` are also accepted; in the expert interface “Warmwasser setzen” → Aus.
+The “AUS” (OFF) button in the app sends the same as JSON with an ID (as in section 9, source `App`).
+Status: `vorgemerkt (MQTT): Warmwasser Aus` (queued: DHW off). Queue and minimum interval as for the heating circuit;
+if a heating circuit request is pending at the same time, the one that arrived first goes first
+(up to v37: always the heating circuit).
 
-**2. JSON to the WEM.**
+**2. Command to the WEM.** Via CAN (default since v42):
+
+```
+CAN-ID 0x601   2F 20 2A 02 02 00 00 00      Schreib-Anfrage Knoten 1, 0x2A20/2, 1 Byte, Wert 2 = Aus
+Antwort 0x581  60 20 2A 02 …                Quittung
+```
+
+Via JSON (switch “Schalten per CAN statt JSON” off) instead:
 
 ```
 {"ID":"…","SRC":"DDC","CAPI":{"NN":1,"N01":{"VG":"030300252002000102"}}}
@@ -1099,7 +1128,7 @@ VG = 03 03 00 2520 02 0001 02
 
 `CM 04` is expected.
 
-**3. Verification on the bus**, 3 s later:
+**3. Verification on the bus**, 3 s after sending (via JSON: 3 s after the response):
 
 ```
 CAN-ID 0x601   40 20 2A 02 00 00 00 00      Lese-Anfrage Knoten 1, 0x2A20/2

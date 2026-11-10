@@ -253,7 +253,7 @@ Bus. Sie werden gelesen, auch wenn „Eigene CAN-Anfragen“ aus ist, aber nur
   mit Paket `verdacht` (in der Hauptdatei eingebunden) stattdessen über die Regeln R3 und R5,
 - wenn eine andere Regel auslöst ([Abschnitt 6a](#6a-regeln-betriebsarten-bei-verdacht-lesen)),
 - nach einem eigenen Warmwasser-Schaltbefehl,
-- auf Wunsch: Knopf „Status lesen“ (Weboberfläche, Handy-App) bzw. MQTT `<gerät>/cmd/status`.
+- auf Wunsch: Knopf „Status lesen“ (Experten-Oberfläche, Handy-App) bzw. MQTT `<gerät>/cmd/status`.
   Wünsche werden höchstens alle 10 s angenommen, gesendet wird nur bei lebendem Bus.
 
 Die Heizkreis-Betriebsart wird dabei höchstens alle 2 min gelesen – außer auf ausdrücklichen Wunsch und wenn eine Regel auslöst (dann gilt der Mindestabstand der Regel). Bekannte Lücke: ein Wechsel
@@ -487,7 +487,7 @@ aus: `04` oder `02` gilt als bestätigt, `05` als abgelehnt.
 Die Heizkreis-Codes stehen so in der Weishaupt-Registertabelle. Die Warmwasser-Betriebsart steht
 dort nicht; sie wurde per Scan und Differenz gefunden (s. [Abschnitt 7](#7-neue-objekte-finden-scan-und-differenz)).
 
-Über das Schreibfeld der Weboberfläche lassen sich weitere Objekte schreiben, aber nur in den
+Über das Schreibfeld der Experten-Oberfläche lassen sich weitere Objekte schreiben, aber nur in den
 Modulen MI 01, 02 und 03 (s. [Abschnitt 6](#6-weboberfläche-lesen-und-schreiben)).
 
 ### Belegte Leseobjekte: Wärmemengen
@@ -722,7 +722,7 @@ Ausgeschaltete Regeln laufen im **Schattenmodus** weiter (melden „wäre ausgel
 Alle Regeln ruhen 2 min nach einem eigenen Schaltbefehl; R1 ruht außerdem 5 min nach einem Neustart
 des WEM (Heartbeat `0x701` = `00`), und R5 liest nicht, wenn R3 im selben Augenblick schon liest.
 Eigene Regeln (Kurzform „CAN-ID + Maske + Muster“, ab v30 auch Folgen, Flanken und Bedingungen)
-sind experimentell und haben einen eigenen Hauptschalter. Einstellen per Weboberfläche, Datei `<gerät>/cmd/regeln` oder Befehl
+sind experimentell und haben einen eigenen Hauptschalter. Einstellen per Experten-Oberfläche, Datei `<gerät>/cmd/regeln` oder Befehl
 `<gerät>/cmd/regel`; Stand unter `<gerät>/regeln/stand`, Protokoll unter
 `<gerät>/verdacht/protokoll`, Ereignisse unter `<gerät>/verdacht/ereignis`.
 
@@ -785,8 +785,10 @@ Ergebnis an der gemessenen Anlage: Standby → Zeitprogramm 1 änderte Knoten 1 
 2 – der JSON-Wert `0x2533`/2 plus `0x400`. Warmwasser Ein → Aus im Bereich `0x2A00`–`0x2AFF`
 änderte `0x2A20`/2 von 1 auf 2 – ein Objekt, das in keiner veröffentlichten Liste steht.
 
-> **Nur am Bus scannen, nie über JSON.** Am Bus haben Lesescans mit vielen Abbruchantworten an der
-> gemessenen Anlage keine Beeinträchtigung gezeigt. Über JSON dagegen verbraucht jede Anfrage an
+> **Nur am Bus scannen, nie über JSON – und am Bus nur am WEM (Knoten 1).** Dort haben Lesescans mit vielen
+> Abbruchantworten an der gemessenen Anlage keine Beeinträchtigung gezeigt. Am Kessel (Knoten 2, `0x602`)
+> stockte dagegen das Portal, solange ein Scan lief ([Ausfall Nr. 10](#beobachtete-ausfälle-wtc-gw-15-b)) –
+> dort nur einzelne Lesebefehle. Über JSON verbraucht jede Anfrage an
 > ein nicht vorhandenes Objekt einen von zehn Plätzen bis zum nächsten Stromlos-Machen
 > (s. [Abschnitt 8](#8-wann-sich-der-wem-aufhängt)). Ein JSON-Scan legt die Schnittstelle sicher lahm.
 
@@ -977,9 +979,11 @@ einzige vorherige `CM 05`-Antwort, nach einer Leerantwort und einer sofortigen W
 2. **Mindestens eine Minute zwischen zwei JSON-Befehlen**, besser mehr.
 3. **Kein Polling über JSON.** Werte am Bus lesen.
 4. **Ein Client** an der JSON-Schnittstelle. Wer mehrere Nutzer hat (App, Automation), führt alle
-   über **eine** Stelle mit einer Sperre (Mutex). Diese Firmware spricht den WEM nur an, wenn
-   jemand schaltet.
-5. **Höchstens sechs Register pro Anfrage** – mehr erzeugt sporadisch `CM 05`
+   über **eine** Stelle mit einer Sperre (Mutex). Diese Firmware ruft die JSON-Schnittstelle
+   nie von selbst auf, nur auf Bedienung: Schalten über JSON (Rückweg), Schreibfeld, Abruf von Hand.
+5. **Wenige Register pro Anfrage.** An der gemessenen Anlage beantwortet der WEM höchstens sieben, das achte
+   bekommt immer `CM 05` ([Warum nie über JSON gepollt wird](#warum-nie-über-json-gepollt-wird)); ein anderer
+   Bericht nennt sporadische `CM 05` schon bei mehr als sechs
    ([kraiz #15](https://github.com/kraiz/hassio-weishaupt/issues/15)).
 6. Nach einer Leerantwort oder reinem `CM 05` **nicht sofort wiederholen**, sondern gestuft
    pausieren: 2 → 4 → 8 → 16 → 30 min; die erste gesunde Antwort setzt zurück.
@@ -988,14 +992,15 @@ einzige vorherige `CM 05`-Antwort, nach einer Leerantwort und einer sofortigen W
 
 ## 9. Beispiel: Heizkreis auf „Zeitprogramm 1“
 
-**1. Befehl.** Der Knopf „ZP 1“ in der Handy-App schickt über die App
+**1. Befehl.** Der Knopf „ZP 1“ in der Docker-App schickt
 
 ```
 MQTT  <gerät>/cmd/heizkreis   {"id":"app-mg3k2-1","wert":2,"quelle":"App"}
 ```
 
-Gleichwertig: `2` oder `Zeitprogramm 1` als Text per MQTT (Kennung vergibt dann das Board), oder
-„Heizkreis Betriebsart setzen“ in der Weboberfläche bzw. in Home Assistant. Auf
+Die App auf dem Board (Paket `app`) übergibt denselben Wunsch ohne MQTT direkt an die Firmware, Quelle
+ebenfalls `App`. Gleichwertig: `2` oder `Zeitprogramm 1` als Text per MQTT (Kennung vergibt dann das Board), oder
+„Heizkreis Betriebsart setzen“ in der Experten-Oberfläche bzw. in Home Assistant. Auf
 `<gerät>/befehl/status` erscheinen `angenommen` und `vorgemerkt` (mit `warten_s`), später
 `gesendet`, `pruefe_bus` und `bestaetigt` – siehe [TOPICS.md](TOPICS.md#gerätbefehlstatus).
 Das Board meldet zusätzlich (veraltet) in „Ergebnis letzter Schaltbefehl“:
@@ -1004,11 +1009,21 @@ Das Board meldet zusätzlich (veraltet) in „Ergebnis letzter Schaltbefehl“:
 vorgemerkt (App): Heizkreis Zeitprogramm 1
 ```
 
-**2. Warteschlange.** Läuft noch die Sperrminute, steht in „Warteschlange“ etwa
-`1. Heizkreis -> Zeitprogramm 1 (MQTT) - naechster Befehl ab 14:03:12`. Kommt vorher ein
+**2. Warteschlange.** Läuft noch der Mindestabstand zum vorigen Befehl (per CAN ab Werk <!--ab-werk:abstand_can-->10<!--/ab-werk--> s, über JSON
+<!--ab-werk:abstand_json-->60<!--/ab-werk--> s), steht in „Warteschlange“ etwa
+`1. Heizkreis -> Zeitprogramm 1 (App) - naechster Befehl ab 14:03:12`. Kommt vorher ein
 anderer Heizkreis-Wunsch, ersetzt er diesen.
 
-**3. JSON an den WEM.** Nach Ablauf der Sperrminute:
+**3. Befehl an den WEM.** Nach Ablauf des Abstands, per CAN (Vorgabe seit v42):
+
+```
+CAN-ID 0x601   2F 33 29 02 02 00 00 00      Schreib-Anfrage Knoten 1, 0x2933/2, 1 Byte, Wert 2
+Antwort 0x581  60 33 29 02 …                Quittung
+```
+
+Status: `sende per CAN an WEM ...`, dann `WEM hat per CAN bestaetigt, pruefe am Bus ...`.
+
+Über JSON (Schalter „Schalten per CAN statt JSON“ aus) stattdessen:
 
 ```
 POST http://<WEM>/ajax/CanApiJson.json
@@ -1021,7 +1036,7 @@ VG = 03 02 00 2533 02 0001 02
 Status: `sende an WEM ...`, dann bei einer Antwort mit `CM 04`:
 `WEM hat bestaetigt, pruefe am Bus ...`.
 
-**4. Kontrolle am Bus.** 3 s später liest das Board:
+**4. Kontrolle am Bus.** 3 s nach dem Senden (über JSON: 3 s nach der Antwort) liest das Board:
 
 ```
 CAN-ID 0x601   40 33 29 02 00 00 00 00      Lese-Anfrage Knoten 1, 0x2933/2
@@ -1034,14 +1049,16 @@ Antwort 0x581  4F 33 29 02 02 00 00 00      1 Byte, Wert 2 = Zeitprogramm 1
 |---|---|
 | Bus meldet 2 | `14:03:16 OK: Heizkreis steht auf Zeitprogramm 1` |
 | Bus meldet anderen Wert | `14:03:16 NICHT uebernommen, Heizkreis steht auf Standby` |
-| WEM antwortet `CM 05` | `14:03 abgelehnt (CM=05) - VG 05…` – keine Kontroll-Lesung |
-| binnen 10 s keine Antwort am Bus | `keine Rueckmeldung vom Bus - Ergebnis unbekannt` |
-| WEM nicht erreichbar | `WEM nicht erreichbar, pruefe trotzdem am Bus ...`, danach wie oben |
+| WEM bricht per CAN ab (`80`) | `14:03 per CAN 01 2933/02: abgelehnt, Abbruch …` – keine Kontroll-Lesung |
+| über JSON: WEM antwortet `CM 05` | `14:03 abgelehnt (CM=05) - VG 05…` – keine Kontroll-Lesung |
+| binnen 10 s keine Antwort auf die Kontroll-Lesung | `keine Rueckmeldung vom Bus - Ergebnis unbekannt` |
+| WEM quittiert per CAN nicht | `keine CAN-Antwort vom WEM, pruefe trotzdem am Bus ...`, danach wie oben |
+| über JSON: WEM nicht erreichbar | `WEM nicht erreichbar, pruefe trotzdem am Bus ...`, danach wie oben |
 
 Das Schaltprotokoll bekommt eine Zeile wie
 `27.09. 14:03 Heizkreis -> Zeitprogramm 1 (App): ok`. Die Handy-App wertet ab v27 nur noch die
 Phase aus `befehl/status` bzw. `status/json` aus und zeigt sie drei Minuten lang – grün bei
-`bestaetigt`, rot bei `gescheitert` (nicht übernommen, abgelehnt CM=05, keine Rückmeldung) oder
+`bestaetigt`, rot bei `gescheitert` (nicht übernommen, vom WEM abgelehnt, keine Rückmeldung) oder
 `abgelehnt` (ungültiger Wert).
 
 Am Bus ändern sich danach die Statusbits im PDO `0x1C1` (Bit `0x1000` Heizkreis Standby fällt weg);
@@ -1049,17 +1066,25 @@ Am Bus ändern sich danach die Statusbits im PDO `0x1C1` (Bit `0x1000` Heizkreis
 
 ## 10. Beispiel: Warmwasser aus
 
-**1. Befehl.** Knopf „AUS“ in der Handy-App:
+**1. Befehl.** Als Klartext per MQTT:
 
 ```
 MQTT  <gerät>/cmd/warmwasser   Aus
 ```
 
-Angenommen werden auch `aus`, `2`, `OFF`, `off`; in der Weboberfläche „Warmwasser setzen“ → Aus.
-Status: `vorgemerkt (MQTT): Warmwasser Aus`. Warteschlange und Sperrminute wie beim Heizkreis;
-steht gleichzeitig ein Heizkreis-Wunsch an, geht dieser zuerst.
+Angenommen werden auch `aus`, `2`, `OFF`, `off`, `false`; in der Experten-Oberfläche „Warmwasser setzen“ → Aus.
+Der Knopf „AUS“ in der App schickt dasselbe als JSON mit Kennung (wie in Abschnitt 9, Quelle `App`).
+Status: `vorgemerkt (MQTT): Warmwasser Aus`. Warteschlange und Mindestabstand wie beim Heizkreis;
+steht gleichzeitig ein Heizkreis-Wunsch an, geht der zuerst, der zuerst kam (bis v37: immer der Heizkreis).
 
-**2. JSON an den WEM.**
+**2. Befehl an den WEM.** Per CAN (Vorgabe seit v42):
+
+```
+CAN-ID 0x601   2F 20 2A 02 02 00 00 00      Schreib-Anfrage Knoten 1, 0x2A20/2, 1 Byte, Wert 2 = Aus
+Antwort 0x581  60 20 2A 02 …                Quittung
+```
+
+Über JSON (Schalter „Schalten per CAN statt JSON“ aus) stattdessen:
 
 ```
 {"ID":"…","SRC":"DDC","CAPI":{"NN":1,"N01":{"VG":"030300252002000102"}}}
@@ -1070,7 +1095,7 @@ VG = 03 03 00 2520 02 0001 02
 
 Erwartet wird `CM 04`.
 
-**3. Kontrolle am Bus**, 3 s später:
+**3. Kontrolle am Bus**, 3 s nach dem Senden (über JSON: 3 s nach der Antwort):
 
 ```
 CAN-ID 0x601   40 20 2A 02 00 00 00 00      Lese-Anfrage Knoten 1, 0x2A20/2
