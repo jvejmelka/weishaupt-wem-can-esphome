@@ -137,7 +137,8 @@ inline Kanal *kanal(const char *gegenstelle) {
 }
 
 // Mitschnitt als Textzeilen per UDP, gebuendelt: "<name> <ms> <R|T|X> <ID>:<DATEN>"
-// R = auf dem eigenen Bus empfangen, T = auf den eigenen Bus gesendet, X = Senden abgelehnt
+// R = auf dem eigenen Bus empfangen, T = auf den eigenen Bus gesendet, X = Senden abgelehnt,
+// E = empfangen, aber Antwort auf einen eigenen Schreibbefehl dieses Boards (nicht weitergereicht)
 class Mitschnitt {
  public:
   void oeffnen(const char *ziel, const char *name) {

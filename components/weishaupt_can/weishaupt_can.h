@@ -79,6 +79,17 @@ class WeishauptCan : public Component {
   std::function<std::string()> json_stand;
   uint32_t knoten_gesehen[128] = {0};   // ab v42: millis() des letzten Lebenszeichens 0x700+n (0 = nie)      // ab v42: WEM-Adresse per CAN (Assistent, Einstellungsseite)
   wc::CanSchreiben schreiben;
+  // ab v43: freies CAN-Schreiben an freigeschaltete Knoten - gesendet wird in einer Pause des SDO-Verkehrs
+  static constexpr uint32_t SDO_RUHE_MS = 200;
+  uint32_t sdo_verkehr[128] = {0};      // millis() des letzten SDO-Frames von/an Knoten n (0x580+n, 0x600+n; 0 = nie)
+  wc::CanSchreibbefehl frei_befehl;     // geprueft und vorgemerkt, wartet auf die Pause
+  void sdo_gesehen(uint32_t can_id, uint32_t jetzt) {
+    if ((can_id & 0x780) == 0x580 || (can_id & 0x780) == 0x600) this->sdo_verkehr[can_id & 0x7F] = jetzt | 1;
+  }
+  bool sdo_ruhig(int kn, uint32_t jetzt) const {
+    if (kn < 1 || kn > 127) return false;
+    return this->sdo_verkehr[kn] == 0 || jetzt - this->sdo_verkehr[kn] >= SDO_RUHE_MS;
+  }
   wc::Scan scan;
   wc::Brenner brenner;
   wc::Schalten schalten;

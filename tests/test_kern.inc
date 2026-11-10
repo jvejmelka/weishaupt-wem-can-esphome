@@ -391,6 +391,24 @@ TEST(kern_can_schreiben) {
   PRUEFE(!wc::can_schreib_lesen("01 2933", c, f));
   PRUEFE(!wc::can_schreib_lesen("01 2933 02 =", c, f));
   PRUEFE(!wc::can_schreib_lesen("01 2933 02 = 100", c, f));
+  // ab v43: andere Knoten nur nach ausdruecklicher Freigabe, der Kessel nie
+  PRUEFE(!wc::can_schreib_lesen("04 2559 00 = 00 00 00 01", c, f) && f.find("nicht freigeschaltet (erlaubt: 01)") != std::string::npos);
+  PRUEFE(!wc::can_schreib_lesen("80 2559 00 01", c, f) && !wc::can_schreib_lesen("00 2559 00 01", c, f));
+  wc::KnotenFreigabe frei;
+  PRUEFE(frei.darf(1) && !frei.darf(2) && !frei.darf(4) && !frei.darf(0) && !frei.darf(128) && frei.text() == "01");
+  PRUEFE(wc::knoten_freigabe_lesen("01 04", frei, f) && frei.darf(1) && frei.darf(4) && !frei.darf(2) && frei.text() == "01 04");
+  PRUEFE(wc::can_schreib_lesen("04 2559 00 = 00 00 00 01", c, f, frei) && c.kn == 4 && c.idx == 0x2559 && c.daten == (F{0, 0, 0, 1}));
+  PRUEFE(!wc::can_schreib_lesen("02 2532 00 01", c, f, frei) && f.find("Kessel") != std::string::npos);
+  PRUEFE(!wc::can_schreib_lesen("04 1017 00 00", c, f, frei));                                       // Bereich gilt fuer jeden Knoten
+  PRUEFE(!wc::can_schreib_lesen("05 2559 00 01", c, f, frei) && f.find("erlaubt: 01 04") != std::string::npos);
+  PRUEFE(wc::knoten_freigabe_lesen("4", frei, f) && frei.darf(4) && !frei.darf(1) && frei.text() == "04");   // nur das Raumgeraet
+  PRUEFE(wc::knoten_freigabe_lesen(" 1,4;7f ", frei, f) && frei.text() == "01 04 7F");
+  wc::KnotenFreigabe vorher = frei;
+  PRUEFE(!wc::knoten_freigabe_lesen("01 02", frei, f) && f.find("Kessel") != std::string::npos);    // Kessel nie
+  PRUEFE(!wc::knoten_freigabe_lesen("00", frei, f) && !wc::knoten_freigabe_lesen("80", frei, f));
+  PRUEFE(!wc::knoten_freigabe_lesen("", frei, f) && !wc::knoten_freigabe_lesen("  ", frei, f));
+  PRUEFE(!wc::knoten_freigabe_lesen("1 x", frei, f) && !wc::knoten_freigabe_lesen("104", frei, f) && !wc::knoten_freigabe_lesen("1-4", frei, f));
+  PRUEFE(frei.text() == vorher.text());                                                              // Fehler aendert nichts
 
   // einfach: 1 Byte -> 2F, bestaetigt
   wc::CanSchreiben w;

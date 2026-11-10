@@ -448,6 +448,7 @@ struct Schalten {
   // Schreiben per CAN (ab v35): Ergebnis des laufenden Schreibbefehls fuer die Skripte
   bool can_fertig = false;
   bool can_frei_gesendet = false;  // freier Schreibbefehl ist raus, Ergebnis abholen
+  bool can_frei_wartet = false;    // freier Schreibbefehl geprueft, wartet auf eine Pause im SDO-Verkehr (ab v43)
   std::string can_text;
 
   // Abstand nach dem letzten Befehl (ab v38 einstellbar): per CAN kurz, ueber JSON/HTTP mindestens 1 min.
@@ -653,11 +654,14 @@ template<size_t N> inline bool speicher_schreiben(std::array<char, N> &m, const 
 // ---------------------------------------------------------------- Schreiben per CAN (ab v35)
 
 // SDO-Download an den WEM: fuer das Schalten per CAN (seit v42 ab Werk AN) und das freie
-// CAN-Schreiben (ab Werk AUS), beides Schalter auf dem Board. Erlaubt nur Knoten 1 (WEM)
+// CAN-Schreiben (ab Werk AUS), beides Schalter auf dem Board. Erlaubt ab Werk nur Knoten 1 (WEM)
 // und nur den Herstellerbereich 0x2000-0x5FFF: nie die Kommunikationsobjekte 0x1000-0x1FFF
 // (Heartbeat, COB-IDs ...), nie den Kessel (dort schreibt der WEM selbst alle ~5 s und teilt sich
 // den SDO-Kanal mit dem Board). Bis 4 Byte in einem Frame, laengere Daten (bis 64 Byte) in
 // Teilstuecken.
+// Ab v43 lassen sich fuer das freie CAN-Schreiben weitere Knoten ausdruecklich freischalten
+// (KnotenFreigabe, Eingabefeld im Expertenmenue) - z. B. 04 fuer ein Raumgeraet. Knoten 00 (alle)
+// und 02 (Kessel) lassen sich nie freischalten.
 inline std::string hex_bytes(const std::vector<uint8_t> &d) {
   std::string t; char b[4];
   for (auto c : d) { snprintf(b, sizeof(b), "%02X", c); t += b; }
@@ -666,15 +670,59 @@ inline std::string hex_bytes(const std::vector<uint8_t> &d) {
 
 struct CanSchreibbefehl { int kn = 0, idx = 0, sub = 0; std::vector<uint8_t> daten; };
 
+// Knoten, an die das freie CAN-Schreiben senden darf (ab v43). Ab Werk nur 01 (WEM).
+struct KnotenFreigabe {
+  static constexpr int KESSEL = 2;
+  bool erlaubt[128] = {false};
+  KnotenFreigabe() { erlaubt[1] = true; }
+  bool darf(int k) const { return k > 0 && k < 128 && k != KESSEL && erlaubt[k]; }
+  std::string text() const {
+    std::string t; char b[4];
+    for (int k = 1; k < 128; k++) if (darf(k)) { snprintf(b, sizeof(b), "%02X", k); if (!t.empty()) t += ' '; t += b; }
+    return t;
+  }
+};
+
+// Liste der freigeschalteten Knoten lesen: hex, getrennt durch Leerzeichen, Komma oder Strichpunkt,
+// z. B. "01" (Vorgabe) oder "01 04". Bei einem Fehler bleibt f unveraendert.
+inline bool knoten_freigabe_lesen(const std::string &e, KnotenFreigabe &f, std::string &fehler) {
+  KnotenFreigabe n; n.erlaubt[1] = false;
+  int anzahl = 0;
+  size_t p = 0;
+  while (p < e.size()) {
+    if (e[p] == ' ' || e[p] == ',' || e[p] == ';') { p++; continue; }
+    size_t q = p; unsigned k = 0;
+    while (q < e.size() && isxdigit((unsigned char) e[q])) {
+      char c = (char) toupper((unsigned char) e[q]);
+      k = k * 16 + (unsigned) (c <= '9' ? c - '0' : c - 'A' + 10); q++;
+    }
+    bool ende = q == e.size() || e[q] == ' ' || e[q] == ',' || e[q] == ';';
+    if (q == p || q - p > 2 || !ende) { fehler = "Knotenliste ungueltig - hex, z. B. 01 04"; return false; }
+    if (k == 0) { fehler = "Knoten 00 (alle Knoten) laesst sich nicht freischalten"; return false; }
+    if (k == (unsigned) KnotenFreigabe::KESSEL) { fehler = "Knoten 02 (Kessel) laesst sich nicht freischalten - der Kessel wird nie beschrieben"; return false; }
+    if (k > 0x7F) { fehler = "Knoten hoechstens 7F"; return false; }
+    n.erlaubt[k] = true; anzahl++; p = q;
+  }
+  if (anzahl == 0) { fehler = "kein Knoten freigeschaltet (Vorgabe: 01)"; return false; }
+  f = n;
+  return true;
+}
+
 // Eingabe hex: "KN IDX SUB WERT [LAENGE]" (LAENGE 1/2/4 Byte, Vorgabe 1, little endian), z. B.
 // "01 2933 02 01", oder Rohbytes "KN IDX SUB = B1 B2 ..." (1-64 Byte, ab 5 Byte in Teilstuecken)
-inline bool can_schreib_lesen(const std::string &e, CanSchreibbefehl &c, std::string &fehler) {
+inline bool can_schreib_lesen(const std::string &e, CanSchreibbefehl &c, std::string &fehler,
+                              const KnotenFreigabe &frei = KnotenFreigabe()) {
   unsigned k = 0, i = 0, s = 0;
   int pos = 0;
   if (sscanf(e.c_str(), "%x %x %x%n", &k, &i, &s, &pos) < 3) {
     fehler = "ungueltig - Format: KN IDX SUB WERT [LAENGE] oder KN IDX SUB = B1 B2 ... (hex)"; return false;
   }
-  if (k != 1) { fehler = "nur Knoten 01 (WEM) - der Kessel wird nie beschrieben"; return false; }
+  if (k == (unsigned) KnotenFreigabe::KESSEL) { fehler = "Knoten 02 (Kessel) wird nie beschrieben"; return false; }
+  if (k > 0x7F || !frei.darf((int) k)) {
+    char t[112];
+    snprintf(t, sizeof(t), "Knoten %02X ist nicht freigeschaltet (erlaubt: %s)", k & 0xFF, frei.text().c_str());
+    fehler = t; return false;
+  }
   if (i < 0x2000 || i > 0x5FFF) { fehler = "nur Objekte 2000-5FFF (Herstellerbereich)"; return false; }
   if (s > 0xFF) { fehler = "Subindex hoechstens FF"; return false; }
   std::string rest = e.substr(pos);
@@ -710,6 +758,11 @@ struct CanSchreiben {
   uint8_t toggle = 0;
   uint32_t faellig = 0;
   std::string roh;
+  // zuletzt als eigene Antwort erkannter Frame (fuer eigene_antwort)
+  static constexpr uint32_t EIGEN_MS = 20;
+  std::vector<uint8_t> eigen;
+  uint32_t eigen_ms = 0;
+  bool eigen_da = false;
 
   void starten(const CanSchreibbefehl &c, uint32_t &can_id, std::vector<uint8_t> &d) {
     kn = c.kn; idx = c.idx; sub = c.sub; daten = c.daten; pos = 0; toggle = 0; folge = false;
@@ -734,26 +787,39 @@ struct CanSchreiben {
     bool unser = ((x[2] << 8) | x[1]) == idx && x[3] == sub;
     char t[96];
     if (x[0] == 0x80 && unser) {
-      notiere('<', x);
+      notiere('<', x); merke(x, jetzt);
       uint32_t code = x[4] | (x[5] << 8) | (x[6] << 16) | ((uint32_t) x[7] << 24);
       snprintf(t, sizeof(t), "%02X %04X/%02X: abgelehnt, Abbruch %08X", kn, idx, sub, (unsigned) code);
       text = t; aktiv = false; folge = false;
       return true;
     }
     if (x[0] == 0x60 && unser && pos == 0) {
-      notiere('<', x);
+      notiere('<', x); merke(x, jetzt);
       if (!segmentiert) return fertig(text);
       plane(jetzt, PAUSE_MS);                                           // WEM braucht eine kurze Pause
       return false;
     }
     if (segmentiert && pos > 0 && (x[0] & 0xEF) == 0x20) {
-      notiere('<', x);
+      notiere('<', x); merke(x, jetzt);
       if ((x[0] & 0x10) != (toggle ^ 0x10)) return false;               // Quittung zum letzten Teilstueck
       if (pos >= daten.size()) return fertig(text);
       plane(jetzt, 0);
       return false;
     }
     return false;
+  }
+
+  // Ist dieser Frame die Antwort auf den EIGENEN Schreibbefehl? Der CAN-Tunnel reicht sie dann nicht
+  // ans andere Ende weiter - dort hat niemand gefragt. Gilt waehrend des Befehls und fuer denselben
+  // Frame noch EIGEN_MS danach, damit die Reihenfolge der on_frame-Bloecke keine Rolle spielt.
+  bool eigene_antwort(uint32_t can_id, const std::vector<uint8_t> &x, uint32_t jetzt) const {
+    if (kn == 0 || can_id != (uint32_t) (0x580 + kn) || x.size() < 8) return false;
+    if (aktiv) {
+      bool unser = ((x[2] << 8) | x[1]) == idx && x[3] == sub;
+      if (unser && (x[0] == 0x80 || (x[0] == 0x60 && pos == 0))) return true;
+      return segmentiert && pos > 0 && (x[0] & 0xEF) == 0x20;
+    }
+    return eigen_da && jetzt - eigen_ms <= EIGEN_MS && x == eigen;
   }
 
   bool weiter(uint32_t &can_id, std::vector<uint8_t> &d, uint32_t jetzt) {
@@ -771,6 +837,7 @@ struct CanSchreiben {
   }
 
  private:
+  void merke(const std::vector<uint8_t> &x, uint32_t jetzt) { eigen = x; eigen_ms = jetzt; eigen_da = true; }
   void plane(uint32_t jetzt, uint32_t pause) { folge = true; faellig = jetzt + pause; }
   bool fertig(std::string &text) {
     char t[64];

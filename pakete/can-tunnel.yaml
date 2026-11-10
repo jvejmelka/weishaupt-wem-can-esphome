@@ -98,6 +98,12 @@ canbus:
               can_tunnel::zaehler().letzter_empfang = millis();
               can_tunnel::zaehler().hat_empfang = true;
               if (!id(tunnel_an).state || !can_tunnel::gueltig(can_id)) return;
+              // Antwort auf einen Schreibbefehl DIESES Boards (freies CAN-Schreiben): bleibt hier, am anderen
+              // Ende hat niemand gefragt. Im Mitschnitt steht sie mit E.
+              if (id(wcan)->schreiben.eigene_antwort(can_id, x, millis())) {
+                can_tunnel::mitschnitt("${tunnel_log}", "${tunnel_name}")->frame('E', can_id, remote_transmission_request, x, millis());
+                return;
+              }
               can_tunnel::kanal("${tunnel_ziel}")->senden(can_id, remote_transmission_request, x);
               can_tunnel::zaehler().vom_bus++;
               can_tunnel::mitschnitt("${tunnel_log}", "${tunnel_name}")->frame('R', can_id, remote_transmission_request, x, millis());
@@ -126,6 +132,7 @@ interval:
             if ((${tunnel_nur_bei_bus}) && !can_tunnel::bus_aktiv(millis())) { can_tunnel::zaehler().gesperrt++; continue; }
             bool ok = id(my_can_bus)->send_data(cid, false, rtr, d) == canbus::ERROR_OK;
             if (ok) can_tunnel::zaehler().zum_bus++; else can_tunnel::zaehler().can_fehler++;
+            if (ok) id(wcan)->sdo_gesehen(cid, millis());   // das andere Ende spricht mit einem Knoten hier: eigene Schreibbefehle warten
             m->frame(ok ? 'T' : 'X', cid, rtr, d, millis());
           }
           m->takt(millis());
