@@ -104,6 +104,10 @@ jobs:
         run: cp secrets-olimex.yaml.example secrets.yaml
       - name: Kompilieren (Ethernet, kraiz-per-can, dallas)
         run: esphome compile olimex-weishaupt.yaml
+      - name: Entitaeten wie im Fork von cg089 (Soll-Liste)
+        run: |
+          esphome config olimex-weishaupt.yaml > /tmp/olimex.cfg
+          python3 werkzeuge/olimex_vergleich.py --soll tests/olimex-fork-soll.txt /tmp/olimex.cfg
 
   release-image:
     name: Release-Image ohne persoenliche Daten (ESPHome 2026.9.1)

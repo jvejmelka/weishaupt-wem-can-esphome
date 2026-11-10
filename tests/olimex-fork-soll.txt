@@ -1,0 +1,128 @@
+# Soll-Liste: was der Fork von cg089 (olimex-weishaupt.yaml, Zweig olimex-esp32-evb) an Entitaeten erzeugt.
+# Fork-Stand 211bd9b vom 31.10.2026, esphome config mit ESPHome 2026.9.1
+# Geschrieben mit: python3 werkzeuge/olimex_vergleich.py --liste fork.cfg   (nicht von Hand aendern)
+# Art | Name | ID | Plattform | Einheit
+button | CAN schreiben |  | template | 
+button | Lesen |  | template | 
+button | Neustart ESP |  | restart | 
+button | SD-Datei holen |  | template | 
+button | Schreiben |  | template | 
+button | Status lesen |  | template | 
+button | Warmwasser-Push | kc_ww_push | template | 
+button | Warteschlange leeren |  | template | 
+number | Abstand zwischen Befehlen per CAN (s) | abstand_can | template | 
+number | Abstand zwischen Befehlen per JSON (s) | abstand_json | template | 
+number | Waechter: Neustart nach Minuten ohne Bus (0 = aus) | waechter_min | template | 
+select | Heizkreis Betriebsart setzen | hk_setzen | template | 
+select | Warmwasser setzen | ww_setzen | template | 
+sensor | Abgastemperatur | wem_abgas | template | °C
+sensor | Anlagendruck | wem_druck | template | bar
+sensor | Aussentemperatur | wem_aussentemp | template | °C
+sensor | Brenner | wem_brenner | template | 
+sensor | Brennerphase | wem_brennerphase | template | 
+sensor | Brennerstarts | wem_brennerstarts | template | 
+sensor | Drehzahl | wem_drehzahl | template | U/min
+sensor | Fehlermodul | kc_fehler_modul | template | 
+sensor | Fehlernummer | kc_fehlernummer | template | 
+sensor | Fühler Rücklauf Heizkreis 1 |  | dallas_temp | °C
+sensor | Fühler Rücklauf Heizkreis 2 |  | dallas_temp | °C
+sensor | Fühler Umgebung |  | dallas_temp | °C
+sensor | Fühler Vorlauf Heizkreis |  | dallas_temp | °C
+sensor | Fühler Warmwasser Speicher oben |  | dallas_temp | °C
+sensor | Heizanforderung | wem_heizanforderung | template | °C
+sensor | Heizkreis Betriebsart Code | hk_betriebsart_code | template | 
+sensor | Heizkreis Status Code | wem_betriebsart_hk_code | template | 
+sensor | Kaskade Abgleichtemperatur | kc_kaskade_abgleichtemperatur | template | °C
+sensor | Kaskade Soll-Modulation HZ | kc_kaskade_sollmodulation_hz | template | %
+sensor | Kaskade Soll-Modulation WW | kc_kaskade_sollmodulation_ww | template | %
+sensor | Kaskade Sollwert HZ | kc_kaskade_sollwert_hz | template | °C
+sensor | Kaskade Sollwert WW | kc_kaskade_sollwert_ww | template | °C
+sensor | Kesselstatus Code | wem_kesselstatus_code | template | 
+sensor | Kesseltemperatur | wem_kessel | template | °C
+sensor | Laufzeit |  | uptime | s
+sensor | Leistung | wem_leistung | template | %
+sensor | Letzter CAN-Frame vor |  | template | s
+sensor | N1-Vorgabe über Ethernet | kc_n1_vorgabe_ethernet | template | %
+sensor | Plattenwärmetauschertemperatur (B2) | kc_plattenwaermetauschertemperatur_b2 | template | °C
+sensor | Pufferspeicher Temperatur oben | kc_pufferspeicher_temperatur_oben | template | °C
+sensor | Pufferspeicher Temperatur unten | kc_pufferspeicher_temperatur_unten | template | °C
+sensor | Raumsoll aktuell | hk_raumsoll_akt | template | °C
+sensor | Raumsolltemperatur Absenk | kc_raumsolltemperatur_absenk | template | °C
+sensor | Raumsolltemperatur Komfort | kc_raumsolltemperatur_komfort | template | °C
+sensor | Raumsolltemperatur Normal | kc_raumsolltemperatur_normal | template | °C
+sensor | Ruecklauf | wem_ruecklauf | template | °C
+sensor | Rücklauftemperatur Zirkulation | kc_ruecklauftemperatur_zirkulation | template | °C
+sensor | Sollleistung | wem_sollleistung | template | %
+sensor | Systembetriebsart Code | wem_systembetriebsart_code | template | 
+sensor | Volumenstrom | wem_volumenstrom | template | l/h
+sensor | Vorlauf | wem_vorlauf | template | °C
+sensor | Vorlauf Heizkreis | hk_vorlauf | template | °C
+sensor | Vorlauf Soll | wem_vorlauf_soll | template | °C
+sensor | Vorlauf VPT | wem_vorlauf_vpt | template | °C
+sensor | Vorlaufsoll Anforderung | wem_ww_vlsoll | template | °C
+sensor | Vorlaufsolltemperatur Absenk | kc_vorlaufsolltemperatur_absenk | template | °C
+sensor | Vorlaufsolltemperatur Komfort | kc_vorlaufsolltemperatur_komfort | template | °C
+sensor | Vorlaufsolltemperatur Normal | kc_vorlaufsolltemperatur_normal | template | °C
+sensor | Vorlaufsolltemperatur Sonderniveau | kc_vorlaufsolltemperatur_sonderniveau | template | °C
+sensor | Vorlaufsolltemperatur aktuell | kc_vorlaufsolltemperatur_aktuell | template | °C
+sensor | WW-Solltemperatur Absenk | kc_wwsolltemperatur_absenk | template | °C
+sensor | Warmwasser | wem_warmwasser | template | °C
+sensor | Warmwasser Betriebsart Code | ww_betriebsart_code | template | 
+sensor | Warmwasser Soll aktuell | ww_soll_akt | template | °C
+sensor | Warmwasser Soll normal | ww_soll_normal | template | °C
+sensor | Warmwasser aktiv Zahl | wem_ww_aktiv_num | template | 
+sensor | Wechselzeit | kc_wechselzeit | template | 
+sensor | Wärmeanforderung Warmwasser | kc_waermeanforderung_warmwasser | template | °C
+sensor | Wärmemenge Vortag Gesamt | wem_wm_gesamt | template | kWh
+sensor | Wärmemenge Vortag Heizung | wem_wm_heizung | template | kWh
+sensor | Wärmemenge Vortag WW | wem_wm_ww | template | kWh
+switch | Eigene CAN-Anfragen | can_anfragen | template | 
+switch | Freies CAN-Schreiben (Experten) | can_frei | template | 
+switch | Lange Lesebefehle auch am Kessel | lang_am_kessel | template | 
+switch | SD-Dateien abrufen | sd_erlaubt | template | 
+switch | Schalten per CAN statt JSON (Heizkreis, Warmwasser) | can_schalten | template | 
+text | CAN-Schreibbefehl (KN IDX SUB WERT [LAENGE] hex) | can_eingabe | template | 
+text | Heizung: IP-Adresse | wem_ip | template | 
+text | Lesebefehl (KN IDX SUB hex) | lese_eingabe | template | 
+text | SD-Datei (Name auf der SD-Karte des WEM) | sd_eingabe | template | 
+text | Schreibbefehl (MI MX OX OS WERT hex) | schreib_eingabe | template | 
+text | WEM-Benutzer | wem_user | template | 
+text | WEM-Passwort | wem_pass | template | 
+text_sensor | Betriebsart HK1 aktuell | kc_betriebsart_hk1_aktuell | template | 
+text_sensor | Betriebsphase WTC | kc_betriebsphase | template | 
+text_sensor | Brenner Status | wem_brenner_text | template | 
+text_sensor | CAN-Schreibbefehl Antwort | can_antwort | template | 
+text_sensor | CAN-Schreibbefehl Rohdaten | can_roh | template | 
+text_sensor | CANopen Fehlerblock | kc_fehlerblock | template | 
+text_sensor | ESPHome-Version |  | version | 
+text_sensor | Eigene CAN-Anfragen |  | template | 
+text_sensor | Ergebnis letzter Schaltbefehl | schalt_status | template | 
+text_sensor | Fehler-Klartext | kc_fehler_klartext | template | 
+text_sensor | Fehler-Warnung Status | kc_fehler_status | template | 
+text_sensor | Firmware | fw_stand | template | 
+text_sensor | Folgewechsel | kc_folgewechsel | template | 
+text_sensor | Gateway |  | template | 
+text_sensor | Heizkreis Betriebsart | hk_betriebsart | template | 
+text_sensor | Heizkreis Status | wem_betriebsart_hk | template | 
+text_sensor | Kesselstatus | wem_kesselstatus | template | 
+text_sensor | Lesebefehl Antwort | lese_antwort | template | 
+text_sensor | Lesebefehl Rohdaten | lese_roh | template | 
+text_sensor | Letzte Emergency-Meldung | kc_emergency | template | 
+text_sensor | Netzmaske |  | template | 
+text_sensor | None |  | ethernet_info | 
+text_sensor | Pumpe Warmwasser | kc_pumpe_warmwasser | template | 
+text_sensor | SD-Datei Antwort | sd_antwort | template | 
+text_sensor | SD-Datei Inhalt (Anfang) | sd_inhalt | template | 
+text_sensor | Schaltprotokoll | schalt_protokoll | template | 
+text_sensor | Schreibbefehl Antwort | schreib_antwort | template | 
+text_sensor | So-Wi Umschaltung HK1 | kc_sowi_umschaltung_hk1 | template | 
+text_sensor | Status HK1 | kc_status_hk1 | template | 
+text_sensor | Status Warmwasser | kc_status_warmwasser | template | 
+text_sensor | Status gelesen | status_gelesen | template | 
+text_sensor | Systembetriebsart | wem_systembetriebsart | template | 
+text_sensor | Systemtabelle (Knoten, Module) | systabelle | template | 
+text_sensor | Uhrzeit Heizung | heizung_uhr | template | 
+text_sensor | Warmwasser Betriebsart | ww_betriebsart | template | 
+text_sensor | Warmwasser aktiv | wem_ww_aktiv | template | 
+text_sensor | Warmwasser-Push | kc_warmwasser_push | template | 
+text_sensor | Warteschlange | warteschlange | template | 

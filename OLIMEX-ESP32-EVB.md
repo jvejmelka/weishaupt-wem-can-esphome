@@ -95,6 +95,41 @@ ohne Adresse (`index: 0 …`) schreibt die Adressen beim Start ins Log; Zuordnun
 4. `esphome run olimex-weishaupt.yaml` (erstes Mal per USB, dann OTA).
 5. In der Weboberfläche oder in Home Assistant „Eigene CAN-Anfragen" einschalten, wenn das Mithören stabil läuft.
 
+## Vergleich mit dem Fork
+
+Die Fassung hier soll dasselbe ergeben wie `olimex-weishaupt.yaml` im Fork. Verglichen ist deshalb nicht der YAML-Text
+(dort eine Datei, hier Pakete), sondern was ESPHome daraus macht – die Ausgabe von `esphome config`
+(Fork `211bd9b` gegen dieses Repository, ESPHome 2026.9.1):
+
+- **Alle 124 Entitäten des Forks bis auf eine kommen hier unverändert heraus** – 123 sind in jedem Feld gleich, auch im
+  Programmteil (Lambdas): Name, ID, Einheit, Gruppe, Abfrage. Namen und IDs in Home Assistant bleiben also dieselben.
+- Board, Ethernet, CAN-Bus-Pins, API, OTA, Logger, 1-Wire, Zeit, Intervalle und globale Variablen sind gleich.
+
+Mit Absicht anders:
+
+| Im Fork | Hier | Grund |
+|---|---|---|
+| Textsensor „Letzte Emergency-Meldung“ | „Meldung WEM“ und „Meldung Kessel“ | die Telegramme `0x081`/`0x082` wertet das Paket `kessel` aus |
+| Fehler-Klartext aus `weishaupt-helfer.h` (Handbuchtexte) | aus `fehlercodes.yaml` (eigene Kurztexte) | Rechte an den Handbuchtexten, siehe oben |
+| Secret `web_server_password` | `web_password` | wie in der WeAct-Variante |
+| `weishaupt-helfer.h` | `pakete/kraiz-per-can.h`, `pakete/kraiz-per-can-texte.h` | Teil des Pakets |
+
+[`tests/olimex-fork-soll.txt`](tests/olimex-fork-soll.txt) ist die Liste der Entitäten des Forks. Die CI prüft bei jedem
+Stand, dass `olimex-weishaupt.yaml` sie weiterhin alle liefert. Selbst nachprüfen (mit dem Python, in dem ESPHome
+installiert ist – das Skript braucht PyYAML):
+
+```
+cp secrets-olimex.yaml.example secrets.yaml      # falls noch keine secrets.yaml da ist
+esphome config olimex-weishaupt.yaml > hier.cfg
+python3 werkzeuge/olimex_vergleich.py --soll tests/olimex-fork-soll.txt hier.cfg
+
+# voller Vergleich gegen den Fork, alle Felder und Abschnitte
+git clone -b olimex-esp32-evb https://github.com/cg089/weishaupt-wem-can-esphome fork
+cp fork/secrets-olimex.yaml.example fork/secrets.yaml
+esphome config fork/olimex-weishaupt.yaml > fork.cfg
+python3 werkzeuge/olimex_vergleich.py fork.cfg hier.cfg
+```
+
 ## Stand der Prüfung
 
 Am Olimex ESP32-EVB geprüft ist der **Stand des Forks** (cg089, Anlage mit WTC-GW …-B, ESPHome 2026.10):
