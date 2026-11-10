@@ -131,7 +131,10 @@ documentation, “Universal” allows 1.5–40.0, “Radiator 60” 8.0–20.0 a
 WTC-GW 15-B (heating circuit type “Universal”, slope 8.5) he read both objects via the JSON interface and
 [compared them with the controller display](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/issues/8#issuecomment-6708250969):
 `02 00 254B 02` (slope) and `02 00 25AD 02` (parallel shift, changed back and forth three times). The objects are thus
-confirmed on two installations; the limits apply per setting.
+confirmed on two installations; the limits apply per setting. On 11 Nov 2026 he also read the limits themselves via JSON
+([comment](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/issues/8#issuecomment-6781859717)):
+`02 00 254B 03` = 25 (2.5) and `02 00 254B 04` = 400 (40.0) with "Universal". Sub 3 and 4 are thus confirmed as min and
+max on two installations. The minimum of 2.5 differs from the 1.5 in the Weishaupt document; the reason is open.
 
 **DHW program (MI 3, `0x2580`):** same layout as the heating time programs, the upper word was `0x3288` here. The flags
 before each day block (sub 3, 19, 35, …) were `01` for the Monday–Friday group and `02` for Saturday/Sunday; the RG2 read
@@ -162,6 +165,9 @@ expert level → commissioning → assignments) and then removed again. On the b
   units). Read via CAN here. **Confirmed via JSON by PiLLoX** on a WTC-GB 25-B with built-in WEM-SG and RG2:
   response `020200258B02000200B0` = 17.6 °C, exactly what the RG2 displayed
   ([comment of 10 Nov 2026](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/issues/4#issuecomment-6781466298)).
+- **Room humidity in the WEM: no object found yet.** On the bus it is only in the RG2's PDO `0x184` (bytes 2–3). The
+  system device does know it, though: on PiLLoX's WTC-GB 25-B the display shows the RG2's room humidity
+  ([comment of 11 Nov 2026](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/issues/4#issuecomment-6781823795)).
 - The assignment had no effect on the heating: flow setpoint and heat demand carried on unchanged. The control variant
   stayed weather-compensated; the display did not ask about it.
 
