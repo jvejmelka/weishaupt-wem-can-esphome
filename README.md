@@ -9,17 +9,20 @@ das am CAN-Bus einer Weishaupt-Brennwertheizung mit **WEM-Systemgerät** (z. B. 
 
 - **Lesen am Bus**, ohne den WEM zu belasten: Kessel-, Vorlauf-, Abgas-, Warmwasser- und
   Außentemperatur, Druck, Leistung, Brennerstatus mit Startzähler, Betriebsarten, Wärmemengen.
-- **Schalten über die JSON-Schnittstelle des WEM**, mit Kontrolle am Bus:
+- **Schalten am WEM**, mit Kontrolle am Bus:
   Heizkreis-Betriebsart (Standby, Zeitprogramm 1–3, Sommer, Komfort, Normal, Absenk)
-  und Warmwasser Ein/Aus – über Weboberfläche, Home Assistant oder MQTT.
-  Zwischen zwei Befehlen liegt ein Abstand (ab v38 einstellbar: per CAN 10 s, über JSON mindestens 60 s);
+  und Warmwasser Ein/Aus – seit v42 ab Werk direkt per CAN, ohne JSON; die JSON-Schnittstelle des WEM
+  bleibt als Rückweg. Bedient über die Handy-App, die Experten-Oberfläche, Home Assistant oder MQTT.
+  Zwischen zwei Befehlen liegt ein Abstand (ab v38 einstellbar: per CAN <!--ab-werk:abstand_can-->10<!--/ab-werk--> s, über JSON mindestens <!--ab-werk:abstand_json-->60<!--/ab-werk--> s);
   was in dieser Zeit kommt, wird vorgemerkt (höchstens einer je Ziel, der neueste Wunsch gewinnt)
   und in der Reihenfolge des Eingangs gesendet – sichtbar im Feld
   „Warteschlange“, mit Knopf zum Leeren.
 - **Schaltprotokoll** der letzten zehn Befehle mit Quelle und Ergebnis am Bus.
-- **Der WEM wird nie von selbst abgefragt** – nur dann, wenn jemand schaltet. Jede zusätzliche
-  JSON-Anfrage ist ein Risiko für die empfindliche Schnittstelle.
-- **Weboberfläche** mit Passwort, Lesefeld für beliebige Objekte, Schreibfeld für Experten,
+- **Die JSON-Schnittstelle des WEM wird nie von selbst aufgerufen** – nur auf Bedienung (Schalten über
+  JSON, Schreibfeld, Abruf von Hand). Jede zusätzliche JSON-Anfrage ist ein Risiko für die empfindliche
+  Schnittstelle.
+- **Handy-App auf dem Board** (`/`), Einstellungsseite und **Experten-Oberfläche** (`/experten`) mit
+  getrennten Passwörtern; dort Lesefeld für beliebige Objekte, Schreibfeld für Experten,
   WLAN-Wechsel ohne neues Flashen.
 - **MQTT** für Messwerte, Lese-, Scan- und Schaltbefehle; wahlweise native Home-Assistant-API.
 
@@ -38,7 +41,8 @@ das am CAN-Bus einer Weishaupt-Brennwertheizung mit **WEM-Systemgerät** (z. B. 
    (MI 02) und Warmwasser WW0 (MI 03). Alle Wege im Überblick: [PROTOKOLL.md](PROTOKOLL.md).
 3. **Der WEM ist empfindlich.** Häufige JSON-Anfragen, Anfragen an nicht vorhandene Objekte oder
    mehrere Clients gleichzeitig können seine JSON-Schnittstelle bis zum nächsten Stromlos-Machen
-   lahmlegen. Deshalb: mindestens eine Minute zwischen zwei Befehlen, kein Polling über JSON.
+   lahmlegen. Deshalb: über JSON ab Werk <!--ab-werk:abstand_json-->60<!--/ab-werk--> s zwischen zwei Befehlen (kürzer lässt es sich nicht
+   einstellen), kein Polling über JSON.
    Einzelheiten: [PROTOKOLL.md – Wann sich der WEM aufhängt](PROTOKOLL.md#8-wann-sich-der-wem-aufhängt).
 4. Der 120-Ω-Abschluss auf dem Board bleibt **aus**, das Board hängt mitten am Bus.
 
@@ -50,8 +54,9 @@ das am CAN-Bus einer Weishaupt-Brennwertheizung mit **WEM-Systemgerät** (z. B. 
 | CAN L | L |
 
 H und L aus **demselben verdrillten Paar** nehmen. − und + bleiben frei.
-Busgeschwindigkeit 50 kbit/s. Am WEM muss die **JSON-Schnittstelle** eingeschaltet sein
-(Parameter 10.8.1, Fachmann-Ebene).
+Busgeschwindigkeit 50 kbit/s. Die **JSON-Schnittstelle** des WEM (Parameter 10.8.1, Fachmann-Ebene)
+braucht nur, wer über JSON schalten (Rückweg), das Schreibfeld nutzen oder Werte per JSON abrufen will –
+das Schalten per CAN benutzt sie nicht.
 
 ## Wer redet mit wem
 
@@ -63,7 +68,8 @@ Busgeschwindigkeit 50 kbit/s. Am WEM muss die **JSON-Schnittstelle** eingeschalt
 - Der WEM hat **eine** LAN-Buchse: Darüber laufen die verschlüsselte Cloud-Verbindung (XMPP/TLS zu `xmpp.wemportal.de`)
   und die unverschlüsselte **JSON-Schnittstelle** – ein ferngesteuerter CAN-Zugang, den der WEM übersetzt und filtert.
   Das Weishaupt-Modbus-Gateway und diese ESP-Brücke benutzen dieselbe JSON-Schnittstelle.
-- Die ESP-Brücke hört am CAN-Bus alles mit, liest einzelne Werte per SDO und schaltet nur über JSON.
+- Die ESP-Brücke hört am CAN-Bus alles mit, liest einzelne Werte per SDO und schaltet seit v42 ab Werk per CAN am WEM
+  (Knoten 1); die JSON-Schnittstelle ist nur noch der Rückweg. In den Kessel schreibt sie nie.
 - Lila = aus diesem Repository, gestrichelt = optional. Erzeugt mit [`werkzeuge/zeichnung_aufbau.py`](werkzeuge/zeichnung_aufbau.py).
 
 ## Aufbau
@@ -85,7 +91,7 @@ Bauteils (`id(wcan)->…`). Die Klassen in [`kern.h`](components/weishaupt_can/k
 | `wc::Anlass` | wann die Betriebsarten nachgelesen werden (Start, Statusbits, Schaltbefehl, „Status lesen“, Regeln) |
 | `wc::Lesebefehl`, `wc::Scan` | Lesebefehl von Hand und Objektscan (nur Leseanfragen) |
 | `wc::Brenner` | Flankenerkennung, Brennerstarts (gespeichert) |
-| `wc::Schalten`, `wc::Protokoll` | Sperrminute, laufender WEM-Aufruf, Schreibbefehl, Schaltprotokoll |
+| `wc::Schalten`, `wc::Protokoll` | Mindestabstand zwischen Befehlen, laufender WEM-Aufruf, Schreibbefehl, Schaltprotokoll |
 | `wc::Verdacht` | Laufzeitzustand der Regeln R1–R5 und der eigenen Regeln (teils gespeichert) |
 | `wc::Zusatz` | Zusatzanzeigen: Speicherform und Datei-Prüfsumme (gespeichert) |
 
@@ -121,8 +127,9 @@ Nicht benötigte Zeilen unter `packages:` auskommentieren.
 | `wem-schalten.yaml` | Heizkreis schalten, Warteschlange, Protokoll | nein |
 | `warmwasser-schalten.yaml` | Warmwasser Ein/Aus (braucht `wem-schalten` und `warmwasser`) | nein |
 | `verdacht.yaml` | **Regeln:** Betriebsarten nur lesen, wenn das Mithören eine Änderung vermuten lässt; feste Regeln R1–R5 einzeln schaltbar (Vorgabe: R1–R3 <!--ab-werk:vd_r1-->an<!--/ab-werk-->, R4/R5 <!--ab-werk:vd_r4-->aus<!--/ab-werk-->; ausgeschaltete laufen im Schattenmodus weiter), dazu eigene Regeln (experimentell, eigener Hauptschalter, Vorgabe <!--ab-werk:vd_eigene_haupt-->aus<!--/ab-werk-->); einstellbar per Web, Datei und MQTT (braucht `warmwasser`). Details: [REGELN.md](REGELN.md) | nein |
-| `zusatz.yaml` | **Zusatzanzeigen für die Handy-App:** Liste von bis zu 6 fremden MQTT-Topics (z. B. Raumtemperaturen, „Wärmepumpe läuft“), einstellbar per Web und Datei. Das Board liest diese Werte **nicht** selbst, es verwaltet nur die Liste (braucht `mqtt`). Details: [PROTOKOLL.md, Abschnitt 6b](PROTOKOLL.md#6b-zusatzanzeigen-für-die-handy-app) | nein |
-| `app.yaml` | **Handy-App direkt auf dem Board** (ab v38): `http://<board>/app`, eigener Login (`app_benutzer`/`app_passwort` in `secrets.yaml`), kein Server nötig (braucht `wem-schalten`, `warmwasser-schalten`) | nein |
+| `zusatz.yaml` | **Zusatzanzeigen für die Handy-App:** Liste von bis zu 6 fremden MQTT-Topics (z. B. Raumtemperaturen, „Wärmepumpe läuft“), einstellbar per Web und Datei. Das Board verwaltet die Liste; die Werte holt die App – die Docker-App abonniert die Topics selbst, mit dem Paket `app` abonniert sie das Board (braucht `mqtt`). Details: [PROTOKOLL.md, Abschnitt 6b](PROTOKOLL.md#6b-zusatzanzeigen-für-die-handy-app) | nein |
+| `app.yaml` | **Handy-App direkt auf dem Board** (ab v38): `http://<board>/`, eigener Login (`app_benutzer`/`app_passwort` in `secrets.yaml`), kein Server nötig (braucht `wem-schalten`, `warmwasser-schalten`) | nein |
+| `json-lesen.yaml` | **Werte per JSON abrufen** (ab v42): eine Anfrage mit sieben Objekten an den WEM, nur von Hand (Knopf in der Experten-Oberfläche und auf der Einstellungsseite, ↻ in der App auf dem Board bei stillem CAN-Bus), nie im Takt; für Boards ohne CAN-Kabel oder bei Busausfall (braucht `wem-schalten`, `warmwasser`) | nein |
 | `feste-ip.yaml` | feste IP statt DHCP | nein |
 | `kraiz-per-can.yaml` | **Weitere Werte per CAN** (von cg089): 29 Objekte der Integration kraiz/hassio-weishaupt – Raum-/Vorlaufsollwerte, Status Heizkreis und Warmwasser, Betriebsphase –, Knopf „Warmwasser-Push“, Fehlerblock des WEM mit Klartext (braucht `wem-schalten` und eingeschaltete eigene CAN-Anfragen) | nein |
 | `dallas.yaml` | 1-Wire-Bus für eigene DS18B20-Fühler (von cg089) | nein |
@@ -145,8 +152,8 @@ esphome run weishaupt-wem-can.yaml       # erstes Mal per USB, danach per OTA
 Nur wenn das nicht geht, das Paket `feste-ip.yaml` einschalten. Findet OTA das Board nicht
 per mDNS: `esphome upload weishaupt-wem-can.yaml --device <IP>`.
 
-**WLAN wechseln** ohne Flashen: in der Weboberfläche unter *Einstellungen* Name und Passwort
-eintragen, dann *WLAN übernehmen*. Klappt die Verbindung binnen 30 s, wird gespeichert; sonst
+**WLAN wechseln** ohne Flashen: in der Experten-Oberfläche (`/experten`) unter *Einstellungen* Name und Passwort
+eintragen, dann *WLAN übernehmen* – oder im Einrichtungs-Assistenten (Schritt Netz). Klappt die Verbindung binnen 30 s, wird gespeichert; sonst
 bleibt das bisherige WLAN. Letzter Rückweg ist der Notfall-Hotspot mit Captive Portal.
 
 ## MQTT-Befehle
@@ -156,7 +163,7 @@ bleibt das bisherige WLAN. Letzter Rückweg ist der Notfall-Hotspot mit Captive 
 | `<gerät>/cmd/heizkreis` | `1`–`8`, Name (`Zeitprogramm 1`) oder `ZP1`; ab v27 auch JSON `{"id":17,"wert":"ZP2"}` | Heizkreis-Betriebsart (Warteschlange); jede Phase auf `befehl/status` |
 | `<gerät>/cmd/warmwasser` | `Ein` / `Aus`; ab v27 auch JSON `{"id":18,"wert":"Aus"}` | Warmwasser (Warteschlange); jede Phase auf `befehl/status` |
 | `<gerät>/cmd/lesen` | `01 2933 02` (Knoten Index Sub, hex), mit `B` am Ende per Block | ein Objekt lesen; lange Objekte automatisch in Teilstücken |
-| `<gerät>/cmd/sd_datei` | `systable.csv` | Datei von der SD-Karte des WEM holen (ab v36; Schalter „SD-Dateien abrufen“, ab Werk <!--ab-werk:sd_erlaubt-->an<!--/ab-werk-->; Sperrminute); Inhalt an `<gerät>/sd/<datei>`, ab 4 KB in Stücken `/1`, `/2` …; `systable.csv` wird ausgewertet (Text-Sensor „Systemtabelle“) |
+| `<gerät>/cmd/sd_datei` | `systable.csv` | Datei von der SD-Karte des WEM holen (ab v36; Schalter „SD-Dateien abrufen“, ab Werk <!--ab-werk:sd_erlaubt-->an<!--/ab-werk-->; Mindestabstand wie beim Schalten über JSON); Inhalt an `<gerät>/sd/<datei>`, ab 4 KB in Stücken `/1`, `/2` …; `systable.csv` wird ausgewertet (Text-Sensor „Systemtabelle“) |
 | `<gerät>/cmd/can_schreiben` | `01 2933 02 01` (Knoten Index Sub Wert [Länge 1/2/4], hex) oder `01 2xxx 00 = 11 22 33 …` | **ab Werk gesperrt** (Schalter „Freies CAN-Schreiben“); nur Knoten 01, nur Objekte 2000–5FFF |
 | `<gerät>/cmd/scan` | `01 2A00 2AFF 3` | Bereich lesen, Antworten in `<gerät>/canraw` |
 | `<gerät>/cmd/stop` | beliebig | Scan abbrechen |
@@ -187,8 +194,9 @@ Gegenüberstellung alt/neu in [TOPICS.md](TOPICS.md#veraltete-text-topics).
 
 Mithören ist passiv und kostet nichts. Eigene Leseanfragen stellt das Board höchstens alle 40 s
 je Wert (Weishaupts Vorgabe für den Datenlogger), Betriebsarten nur bei Anlass; nach einem
-Stromzyklus der Heizung hört es zehn Minuten nur mit. Mit dem Schalter **„Eigene CAN-Anfragen“**
-lassen sich die Abfragen ganz abschalten – Takte und Bedingungen:
+Stromzyklus der Heizung hört es zehn Minuten nur mit. Der Schalter **„Eigene CAN-Anfragen“**
+(ab Werk <!--ab-werk:can_anfragen-->aus<!--/ab-werk-->) schaltet nur die Abfragen im Takt; die Betriebsarten liest das Board bei
+Anlass auch ohne ihn – Takte und Bedingungen:
 [PROTOKOLL.md – Mithören und Lesen auf Anforderung](PROTOKOLL.md#2-mithören-und-lesen-auf-anforderung).
 
 ## Überwachung
@@ -230,29 +238,30 @@ Auf dem Startbildschirm installierbar („+ App“).
 | Bereich | Inhalt | Quelle |
 |---|---|---|
 | Kopfzeile | grüner Punkt = letzter Abruf erfolgreich, rot = Problem; oranger Strich = Countdown bis zum nächsten Abruf (30 s) | App |
-| ⚙ (Kopfzeile) | öffnet die Weboberfläche des Boards in einem neuen Tab – nur sichtbar, wenn `BOARD_URL` in der `.env` gesetzt ist. Die App reicht nichts durch; das Board fragt sein Passwort selbst ab und ist nur im LAN erreichbar | `.env`: `BOARD_URL` |
+| ⚙ (Kopfzeile) | öffnet das Board (die in `BOARD_URL` eingetragene Adresse, z. B. dessen Einstellungsseite) in einem neuen Tab – nur sichtbar, wenn `BOARD_URL` in der `.env` gesetzt ist. Die App reicht nichts durch; das Board fragt sein Passwort selbst ab und ist nur im LAN erreichbar | `.env`: `BOARD_URL` |
 | Heizkreis | acht Knöpfe (Standby, ZP 1–3, Sommer, Komfort, Normal, Absenk). **Voll markiert = Ist**: die Betriebsart, die das Board am Bus gelesen hat (0x2933/2). Rechts vom Titel **„Zustand: …“** = Laufzustand aus den Statusbits (z. B. „Standby“, „Zeitprogramm, heizt“, „· WW lädt“) | Board: `status/json` → `heizkreis`; Knopf → `cmd/heizkreis` (JSON mit Kennung) |
 | ↻ (beim Heizkreis) | lässt das Board Heizkreis- und Warmwasser-Betriebsart einmal vom Bus lesen (die liest es sonst nur bei Anlass); die Statuszeile zeigt „angefordert …“ und dann „Status HH:MM:SS gelesen“ | Knopf → `cmd/status`; Board: `status/json` → `heizkreis.zeit`, `bus` |
 | Warmwasser | Temperatur (Fühler **unten** im Speicher), Knöpfe EIN/AUS – **voll markiert = Ist** am Bus (0x2A20/2); rechts **„Ladung: Gas“** (orange pulsierend, Kessel im Warmwasserbetrieb = Kesselstatus 15) bzw. **„Ladung: aus“** | Board: `warmwasser`, `warmwasser_betriebsart`, `kesselstatus_code` (ersatzweise `warmwasser_aktiv`); Knopf → `cmd/warmwasser` |
 | Vorgabe (gestrichelt) | **Vorgabe = eigener Schaltbefehl** über das Board, solange er nicht am Bus bestätigt ist: **vorgemerkt** (Warteschlange bzw. eben gedrückt), **gesendet** (Befehl an den WEM raus, Bus-Kontrolle steht aus). Nach „OK“ verschwindet die Strichelung, der Knopf wird voll markiert. **Rot gestrichelt** mit Kurztext: nicht übernommen / abgelehnt (CM=05) / keine Rückmeldung. **„von außen geändert“** am Ist-Knopf: der Bus steht auf etwas anderem als der letzte eigene erfolgreiche Befehl, ohne dass ein Befehl läuft (Display, Portal) | Board: `status/json` → `schalten`, `befehl/status` |
-| Fortschritt (unter den Knöpfen) | nach einem Schaltbefehl im betroffenen Block: **vorgemerkt (ab HH:MM) → an WEM gesendet (JSON) → Bus liest nach → bestätigt ✓** (grün); im Fehlerfall endet die Kette rot mit **✗ nicht übernommen (steht auf …) / abgelehnt (CM=05) / keine Rückmeldung / ungültig**. Allein aus der **Phase** des Befehls (keine Textauswertung). Der aktuelle Schritt pulsiert orange; nach dem Abschluss bleibt die Zeile 3 min stehen, ohne laufenden Befehl gibt es keine Zeile | Board: `status/json` → `schalten`, `befehl/status` |
+| Fortschritt (unter den Knöpfen) | nach einem Schaltbefehl im betroffenen Block: **vorgemerkt (ab HH:MM) → an WEM gesendet (CAN) → Bus liest nach → bestätigt ✓** (grün; statt „(CAN)“ steht „(JSON)“, wenn über den Rückweg geschaltet wird); im Fehlerfall endet die Kette rot mit **✗ nicht übernommen (steht auf …) / abgelehnt (CM=05) / keine Rückmeldung / ungültig**. Allein aus der **Phase** des Befehls (keine Textauswertung). Der aktuelle Schritt pulsiert orange; nach dem Abschluss bleibt die Zeile 3 min stehen, ohne laufenden Befehl gibt es keine Zeile | Board: `status/json` → `schalten`, `befehl/status` |
 | Kessel | Kesseltemperatur groß, daneben Vorlauf / Soll und Rücklauf; rechts **Brenner: aus / vorlüften / an / nachlüften** (an in Orange, nur mit Flamme), dahinter der **Zweck** aus dem Kesselstatus: „· Heizung“ bzw. „· Warmwasser“; „(Heizung wartet)“, wenn der Kessel Warmwasser macht und der Heizkreis gleichzeitig Wärme anfordert. **Kaminfeger** und **Wartung** stehen in Rot, auch bei Brenner aus | Board: `kesseltemperatur`, `vorlauf_vpt`, `vorlauf_soll`, `ruecklauf`, `brennerphase`, `kesselstatus_code`, `heizkreis_status_code` (Bit 0x0040), `heizanforderung` |
-| Zusatz (unter Kessel) | eine kompakte Zeile aus der Liste des Boards, z. B. „Wohnzimmer 21,3 °C · Arbeitszimmer 22,1 °C · WP ◉ läuft“ – Art `laeuft` zeigt „läuft“ (orange, pulsierend wie der Brenner) bzw. „aus“ ab der Schwelle. Werte älter als 10 min erscheinen als „--“; leere Liste = keine Zeile. Tippen/Überfahren zeigt das Alter des Werts | Board: `<gerät>/app/zusatz` (Paket `zusatz`), Werte direkt aus den dort genannten Topics |
+| Zusatz (unter Kessel) | eine kompakte Zeile aus der Liste des Boards, z. B. „Wohnzimmer 21,3 °C · Arbeitszimmer 22,1 °C · WP ◉ läuft“ – Art `laeuft` zeigt „läuft“ (orange, pulsierend wie der Brenner) bzw. „aus“ ab der Schwelle. Werte älter als 10 min (Docker-App) bzw. 2 h (App auf dem Board) erscheinen als „--“; leere Liste = keine Zeile. Tippen/Überfahren zeigt das Alter des Werts | Board: `<gerät>/app/zusatz` (Paket `zusatz`), Werte direkt aus den dort genannten Topics |
 | Außen | Außentemperatur groß | Board: `aussentemperatur` |
-| Statuszeile | „Aktualisiert HH:MM:SS · Status gelesen HH:MM“, dahinter „nächster Befehl ab …“, solange die Sperrminute läuft (höchstens zwei Zeilen); nach einem Knopfdruck 3 min lang der Fortschritt: vorgemerkt → gesendet → **OK** (grün) oder **NICHT übernommen / abgelehnt (CM=05) / keine Rückmeldung** (rot); Fehler wie „CAN-Board nicht erreichbar“ | Board: `befehl/status`, `status/json` → `schalten.frei_ab`, `heizkreis.zeit` |
+| Statuszeile | „Aktualisiert HH:MM:SS · Status gelesen HH:MM“, dahinter „nächster Befehl ab …“, solange der Mindestabstand läuft (höchstens zwei Zeilen); nach einem Knopfdruck 3 min lang der Fortschritt: vorgemerkt → gesendet → **OK** (grün) oder **NICHT übernommen / abgelehnt (CM=05) / keine Rückmeldung** (rot); Fehler wie „CAN-Board nicht erreichbar“ | Board: `befehl/status`, `status/json` → `schalten.frei_ab`, `heizkreis.zeit` |
 | Fußzeile | Build-Stand als Datum | App |
 
 Messwerte, die länger als 10 min nicht aktualisiert wurden, zeigt die App als „--“ statt eines
 alten Werts. Betriebsarten und Sollwerte sind davon ausgenommen – das Board liest sie nur bei
-Anlass (nach dem Start, bei geänderten Statusbits, nach Schaltbefehlen).
+Anlass (nach dem Start, nach Schaltbefehlen, auf ↻ und wenn das Mithören eine Umschaltung vermuten
+lässt – [Regeln](REGELN.md) R1–R5).
 
 ### Wie sie arbeitet
 
 - **Liest nur MQTT** vom Board (`<gerät>/sensor/+/state`, retained) und spricht **nie mit dem WEM**.
 - **Zusatzanzeigen:** die App abonniert `<gerät>/app/zusatz` und danach die dort genannten fremden
-  Topics (bei Änderung der Liste neu abonniert bzw. abbestellt). Das Board selbst liest sie nicht.
+  Topics (bei Änderung der Liste neu abonniert bzw. abbestellt). Bei der App auf dem Board abonniert sie das Board (siehe unten).
 - **Schalten** geht als MQTT-Befehl mit Kennung an das Board (`{"id":"app-…","wert":3,"quelle":"App"}`);
-  das Board setzt ihn mit Sperrminute, Warteschlange und Kontrolle am Bus um und meldet jede Phase
+  das Board setzt ihn mit Mindestabstand, Warteschlange und Kontrolle am Bus um und meldet jede Phase
   auf `befehl/status`. Die App liest nur diese festen Felder und `status/json` – **keinen Freitext**.
 - Anmeldung mit Benutzer und Passwort aus der `.env` – **ohne beide startet die App nicht**.
   Die Sitzungen liegen in `data/` und überleben einen Neubau.
@@ -261,24 +270,27 @@ Anlass (nach dem Start, bei geänderten Statusbits, nach Schaltbefehlen).
 
 ### Auf dem Board (ab v38, Paket `app.yaml`)
 
-Dieselbe App, ohne Server: das Board liefert sie selbst aus (gzip, zusammen etwa 16 KB im Flash).
+Dieselbe App, ohne Server: das Board liefert sie selbst aus (gzip, zusammen etwa 40 KB im Flash).
 
 - Aufruf: **`http://<board>/`** (oder `/app`). Die ESPHome-Weboberfläche liegt ab v42 unter **`/experten`**
   (Benutzer `admin`, Experten-Passwort).
 - Login mit `app_benutzer` und `app_passwort` aus `secrets.yaml`. 5 Fehlversuche je Adresse in 15 min
   sperren diese Adresse für 15 min. Das Sitzungs-Token liegt im Flash und übersteht Updates.
-- Schaltbefehle laufen wie per MQTT durch Warteschlange, Sperrminute und Kontrolle am Bus.
+- Schaltbefehle laufen wie per MQTT durch Warteschlange, Mindestabstand und Kontrolle am Bus.
+- Steht der CAN-Bus länger als 2 min still (kein Kabel, Ausfall), zeigt die App oben ein ↻ „Aktualisieren“: ein Druck
+  holt die Werte einmal per JSON vom WEM (Paket `json-lesen`; nie automatisch, Mindestabstand ab Werk
+  <!--ab-werk:json_abstand-->300<!--/ab-werk--> s).
 - **Zusatzanzeigen:** das Board abonniert die Topics der Liste selbst. Sein Broker-Konto braucht
   dafür je Topic eine `topic read`-Zeile (wie unten für die Docker-App); nach dem Ergänzen der ACL
   das Board einmal neu starten (ein verweigertes Abo holt es sonst erst beim nächsten Verbinden nach).
 - Nach einem Neustart fehlen Betriebsart und Statusbits, bis das Board sie wieder gelesen bzw.
-  gesehen hat (Betriebsart nach etwa 1 min, Statusbits bei der nächsten Änderung).
+  gesehen hat (beides liest es nach der Anlaufpause von etwa 1 min einmal selbst).
 - **Einstellungen** (ab v39): ⚙ in der App öffnet `http://<board>/einstellungen` – im Design der App,
   mit eigenem Admin-Passwort. Schalter und Zahlen des Boards, App- und Admin-Passwort ändern,
   Vorgabe für Hell/Dunkel/Auto. Jede Einstellung zeigt ihre Empfehlung (◆) und markiert Abweichungen (ab v42).
 - **Ersteinrichtung** (ab v39): Das Board speichert die Zugangsdaten. Ohne Vorgaben in `secrets.yaml`
   verlangt `/app` beim ersten Aufruf Benutzer, App- und Admin-Passwort (mindestens 8 Zeichen) – vorher
-  ist nichts bedienbar, auch die Weboberfläche nicht. Mit Vorgaben werden diese beim ersten Start übernommen;
+  ist nichts bedienbar, auch die Experten-Oberfläche nicht. Mit Vorgaben werden diese beim ersten Start übernommen;
   spätere Änderungen an `secrets.yaml` wirken dann nicht mehr (Passwort auf der Einstellungsseite ändern).
 - **Hell / Dunkel / Auto:** Knopf oben in der App, Wahl je Gerät; Auto folgt der Einstellung des Geräts.
 - **Drei Zugangsstufen** (ab v42), alle drei Passwörter verschieden:
@@ -305,7 +317,7 @@ Dieselbe App, ohne Server: das Board liefert sie selbst aus (gzip, zusammen etwa
   die Infoseite zeigt Größe und freien Platz. Beim Flashen per USB die Karte herausnehmen (Hinweis von WeAct).
 - Von außen **nur über einen Reverse Proxy mit TLS** – das Board spricht nur HTTP. Mit `app_proxy` in `secrets.yaml`
   (IP des Proxys) glaubt das Board dessen `X-Forwarded-For` und weist über den Proxy selbst ab: `/experten`, `/update`,
-  `/events`, die Wertepfade, Rücksetzen und Oberflächen-Paket (403, auf eigenes Risiko zeitweise freischaltbar).
+  `/events`, die Wertepfade, Rücksetzen, Oberflächen-Paket und Störmeldungstexte (403, auf eigenes Risiko zeitweise freischaltbar).
   App und Einstellungsseite gehen von außen. Der Proxy sollte nur die nötigen Kopfzeilen weiterreichen
   (keine Cookies) – der Webserver des ESP32 verträgt höchstens 1024 Byte je Kopfzeile.
 - Die Dateien kommen aus `app/public/` (dazu `app/board/` für die Einstellungsseite); `werkzeuge/app_einbetten.py` bettet sie ein
@@ -348,7 +360,7 @@ vergeben: bei manchen Geräten (z. B. Shelly) lässt sich über ein benachbartes
 - **Warum die App den WEM nicht selbst fragt:** Eine frühere Fassung las ihre Werte bei jedem
   Öffnen direkt über die JSON-Schnittstelle des WEM. Das verträgt die Schnittstelle nicht – sie
   wurde dadurch mehrfach gesperrt und kam erst nach Stromlos-Machen der Heizung wieder. Seitdem
-  liest die App nur MQTT vom Board, und Schaltbefehle gehen über das Board mit Sperrminute.
+  liest die App nur MQTT vom Board, und Schaltbefehle gehen über das Board mit Mindestabstand.
 
 ## Was belegt ist und was nicht
 
@@ -404,7 +416,7 @@ Kurzübersicht aller Objekte, die die Firmware auswertet (Einzelheiten und Beleg
 
 ## Sicherheit
 
-- Das Board spricht **unverschlüsseltes HTTP** (ab v42 Digest-Anmeldung für `/experten` und `/update`) – nur im LAN
+- Das Board spricht **unverschlüsseltes HTTP** (Digest-Anmeldung seit v41; `/experten` und `/update` verlangen das Experten-Passwort) – nur im LAN
   betreiben, von außen höchstens hinter einem Reverse Proxy mit TLS (siehe Handy-App, „Auf dem Board“).
 - **Wer auf `<gerät>/cmd/...` schreiben darf, kann die Heizung schalten.** Am Broker Zugriffsregeln
   (ACL) setzen: Schreibrecht auf `cmd/#` nur für Konten, die schalten sollen.
@@ -498,9 +510,9 @@ Objekt, ohne Firmware-Konstanten ([PROTOKOLL, Abschnitt 7a](PROTOKOLL.md#7a-übe
 nur in den Paketen (`restore_mode`, `initial_value`). [`werkzeuge/einstellungen_erzeugen.py`](werkzeuge/einstellungen_erzeugen.py)
 schreibt daraus die [Tabelle aller Einstellungen](PROTOKOLL.md#einstellungen) und jede Angabe „ab Werk“ in der Doku.
 
-Bei jedem Push laufen alle drei in [GitHub Actions](https://github.com/jvejmelka/weishaupt-wem-can-esphome/actions/workflows/ci.yml), dazu wird die
-Firmware mit ESPHome 2026.9.0 und einer Dummy-`secrets.yaml` (aus `secrets.yaml.example`)
-kompiliert – samt Bauteil `weishaupt_can`. Neue Regeln oder Änderungen an bestehenden bitte mit Test – der Fehler aus
+Bei jedem Push laufen alle vier in [GitHub Actions](https://github.com/jvejmelka/weishaupt-wem-can-esphome/actions/workflows/ci.yml), dazu wird die
+Firmware mit ESPHome 2026.9.1 und einer Dummy-`secrets.yaml` (aus `secrets.yaml.example`)
+kompiliert – samt Bauteil `weishaupt_can`, dazu die Olimex-Variante und das Release-Image. Neue Regeln oder Änderungen an bestehenden bitte mit Test – der Fehler aus
 v22–v24 (R1 kannte nur `0x40`, der WEM fragt mit `0xA4`) hätte so nicht passieren können.
 
 ### Was die automatische Prüfung macht (GitHub Actions, kurz erklärt)
@@ -509,7 +521,7 @@ GitHub prüft jeden Stand dieses Repositorys automatisch auf eigenen Rechnern �
 etwas installieren. Das Abzeichen „CI“ ganz oben zeigt das Ergebnis des letzten Laufs:
 **grün** = alles bestanden, **rot** = etwas ist kaputt. Ein Klick darauf öffnet die Liste aller Läufe.
 
-Bei jedem Hochladen (Push) und bei jeder vorgeschlagenen Änderung (Pull Request) laufen vier Prüfungen
+Bei jedem Hochladen (Push) und bei jeder vorgeschlagenen Änderung (Pull Request) laufen sechs Prüfungen
 ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)):
 
 | Prüfung | was sie sicherstellt |
@@ -518,6 +530,8 @@ Bei jedem Hochladen (Push) und bei jeder vorgeschlagenen Änderung (Pull Request
 | Registertabelle und erzeugte Dateien | Firmware-Konstanten und Doku-Tabellen passen zu `register.yaml`, keine Leseanfrage geht an den falschen Knoten; Angaben „ab Werk“ in der Doku passen zu den Paketen |
 | Links in den .md-Dateien | alle Verweise in der Dokumentation führen irgendwohin |
 | Firmware kompilieren | die Firmware baut mit ESPHome (mit Platzhalter-Zugangsdaten, echte Geheimnisse braucht es nicht) |
+| Olimex ESP32-EVB kompilieren | die Variante für das Olimex-Board (Ethernet, `kraiz-per-can`, `dallas`) baut und hat dieselben Entitäten wie der Fork von cg089 |
+| Release-Image ohne persönliche Daten | das fertige Image für die Installationsseite baut ohne WLAN, Passwörter und MQTT und enthält keine Platzhalter-Zugangsdaten |
 
 **Für Nachbauer:** Ein grünes Abzeichen heißt, der aktuelle Stand baut und die Regeln bestehen ihre
 Tests. Wer das Repository **forkt** und selbst etwas ändert (etwa für einen anderen Kesseltyp), bekommt

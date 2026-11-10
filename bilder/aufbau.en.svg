@@ -85,7 +85,7 @@
 <circle cx="200" cy="398" r="7" fill="#333"/>
 <text x="190" y="394" font-size="11" font-weight="bold" fill="#333" text-anchor="end">one LAN socket,</text>
 <text x="190" y="408" font-size="11" fill="#333" text-anchor="end">one cable</text>
-<text x="520" y="392" fill="#1e8449" font-size="12">HTTP / JSON via Wi-Fi + router – switch commands only</text>
+<text x="520" y="392" fill="#1e8449" font-size="12">HTTP / JSON via Wi-Fi + router – on demand only</text>
 
 <line x1="50" y1="745" x2="880" y2="745" stroke="#2e86c1" stroke-width="6"/>
 <line x1="240" y1="652" x2="240" y2="745" stroke="#2e86c1" stroke-width="3"/>
@@ -109,9 +109,9 @@
 <text x="895" y="709" font-weight="bold">ESP bridge (WeAct CAN485)</text>
 <text x="895" y="729">• listens to everything</text>
 <text x="895" y="749">• reads single values (SDO)</text>
-<text x="895" y="769">• switches via WEM JSON,</text>
+<text x="895" y="769">• switches via CAN at the WEM,</text>
 <text x="895" y="787">  verifies the result on the bus</text>
-<text x="895" y="807" font-size="12" fill="#555">writing via CAN: off by default</text>
+<text x="895" y="807" font-size="12" fill="#555">fallback: switching via WEM JSON</text>
 <line x1="1025" y1="685" x2="1025" y2="378" stroke="#1e8449" stroke-width="2.5" marker-start="url(#pg)" marker-end="url(#pg)"/>
 <text x="1035" y="520" fill="#1e8449" font-size="12">Wi-Fi · MQTT</text>
 <text x="1035" y="536" fill="#1e8449" font-size="11">(IP, same as LAN)</text>

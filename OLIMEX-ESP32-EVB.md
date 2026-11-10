@@ -56,8 +56,9 @@ node werkzeuge/kraiz-per-can/kraiz_erzeugen.js hassio-weishaupt/custom_component
 ```
 
 ### Warmwasser-Push
-Ein Knopf schreibt `1` auf `0x2A49/2` des WEM (JSON `MI 03 / 0x2549/2` wie bei kraiz). Die Schreib-Schutzfunktionen des
-Pakets `wem-schalten` (Sperrminute, Kontrolle am Bus) gelten auch hier. Nur an einer Anlage erprobt.
+Ein Knopf schreibt `1` auf `0x2A49/2` des WEM (JSON `MI 03 / 0x2549/2` wie bei kraiz). Mindestabstand und Kontrolle am Bus
+aus dem Paket `wem-schalten` gelten auch hier; der Schalter „Freies CAN-Schreiben“ gilt für diesen Knopf nicht
+(festes Ziel, fester Wert). Nur an einer Anlage erprobt.
 
 ### Fehlerblock und Fehler-Klartext
 Der 8-Byte-Fehlerblock des WEM (`0x273F`) wird alle 2 Minuten gelesen: Status, Fehlernummer, Modul und ein Klartext.
