@@ -15,7 +15,7 @@ Quellen stammt oder nur plausibel ist, steht das dabei.
 > | **CAN lesen** (SDO, Kommandobyte `0x40`) | eigene Leseanfragen an den WEM (Knoten 1) und den Kessel (Knoten 2): im Takt, bei Anlass (Betriebsarten, nur WEM), zur Kontrolle nach dem Schalten, von Hand | Takt <!--ab-werk:can_anfragen-->aus<!--/ab-werk--> (Schalter „Eigene CAN-Anfragen“), alles andere an |
 > | **CAN schreiben an den WEM** (SDO, Knoten 1) | Heizkreis (`0x2933`/2) und Warmwasser (`0x2A20`/2) schalten – direkt am Bus, ohne JSON | **<!--ab-werk:can_schalten-->an<!--/ab-werk-->** seit v42 (v35–v41 einschaltbar) |
 > | **Freies CAN-Schreiben** (Experten) | einzelne Objekte von Hand, nur am WEM (Knoten 1), nur `0x2000`–`0x5FFF` | <!--ab-werk:can_frei-->aus<!--/ab-werk--> |
-> | **JSON schreiben** (HTTP an den WEM) | Rückweg fürs Schalten, wenn „Schalten per CAN statt JSON“ aus ist. Bis v34 war das der einzige Weg. | ungenutzt |
+> | **JSON schreiben** (HTTP an den WEM) | Rückweg fürs Schalten, wenn „Schalten per CAN statt JSON“ aus ist. Bis v34 war das der einzige Weg. Dazu das Feld „Schreibbefehl über WEM (Experten)“, das immer über JSON geht. | ungenutzt, solange niemand den Rückweg oder das Schreibfeld benutzt |
 > | **JSON lesen** (HTTP an den WEM) | nur von Hand: „Werte per JSON abrufen“ (eine Anfrage, ab v42), Dateien der SD-Karte. Nie im Takt – der WEM verträgt kein Polling. | nur auf Knopfdruck |
 > | **CAN-Tunnel** (Versuch, Zweig `can-tunnel`) | reicht ungefiltert weiter, was das Gerät am anderen Ende sendet – auch die Schreibaufträge eines Raumgeräts ([Abschnitt 10b](#10b-can-tunnel-über-wlan-versuch-zweig-can-tunnel)) | nicht enthalten |
 >
@@ -92,8 +92,8 @@ JSON; **einzeln abrufen, nie im Takt**):
 | `FAC_TEST.TXT` | Werkstest der SD-Karte (laut BorgNumberOne) |
 
 Ein Inhaltsverzeichnis liefert der WEM nicht (`/sd/` → 404, Webserver „SEVENSTAX“); die Namen muss man
-kennen. Ab v36 holt das Board eine Datei auf Knopfdruck oder per `cmd/sd_datei` (Sperrminute wie beim
-Schalten) und wertet `systable.csv` aus, z. B. „Knoten 01 (FW 428CC226): MI 01 SYSTEM0, MI 02 HZK0, …“.
+kennen. Ab v36 holt das Board eine Datei auf Knopfdruck oder per `cmd/sd_datei` (Abstand wie beim
+Schalten über JSON, ab Werk <!--ab-werk:abstand_json-->60<!--/ab-werk--> s) und wertet `systable.csv` aus, z. B. „Knoten 01 (FW 428CC226): MI 01 SYSTEM0, MI 02 HZK0, …“.
 
 ### CANopen in drei Sätzen
 
@@ -111,10 +111,10 @@ Schalten) und wertet `systable.csv` aus, z. B. „Knoten 01 (FW 428CC226): MI 01
 
 | Kommandobyte | Bedeutung |
 |---|---|
-| `40` | Lese-Anfrage (Upload). Dazu sendet die Firmware nur die Lese-Kommandos für lange Objekte (`60`/`70`, `A4`/`A3`/`A2`/`A1`, siehe unten). |
+| `40` | Lese-Anfrage (Upload). Für lange Objekte sendet die Firmware außerdem die Lese-Kommandos `60`/`70` und `A4`/`A3`/`A2`/`A1` (siehe unten). |
 | `41` | Ankündigung: Objekt ist länger als 4 Byte, Länge in Byte 4–7 |
 | `4F` / `4B` / `47` / `43` | Antwort mit 1 / 2 / 3 / 4 Datenbytes |
-| `2F` / `2B` / `23` | Schreib-Anfrage mit 1 / 2 / 4 Datenbytes (sendet nur der WEM) |
+| `2F` / `2B` / `23` | Schreib-Anfrage (Download) mit 1 / 2 / 4 Datenbytes. Sendet der WEM – und die Firmware an den WEM, wenn sie per CAN schaltet ([Schreiben per CAN](#schreiben-per-can-ab-v35-seit-v42-vorgabe)) |
 | `60` | Bestätigung eines Schreibvorgangs |
 | `80` | Abbruch; Bytes 4–7 = Abbruchcode, z. B. `06020000` Objekt existiert nicht, `06090011` Subindex existiert nicht |
 
@@ -146,21 +146,24 @@ Teilstücke (segmentiert)                     Block
   liefert er (ab v33).
 - **Block** beherrscht der WEM auch als Antwortender (ab v34: Lesebefehl mit Zusatz `B`). Er selbst
   fragt den Kessel fast nur per Block ab (`602: A4 …`).
-- Block und Teilstücke **nur am WEM (Knoten 1)** – siehe nächster Abschnitt.
+- Block und Teilstücke sendet die Firmware am WEM (Knoten 1) immer, am Kessel (Knoten 2) nur, solange
+  „Lange Lesebefehle auch am Kessel“ an ist (ab Werk <!--ab-werk:lang_am_kessel-->an<!--/ab-werk-->) – siehe nächster Abschnitt.
 
 ### SDO-Kanäle: wer fragt wen
 
 | Kanal (Frage → Antwort) | Gegenstelle | wer fragt |
 |---|---|---|
-| `0x601` → `0x581` | WEM | nur wir (Lesebefehle, Kontrolle nach dem Schalten) |
+| `0x601` → `0x581` | WEM | nur wir (Lesebefehle, Anlass-Lesungen, Schalten per CAN, Kontrolle nach dem Schalten) |
 | `0x602` → `0x582` | Kessel | **der WEM, etwa 3× pro Sekunde, meist per Block** – und gegebenenfalls wir |
 | `0x6C2` → `0x682` | WEM | der Kessel: schreibt seine Messwerte in den WEM (z. B. `0x2A29` Warmwassertemperatur, `0x2694`–`0x2699`) |
 | `0x6C0 + n` → `0x680 + n` | WEM | weitere Module (n = Knoten, z. B. `0x6C3` EM-HK, `0x6C4` EM-Sol, siehe [Knoten und Module](#knoten-und-module)) |
 
 CAN-Nachrichten haben keinen Absender: Eine Frage von uns auf `0x602` sieht für den Kessel genauso aus
 wie eine des WEM. Mitten in einem Block-Dialog des WEM kann sie dessen Abfrage stören. Darum:
-am Kessel nur **einzelne, einfache** Lesebefehle, nie Teilstücke, Block oder Serien. An der gemessenen
-Anlage ließen Scans über `0x602` das WEM-Portal stocken, bis der Scan aufhörte. Am WEM (`0x601`) fragt
+am Kessel nur **einzelne** Lesebefehle, keine Serien. An der gemessenen
+Anlage ließen Scans über `0x602` das WEM-Portal stocken, bis der Scan aufhörte. Lange Objekte
+(Teilstücke, Block) liest der Lesebefehl seit v35 auch am Kessel; abschalten lässt sich das mit
+„Lange Lesebefehle auch am Kessel“ (ab Werk <!--ab-werk:lang_am_kessel-->an<!--/ab-werk-->). Am WEM (`0x601`) fragt
 sonst niemand – dort sind auch lange Dialoge unkritisch.
 
 Umgekehrt schreibt **nur der WEM** in den Kessel: alle ~5 s sieben Werte (`0x2709`, `0x270A`,
@@ -186,8 +189,8 @@ CANopen-Teilnehmer, braucht keine Knotennummer und fehlt dem WEM nicht. Ein Raum
 Raumgerät (WEM-RF/RG) ist dagegen ein eigener Knoten und sendet einen eigenen Heartbeat
 `0x700 + n`.
 
-Standard-Objekte der Kennung (lesbar mit dem Lesebefehl; Texte am Kessel nicht gelesen, weil sie
-Teilstücke auf `0x602` bräuchten):
+Standard-Objekte der Kennung (lesbar mit dem Lesebefehl; die Texte am Kessel sind hier nicht gelesen – sie
+brauchen Teilstücke auf `0x602`, die der Lesebefehl dort erst seit v35 sendet):
 
 | Objekt | WEM (Knoten 1) | Kessel (Knoten 2) |
 |---|---|---|
@@ -246,12 +249,14 @@ Zwischen zwei Anfragen eines Takts liegen 150 ms; die 60-s-Gruppe startet 7 s, d
 Bus. Sie werden gelesen, auch wenn „Eigene CAN-Anfragen“ aus ist, aber nur
 
 - einmal nach der Anlaufpause,
-- wenn sich die Statusbits ändern (PDO `0x1C1`, etwa bei einer Umstellung am Display oder im Portal),
+- wenn sich die Statusbits ändern (PDO `0x1C1`, etwa bei einer Umstellung am Display oder im Portal) –
+  mit Paket `verdacht` (in der Hauptdatei eingebunden) stattdessen über die Regeln R3 und R5,
+- wenn eine andere Regel auslöst ([Abschnitt 6a](#6a-regeln-betriebsarten-bei-verdacht-lesen)),
 - nach einem eigenen Warmwasser-Schaltbefehl,
 - auf Wunsch: Knopf „Status lesen“ (Weboberfläche, Handy-App) bzw. MQTT `<gerät>/cmd/status`.
   Wünsche werden höchstens alle 10 s angenommen, gesendet wird nur bei lebendem Bus.
 
-Die Heizkreis-Betriebsart wird dabei höchstens alle 2 min gelesen – außer auf ausdrücklichen Wunsch. Bekannte Lücke: ein Wechsel
+Die Heizkreis-Betriebsart wird dabei höchstens alle 2 min gelesen – außer auf ausdrücklichen Wunsch und wenn eine Regel auslöst (dann gilt der Mindestabstand der Regel). Bekannte Lücke: ein Wechsel
 zwischen zwei Zeitprogrammen am Display ändert die Statusbits nicht und bleibt bis zum nächsten
 Anlass unbemerkt.
 
@@ -260,10 +265,11 @@ Anlass unbemerkt.
 Die JSON-Schnittstelle des WEM ist ein Übersetzer zwischen HTTP und dem CAN-Bus – und der ist
 empfindlich (s. [Abschnitt 8](#8-wann-sich-der-wem-aufhängt)). Regelmäßiges Abfragen über JSON hat
 sie an der gemessenen Anlage fünfmal bis zum Stromlos-Machen lahmgelegt. Der Bus selbst hat damit
-kein Problem: Der WEM fragt den Kessel dort dreimal pro Sekunde ab. **Lesen deshalb immer am Bus,
-den WEM nur zum Schalten ansprechen.**
+kein Problem: Der WEM fragt den Kessel dort dreimal pro Sekunde ab. **Lesen deshalb immer am Bus –
+und seit v42 auch Schalten: per CAN direkt am WEM. Die JSON-Schnittstelle ist nur noch der Rückweg
+und wird nie von selbst angesprochen.**
 
-Ausnahme ab v42: **Abruf von Hand** (Paket `json-lesen`, Knopf „Aktualisieren“) für Boards ohne CAN-Kabel.
+Ausnahme ab v42: **Abruf von Hand** (Paket `json-lesen`: Knopf „Werte per JSON abrufen“ in der Experten-Oberfläche, „Aktualisieren“ in der App auf dem Board) für Boards ohne CAN-Kabel.
 Dabei am 28.10.2026 beobachtet:
 - Der WEM beantwortet **höchstens 7 Objekte je Anfrage**; das achte bekommt immer CM 05 – egal welches Objekt dort steht.
 - Sechs Abrufe in 7 Minuten (je mindestens 60 s Abstand) – danach kamen nur noch leere Antworten; nach 10 Minuten
@@ -273,7 +279,7 @@ Dabei am 28.10.2026 beobachtet:
 
 | Ausfall | Folge |
 |---|---|
-| nur die JSON-Schnittstelle hängt (der bisher beobachtete Fall) | am Bus läuft alles weiter; das Board liest unverändert, nur Schalten geht nicht |
+| nur die JSON-Schnittstelle hängt (der bisher beobachtete Fall) | am Bus läuft alles weiter; das Board liest unverändert. Schalten über JSON geht nicht; ob der WEM in diesem Zustand per CAN schaltet (Vorgabe seit v42), ist noch nicht gemessen |
 | nur Cloud-Verbindung und Portal-Logger hängen (Oktober 2026) | Regelung, Heizkurve und Bus laufen normal; es fehlen nur die mitgehörten Logger-Abfragen des WEM (Abgas, Volumenstrom) |
 | der WEM ist ganz weg | es fehlen alle Werte, die nur als Antwort auf **WEM-Anfragen** mitgehört werden, und alles, was der WEM sendet |
 
@@ -398,7 +404,8 @@ dieselben Folgen entstehen, ist unbekannt. Die Rückrechnung braucht Winterdaten
 
 Alle Anfragen mit Kommandobyte `0x40`. Die Größe ergibt sich aus der Antwort (`4F` 1 Byte, `4B`
 2 Byte, `43` 4 Byte); die Firmware liest bei Knoten 2 bis zu 4 Byte, bei Knoten 1 meist 2 Byte mit
-Vorzeichen (Betriebsarten: 1 Byte). Der Wert `0x8000` bedeutet „kein Wert“ und wird verworfen.
+Vorzeichen (Betriebsarten: 1 Byte). Der Wert `0x8000` bedeutet „kein Wert“; die Firmware verwirft ihn bei Raumsoll, Heizkreis-Vorlauf und
+den Warmwasser-Sollwerten.
 
 <!-- REGISTER:BEGIN eigene-anfragen -->
 <!-- erzeugt aus register.yaml von werkzeuge/register_erzeugen.py - nicht von Hand aendern -->
@@ -461,7 +468,8 @@ Content-Type: application/json
 | `04` | Schreibbestätigung |
 | `05` | Fehler – Objekt unbekannt oder nicht schreibbar |
 
-Die Firmware sendet nur `CM 03` und nie `CM 01`. Sie wertet die ersten zwei Zeichen der Antwort
+Zum Schalten und Schreiben sendet die Firmware `CM 03`; `CM 01` sendet sie nur beim Abruf von Hand
+(Paket `json-lesen`, ab v42), nie von selbst. Sie wertet die ersten zwei Zeichen der Antwort
 aus: `04` oder `02` gilt als bestätigt, `05` als abgelehnt.
 
 ### Was die Firmware schreibt
@@ -484,7 +492,8 @@ Modulen MI 01, 02 und 03 (s. [Abschnitt 6](#6-weboberfläche-lesen-und-schreiben
 
 ### Belegte Leseobjekte: Wärmemengen
 
-Die Firmware liest nichts über JSON. Wer es dennoch tut: diese Objekte antworten an der
+Die Firmware liest diese Objekte nicht; ihr Abruf von Hand holt sieben andere Werte
+([Warum nie über JSON gepollt wird](#warum-nie-über-json-gepollt-wird)). Wer sie über JSON liest: Diese Objekte antworten an der
 WTC-GW 15-B mit `CM 02` (alle **MI 09 / MX 01**, OS `02`, 4 Byte):
 
 <!-- REGISTER:BEGIN json-lesen -->
@@ -544,12 +553,12 @@ wo deren Objekte liegen.
 Bis v34 schrieb die Firmware nie per SDO auf den Bus: Geschaltet wurde über JSON, der Bus diente zur
 Kontrolle. Seit v35 kann sie Heizkreis und Warmwasser direkt per CAN am WEM schalten, **seit v42 ist
 das die Vorgabe** – der WEM nimmt den Befehl sofort an, und seine empfindliche JSON-Schnittstelle
-bleibt unberührt. JSON ist der Rückweg (Schalter aus). Drei Schalter in der Weboberfläche (Gruppe
-„Schreiben per CAN“):
+bleibt unberührt. JSON ist der Rückweg (Schalter aus). Drei Schalter in der Experten-Oberfläche (die ersten beiden in
+der Gruppe „Schreiben per CAN“, der dritte unter „Lesebefehl (nur lesen)“):
 
 | Schalter | ab Werk | Wirkung |
 |---|---|---|
-| Schalten per CAN statt JSON (Heizkreis, Warmwasser) | **<!--ab-werk:can_schalten-->an<!--/ab-werk-->** (seit v42; v35–v41 aus) | App-Knöpfe, `cmd/heizkreis`, `cmd/warmwasser` schreiben per SDO-Download an den WEM: `0x2933`/2 bzw. `0x2A20`/2, 1 Byte. Warteschlange, Sperrminute und Kontrolle am Bus wie beim JSON-Weg; Abbruch des WEM = „abgelehnt“ |
+| Schalten per CAN statt JSON (Heizkreis, Warmwasser) | **<!--ab-werk:can_schalten-->an<!--/ab-werk-->** (seit v42; v35–v41 aus) | App-Knöpfe, `cmd/heizkreis`, `cmd/warmwasser` schreiben per SDO-Download an den WEM: `0x2933`/2 bzw. `0x2A20`/2, 1 Byte. Warteschlange und Kontrolle am Bus wie beim JSON-Weg; Abstand zum vorigen Befehl ab Werk <!--ab-werk:abstand_can-->10<!--/ab-werk--> s (über JSON <!--ab-werk:abstand_json-->60<!--/ab-werk--> s); Abbruch des WEM = „abgelehnt“ |
 | Freies CAN-Schreiben (Experten) | <!--ab-werk:can_frei-->aus<!--/ab-werk--> | Eingabefeld und `cmd/can_schreiben`: `KN IDX SUB WERT [LÄNGE]` oder `KN IDX SUB = B1 B2 …` (hex, bis 64 Byte, ab 5 Byte in Teilstücken mit 50 ms Pause). **Nur Knoten 01, nur 2000–5FFF** – nie der Kessel, nie Kommunikationsobjekte (0x1000–0x1FFF) |
 | Lange Lesebefehle auch am Kessel | **<!--ab-werk:lang_am_kessel-->an<!--/ab-werk-->** | Teilstücke/Block beim Lesen auch an Knoten 2 (dort teilt sich das Board den Kanal mit dem WEM) |
 
@@ -569,14 +578,21 @@ Geräte SDO-Schreiben ablehnen, betrafen vermutlich andere Objekte oder den Kess
 
 ### Ablauf in der Firmware
 
-1. Ein Wunsch kommt über die Weboberfläche, Home Assistant oder MQTT (`<gerät>/cmd/heizkreis`,
-   `<gerät>/cmd/warmwasser`) und landet in der **Warteschlange**: höchstens ein Eintrag je Ziel,
-   der neueste Wunsch ersetzt den alten; Heizkreis vor Warmwasser.
-2. Einmal pro Sekunde prüft die Firmware die Warteschlange. Gesendet wird höchstens **ein Befehl
-   pro Minute** (Sperrminute ab dem letzten Senden).
-3. Die Antwort des WEM wird angezeigt. Bei `CM 05` ist der Vorgang beendet („abgelehnt“).
-4. Sonst liest die Firmware **3 s** nach der Antwort das Zielobjekt am Bus (Knoten 1, `0x2933`/2
-   bzw. `0x2A20`/2). Diese eine Kontroll-Lesung geht auch bei ausgeschalteten eigenen Anfragen raus.
+1. Ein Wunsch kommt über die App auf dem Board, die Experten-Oberfläche, Home Assistant oder MQTT
+   (`<gerät>/cmd/heizkreis`, `<gerät>/cmd/warmwasser`) und landet in der **Warteschlange**: höchstens
+   ein Eintrag je Ziel, der neueste Wunsch ersetzt den alten; gesendet wird in der Reihenfolge des
+   Eingangs (bis v37: Heizkreis vor Warmwasser).
+2. Einmal pro Sekunde prüft die Firmware die Warteschlange. Zwischen zwei Befehlen liegt ein
+   **Mindestabstand** ab dem letzten Senden: per CAN ab Werk <!--ab-werk:abstand_can-->10<!--/ab-werk--> s, über JSON <!--ab-werk:abstand_json-->60<!--/ab-werk--> s (beide
+   einstellbar, Grenzen in der Tabelle unter [Einstellungen](#einstellungen)).
+3. **Per CAN (Vorgabe):** ein SDO-Download an den WEM (`0x601`, `0x2933`/2 bzw. `0x2A20`/2, 1 Byte).
+   Nach 1 s wertet die Firmware die Antwort aus: Quittung `60` = bestätigt; Abbruch `80` =
+   „abgelehnt“, der Vorgang ist beendet; keine Antwort = es wird trotzdem am Bus geprüft.
+   **Über JSON (Schalter aus):** `CM 03` an den WEM, die Antwort wird angezeigt; bei `CM 05` ist der
+   Vorgang beendet („abgelehnt“).
+4. Sonst liest die Firmware das Zielobjekt am Bus (Knoten 1, `0x2933`/2 bzw. `0x2A20`/2) – per CAN
+   **3 s** nach dem Senden, über JSON **3 s** nach der Antwort. Diese eine Kontroll-Lesung geht auch
+   bei ausgeschalteten eigenen Anfragen raus.
 5. **Der Bus entscheidet, nicht die WEM-Antwort:** Stimmt der gelesene Wert mit dem Wunsch überein,
    heißt es „OK“, sonst „NICHT übernommen“. Kommt binnen 10 s keine Antwort, „keine Rückmeldung
    vom Bus – Ergebnis unbekannt“. Auch nach einer leeren oder unklaren WEM-Antwort wird am Bus
@@ -587,8 +603,9 @@ Geräte SDO-Schreiben ablehnen, betrafen vermutlich andere Objekte oder den Kess
 
 ## 6. Weboberfläche: lesen und schreiben
 
-Die Weboberfläche des Boards (`http://<Board>`, Benutzer `admin`) ist in Gruppen geteilt. Die
-Namen hier sind die aus der Firmware.
+Gemeint ist die **Experten-Oberfläche** des Boards (die ESPHome-Weboberfläche): ab v42 unter
+`http://<Board>/experten`, Benutzer `admin` mit dem Experten-Passwort; unter `http://<Board>/` liegt
+mit Paket `app` die App. Sie ist in Gruppen geteilt. Die Namen hier sind die aus der Firmware.
 
 ### Lesebefehl (nur lesen)
 
@@ -600,7 +617,7 @@ Namen hier sind die aus der Firmware.
 | **Lesebefehl Rohdaten** (ab v33) | jede Nachricht des letzten Lesebefehls, `>` gesendet, `<` empfangen, z. B. `>403F270000000000 <413F270008000000 …` |
 
 Lange Objekte liest der Lesebefehl automatisch in Teilstücken (ab v33), mit Zusatz `B` (z. B.
-`01 273F 00 B`) per Block – `B` nur am WEM (Knoten 01).
+`01 273F 00 B`) per Block – am Kessel (Knoten 02) nur, solange „Lange Lesebefehle auch am Kessel“ an ist.
 
 Dasselbe geht per MQTT: `<gerät>/cmd/lesen` mit `01 2933 02`.
 
@@ -608,7 +625,7 @@ Dasselbe geht per MQTT: `<gerät>/cmd/lesen` mit `01 2933 02`.
 
 | Element | Funktion |
 |---|---|
-| **Status lesen** (Knopf) | liest Heizkreis-Betriebsart (`0x2933`/2) und – mit Paket warmwasser – `0x2A20`, `0x2A2C`, `0x2A39` (je Subindex 2) einmal von Knoten 1. Nur Leseanfragen, kein WEM-JSON |
+| **Status lesen** (Knopf) | liest Heizkreis-Betriebsart (`0x2933`/2) und – mit Paket warmwasser – `0x2A20`, `0x2A2C`, `0x2A39` (je Subindex 2) einmal von Knoten 1, nach einem Neustart des Boards dazu einmal die Statusbits (`0x274D`). Nur Leseanfragen, kein WEM-JSON. Gruppe „Betriebsarten und Sollwerte“ |
 | **Status gelesen** | `27.09. 09:32:51 gelesen`, während der Anforderung `09:32:46 angefordert ...`, bei totem Bus `… Bus schweigt - nicht gelesen` |
 
 Per MQTT: `<gerät>/cmd/status` mit beliebigem Inhalt. Höchstens ein Wunsch alle 10 s.
@@ -629,7 +646,7 @@ Per MQTT: `<gerät>/cmd/status` mit beliebigem Inhalt. Höchstens ein Wunsch all
 | Element | Funktion |
 |---|---|
 | **Schreibbefehl (MI MX OX OS WERT hex)** | z. B. `03 00 2520 02 02` = Warmwasser Aus. WERT 1–4 Hexziffern; die Länge (VS) ergibt sich daraus |
-| **Schreiben** | baut `CM 03` und sendet über JSON. **Nur MI 01, 02, 03** – der Kessel ist gesperrt. Es gilt dieselbe Sperrminute wie beim Schalten |
+| **Schreiben** | baut `CM 03` und sendet über JSON. **Nur MI 01, 02, 03** – der Kessel ist gesperrt. Es gilt der Abstand für Befehle über JSON (ab Werk <!--ab-werk:abstand_json-->60<!--/ab-werk--> s) |
 | **Schreibbefehl Antwort** | `OK, WEM bestaetigt (VG …)`, `abgelehnt (CM=05): Objekt unbekannt oder nicht schreibbar - VG …`, `unklare Antwort, HTTP …` oder `WEM nicht erreichbar` |
 
 Das Schreibfeld prüft **nicht** am Bus nach und kennt keine Warteschlange. Vor dem Schreiben das
@@ -637,13 +654,23 @@ Objekt über den Lesebefehl am Bus ansehen und die Abbildung aus
 [Abschnitt 5](#abbildung-json-objekt--can-objekt) anwenden. Jede `CM 05`-Antwort kostet einen der
 zehn Plätze aus [Abschnitt 8](#8-wann-sich-der-wem-aufhängt).
 
+### Weitere Gruppen
+
+- **Schreiben per CAN:** die Schalter „Schalten per CAN statt JSON“ und „Freies CAN-Schreiben“, das
+  Feld für den freien Schreibbefehl und der Abstand per CAN – beschrieben unter [Schreiben per CAN](#schreiben-per-can-ab-v35-seit-v42-vorgabe).
+- **SD-Karte des WEM (Dateien lesen):** Datei holen und Systemtabelle – beschrieben unter
+  [Knoten und Module](#knoten-und-module).
+- Paket `json-lesen` (Gruppe „Einstellungen“): Knopf „Werte per JSON abrufen“, Meldung „JSON-Abruf“
+  und „Mindestabstand JSON-Abruf (s)“ – beschrieben unter
+  [Warum nie über JSON gepollt wird](#warum-nie-über-json-gepollt-wird).
+
 ### Einstellungen
 
 | Element | Funktion |
 |---|---|
 | **Eigene CAN-Anfragen** | an = Leseanfragen im Takt aus [Abschnitt 2](#takt-der-eigenen-anfragen); aus = nur mithören. Bleibt über Neustarts erhalten; Startzustand über `can_anfragen_start` in der Hauptdatei |
 | **CAN-Rohmitschnitt nach MQTT** | jeder empfangene Frame als `ID:DATEN` nach `<gerät>/canraw` (Paket `mqtt`); während eines Scans immer an |
-| **Heizung: IP-Adresse** | Adresse des WEM für die JSON-Befehle |
+| **Heizung: IP-Adresse** | Adresse des WEM für alles, was über HTTP läuft: Schalten über JSON, Schreibbefehl, SD-Dateien, Abruf von Hand |
 | **Waechter: Neustart nach Minuten ohne Bus (0 = aus)** | startet das Board neu, wenn so lange kein Frame kam (Bus-off-Falle) |
 
 **Alle Einstellungen mit ihrem Wert ab Werk.** Die Tabelle wird aus dem Code erzeugt (`werkzeuge/einstellungen_erzeugen.py`: `restore_mode` und `initial_value` in `pakete/*.yaml`, Liste der Einstellungsseite in `app_server.cpp`); die CI schlägt fehl, wenn sie nicht zum Code passt. Dasselbe gilt für jede Angabe „ab Werk“ an anderer Stelle der Doku.
@@ -685,15 +712,17 @@ Mindestabstand je Regel und Obergrenze pro Stunde. **Ausführlich: [REGELN.md](R
 
 | Regel | Auslöser am Bus | liest | Vorgabe |
 |---|---|---|---|
-| R1 | WEM fragt den Kessel `2101/0A`, `2102/0D`, `2102/01` (SDO Block-Upload `0xA4`) | Warmwasser | <!--ab-werk:vd_r1-->an<!--/ab-werk--> |
+| R1 | WEM fragt den Kessel `2101/0A`, `2102/0D`, `2102/01` (SDO Block-Upload `0xA4` oder Upload `0x40`) | Warmwasser | <!--ab-werk:vd_r1-->an<!--/ab-werk--> |
 | R2 | Kesselstatus 15 bzw. `0x252B` = `0F` bei bekanntem Warmwasser „Aus“ | Warmwasser | <!--ab-werk:vd_r2-->an<!--/ab-werk--> |
 | R3 | Standby-Bit `0x1000` in `0x1C1` ändert sich | Heizkreis | <!--ab-werk:vd_r3-->an<!--/ab-werk--> |
 | R4 | Heizanforderung passt nicht zur bekannten Heizkreis-Betriebsart | Heizkreis | <!--ab-werk:vd_r4-->aus<!--/ab-werk--> |
 | R5 | übrige Statusbits in `0x1C1` ändern sich | Heizkreis | <!--ab-werk:vd_r5-->aus<!--/ab-werk--> |
 
 Ausgeschaltete Regeln laufen im **Schattenmodus** weiter (melden „wäre ausgelöst“, lesen nicht).
-Eigene Regeln der Form „CAN-ID + Maske + Muster“ sind experimentell und haben einen eigenen
-Hauptschalter. Einstellen per Weboberfläche, Datei `<gerät>/cmd/regeln` oder Befehl
+Alle Regeln ruhen 2 min nach einem eigenen Schaltbefehl; R1 ruht außerdem 5 min nach einem Neustart
+des WEM (Heartbeat `0x701` = `00`), und R5 liest nicht, wenn R3 im selben Augenblick schon liest.
+Eigene Regeln (Kurzform „CAN-ID + Maske + Muster“, ab v30 auch Folgen, Flanken und Bedingungen)
+sind experimentell und haben einen eigenen Hauptschalter. Einstellen per Weboberfläche, Datei `<gerät>/cmd/regeln` oder Befehl
 `<gerät>/cmd/regel`; Stand unter `<gerät>/regeln/stand`, Protokoll unter
 `<gerät>/verdacht/protokoll`, Ereignisse unter `<gerät>/verdacht/ereignis`.
 
@@ -701,19 +730,21 @@ Hauptschalter. Einstellen per Weboberfläche, Datei `<gerät>/cmd/regeln` oder B
 
 Paket `zusatz.yaml` (ab v24) hat mit dem Kesselbus nichts zu tun: es verwaltet nur eine **Liste
 fremder MQTT-Topics** (bis 6), die die Handy-App zusätzlich anzeigt – z. B. Raumtemperaturen oder ob
-eine Wärmepumpe läuft. **Das Board liest diese Topics nicht**, es speichert die Liste dauerhaft und
-veröffentlicht sie retained unter `<gerät>/app/zusatz`. Die App abonniert daraus die Topics selbst.
+eine Wärmepumpe läuft. Das Board speichert die Liste dauerhaft und
+veröffentlicht sie retained unter `<gerät>/app/zusatz`. **Wer die Topics liest, hängt von der App ab:**
+Die Docker-App abonniert sie selbst, das Board liest sie dann nicht. Mit Paket `app` (App auf dem
+Board, ab v38) abonniert das Board die Topics der Liste selbst – sein MQTT-Konto braucht dafür Leserecht.
 
 | Feld | Bedeutung |
 |---|---|
 | `name` | Anzeigename, 1–24 Byte |
 | `topic` | MQTT-Topic ohne Platzhalter `+`/`#` |
 | `feld` | JSON-Feld im Payload, verschachtelt mit Punkt (`aenergy.total`); fehlt es, ist der Payload selbst die Zahl |
-| `einheit` | bis 8 Zeichen, z. B. `°C` |
+| `einheit` | bis 8 Byte, z. B. `°C` (3 Byte) |
 | `art` | `wert` (Vorgabe) zeigt die Zahl; `laeuft` zeigt „läuft“ ab `schwelle` (Vorgabe 1), sonst „aus“ |
 
 Einstellen: JSON `{"version":N,"eintraege":[…]}` an `<gerät>/cmd/zusatz` (retained möglich,
-Prüfsumme wie bei `cmd/regeln`) oder in der Weboberfläche, Feld **Zusatz-Befehl**:
+Prüfsumme wie bei `cmd/regeln`) auf der Einstellungsseite der App (Paket `app`) oder in der Experten-Oberfläche, Feld **Zusatz-Befehl**:
 
 ```
 Wohnzimmer topic=sensoren/wz/temp feld=tC einheit=°C
@@ -724,7 +755,7 @@ alle loeschen
 
 Der Name ist alles vor dem ersten Wort mit `=` (darf Leerzeichen enthalten); Werte ohne
 Leerzeichen. Ein vorhandener Eintrag gleichen Namens wird ersetzt. Ergebnis in **Zusatz Meldung**,
-die Liste in **Zusatzanzeigen**. In der App gelten Werte älter als 10 min als „--“ – bei Sensoren,
+die Liste in **Zusatzanzeigen**. In der Docker-App gelten Werte älter als 10 min als „--“, in der App auf dem Board erst nach 2 Stunden – bei Sensoren,
 die nur alle paar Minuten senden (Batteriegeräte), ist das Alter entsprechend hoch.
 
 ## 7. Neue Objekte finden: Scan und Differenz
