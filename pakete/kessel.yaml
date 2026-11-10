@@ -227,7 +227,10 @@ canbus:
       - can_id: 0x201
         then:
           - lambda: |-
-              id(wem_aussentemp).publish_state(reg::pdo_wert(reg::AUSSENTEMP, x));
+              // 0x8000 = "kein Wert" (kommt z.B. beim Einschalten der Anlage): nicht veroeffentlichen
+              float w;
+              if (reg::pdo_lesen(reg::AUSSENTEMP, x, w)) id(wem_aussentemp).publish_state(w);
+              if (x.empty()) return;
               int sb = x[reg::SYSTEMBETRIEBSART.byte];
               id(wem_systembetriebsart_code).publish_state((float) sb);
               id(wem_systembetriebsart).publish_state(wc::system_text(sb));
@@ -236,9 +239,10 @@ canbus:
       - can_id: 0x241
         then:
           - lambda: |-
-              id(wem_heizanforderung).publish_state(reg::pdo_wert(reg::VORLAUFSOLL_HZ, x));
+              float w;
+              if (reg::pdo_lesen(reg::VORLAUFSOLL_HZ, x, w)) id(wem_heizanforderung).publish_state(w);
               // Bytes 2-3: Kesseltemperatur (gleich 0x2532) - kommt so alle paar Sekunden, ohne Anfrage
-              if (x.size() >= 4) id(wem_kessel).publish_state(reg::pdo_wert(reg::KESSEL_TEMP_PDO, x));
+              if (reg::pdo_lesen(reg::KESSEL_TEMP_PDO, x, w)) id(wem_kessel).publish_state(w);
 
       # PDO 0x181: Datum und Uhrzeit der Heizung (Stunde, Minute, Jahr-2000, Monat, Tag, Wochentag)
       - can_id: 0x181
@@ -255,8 +259,8 @@ canbus:
               if (x.size() < 6 || (x[0] != 0x2B && x[0] != 0x2F && x[0] != 0x23)) return;
               uint16_t idx = (x[2] << 8) | x[1];
               uint8_t sub = x[3];
-              int16_t v = (int16_t)((x[5] << 8) | x[4]);
-              if (sub != 1) return;
+              int32_t v;
+              if (sub != 1 || !reg::sdo_roh(x, v)) return;   // Laenge aus dem Kommandobyte, 0x8000 = kein Wert
               if (reg::ist(reg::RUECKLAUF_VPT, idx, sub)) id(wem_ruecklauf).publish_state(reg::wert(reg::RUECKLAUF_VPT, v));
               else if (reg::ist(reg::VORLAUF_VPT, idx, sub)) id(wem_vorlauf_vpt).publish_state(reg::wert(reg::VORLAUF_VPT, v));
               else if (reg::ist(reg::SOLLLEISTUNG, idx, sub)) id(wem_sollleistung).publish_state(reg::wert(reg::SOLLLEISTUNG, v));
@@ -292,7 +296,8 @@ canbus:
                 id(wem_betriebsart_hk).publish_state(wc::hk_status_text(m));
                 bf::status().setze(bf::status().hk_bits, (int) m);
               } else if (reg::ist(reg::VL_SOLL_ANF, idx, sub)) {
-                id(wem_ww_vlsoll).publish_state(reg::wert(reg::VL_SOLL_ANF, (int16_t)((x[5] << 8) | x[4])));
+                int32_t v;
+                if (reg::sdo_roh(x, v)) id(wem_ww_vlsoll).publish_state(reg::wert(reg::VL_SOLL_ANF, v));
               } else if (reg::ist(reg::HK_BETRIEBSART, idx, sub)) {
                 // Heizkreis-Betriebsart (JSON MI02 0x2533/02)
                 uint8_t b = x[4];
@@ -301,8 +306,8 @@ canbus:
                 bf::status().hk_gelesen(b, id(wcan)->unix_zeit());
                 id(status_gelesen).publish_state(id(wcan)->zeit("%d.%m. %H:%M:%S ") + "gelesen");
               } else if (reg::ist(reg::RAUMSOLL, idx, sub) || reg::ist(reg::HK_VORLAUF, idx, sub)) {
-                int16_t v = (int16_t)((x[5] << 8) | x[4]);
-                if (v == (int16_t) 0x8000) return;
+                int32_t v;
+                if (!reg::sdo_roh(x, v)) return;   // 0x8000 = kein Wert
                 if (reg::ist(reg::RAUMSOLL, idx, sub)) id(hk_raumsoll_akt).publish_state(reg::wert(reg::RAUMSOLL, v));
                 else id(hk_vorlauf).publish_state(reg::wert(reg::HK_VORLAUF, v));
               }
@@ -314,7 +319,11 @@ canbus:
               if ((x[0] & 0xF0) != 0x40) return;
               uint16_t idx = (x[2] << 8) | x[1];
               uint8_t sub = x[3];
-              int32_t v = (int32_t)((uint32_t)x[7] << 24 | (uint32_t)x[6] << 16 | (uint32_t)x[5] << 8 | (uint32_t)x[4]);
+              // Laenge aus dem Kommandobyte (4F 1 Byte, 4B 2 Byte mit Vorzeichen, 43 4 Byte). 0x8000 bei 2 Byte
+              // heisst "kein Wert" - der Kessel meldet es z.B. kurz nach dem Einschalten der Anlage. Frueher
+              // wurden immer 4 Byte gelesen, daraus wurden 327,68 bar und 3276,8 Grad (Issue #2, cg089).
+              int32_t v;
+              if (!reg::sdo_roh(x, v)) return;
               if (reg::ist(reg::DRUCK, idx, sub)) id(wem_druck).publish_state(reg::wert(reg::DRUCK, v));
               else if (reg::ist(reg::LEISTUNG, idx, sub)) id(wem_leistung).publish_state(reg::wert(reg::LEISTUNG, v));
               else if (reg::ist(reg::DREHZAHL, idx, sub)) id(wem_drehzahl).publish_state(reg::wert(reg::DREHZAHL, v));

@@ -421,10 +421,18 @@ dieselben Folgen entstehen, ist unbekannt. Die Rückrechnung braucht Winterdaten
 
 ## 4. Was auf Anforderung gelesen wird
 
-Alle Anfragen mit Kommandobyte `0x40`. Die Größe ergibt sich aus der Antwort (`4F` 1 Byte, `4B`
-2 Byte, `43` 4 Byte); die Firmware liest bei Knoten 2 bis zu 4 Byte, bei Knoten 1 meist 2 Byte mit
-Vorzeichen (Betriebsarten: 1 Byte). Der Wert `0x8000` bedeutet „kein Wert“; die Firmware verwirft ihn bei Raumsoll, Heizkreis-Vorlauf und
-den Warmwasser-Sollwerten.
+Alle Anfragen mit Kommandobyte `0x40`. Die Größe steht im Kommandobyte der Antwort (`4F` 1 Byte, `4B`
+2 Byte, `43` 4 Byte); die Firmware liest genau so viele Bytes, 2-Byte-Werte mit Vorzeichen.
+
+**„Kein Wert“:** Bei 2-Byte-Werten bedeutet `0x8000` „kein Wert“. An der gemessenen Anlage antwortet der
+Kessel so auf `0x2527`/0 und `0x273B`/2 (`582: 4B 27 25 00 00 80 00 00`), und einmal standen die
+Außentemperatur im PDO `0x201` und das Warmwasser im PDO `0x241` für einen Augenblick auf `0x8000`. cg089
+sah es nach einem Neustart der Anlage bei Anlagendruck und Temperatur ([Issue #2](https://github.com/jvejmelka/weishaupt-wem-can-esphome/issues/2)).
+Die Firmware verwirft `0x8000` und `0x7FFF` bei allen 2-Byte-Werten aus SDO-Telegrammen und bei den
+Temperaturen der PDOs; der letzte gültige Wert bleibt stehen. Frühere Stände lasen Antworten des Kessels
+immer als 4 Byte, ohne auf die Länge zu achten – `0x8000` erschien dann als 327,68 bar oder 3276,8 °C. Ein
+Bereichsfilter je Wert (etwa 0–3 bar) ist nicht eingebaut: Er würde echte Zustände wie Überdruck oder
+Frost am Außenfühler verdecken.
 
 <!-- REGISTER:BEGIN eigene-anfragen -->
 <!-- erzeugt aus register.yaml von werkzeuge/register_erzeugen.py - nicht von Hand aendern -->
@@ -685,7 +693,8 @@ Tabellen der Abschnitte 3 und 4.
 
 - Aufgenommen sind nur Objekte der Module, die es an der gemessenen Anlage gibt (Kessel, System,
   Heizkreis 1, Warmwasser). Objekte für einen zweiten Heizkreis, Erweiterungsmodule und Solar stehen in
-  den Quellen.
+  den Quellen – am vollständigsten in [`wem_codes.py`](https://github.com/geronet1/wem-python/blob/main/wem_codes.py) von geronet1
+  (knapp 200 Objekte zum Erweiterungsmodul Heizkreis und zu Solar; hier an keiner Anlage geprüft).
 - Nennt die Quelle eine JSON-Adresse, ist der CAN-Index mit den Versätzen aus
   [Abschnitt 5](#abbildung-json-objekt--can-objekt) umgerechnet. Die Versätze sind an einer WTC-GW 15-B
   gemessen; ob sie für jedes Objekt eines Moduls gelten, ist nur an den dort genannten Beispielen geprüft.
@@ -790,7 +799,7 @@ Tabellen der Abschnitte 3 und 4.
 
 **Quellen**
 
-- [geronet1/wem-python](https://github.com/geronet1/wem-python) – Objektliste des Mitschnitts (`wem_codes.py`)
+- [geronet1/wem-python](https://github.com/geronet1/wem-python) – Objektliste des Mitschnitts (`wem_codes.py`, MIT-Lizenz)
 - [BorgNumberOne/Weishaupt_CanApiJson](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) – Adresstabelle der JSON-Schnittstelle mit Modbus-Registern
 - [kraiz/hassio-weishaupt](https://github.com/kraiz/hassio-weishaupt) – Sensorliste der Home-Assistant-Integration (MIT-Lizenz)
 - [BorgNumberOne/Weishaupt_CanApiJson, Pull Request #10 (ChristophKomenda)](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/pull/10) – Heizkreis-Parameter der JSON-Schnittstelle

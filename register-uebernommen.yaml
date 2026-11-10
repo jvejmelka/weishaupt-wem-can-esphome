@@ -24,8 +24,8 @@ quellen:
     kurz: geronet1
     name: "geronet1/wem-python"
     url: "https://github.com/geronet1/wem-python"
-    was: "Objektliste des Mitschnitts (`wem_codes.py`)"
-    was_en: "object list of the bus logger (`wem_codes.py`)"
+    was: "Objektliste des Mitschnitts (`wem_codes.py`, MIT-Lizenz)"
+    was_en: "object list of the bus logger (`wem_codes.py`, MIT licence)"
   borg:
     kurz: BorgNumberOne
     name: "BorgNumberOne/Weishaupt_CanApiJson"

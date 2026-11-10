@@ -431,10 +431,17 @@ the same sequences is unknown. The back-calculation needs winter data (OT 0–8 
 
 ## 4. What is read on demand
 
-All requests use command byte `0x40`. The size follows from the response (`4F` 1 byte, `4B`
-2 bytes, `43` 4 bytes); for node 2 the firmware reads up to 4 bytes, for node 1 mostly 2 bytes
-signed (operating modes: 1 byte). The value `0x8000` means “no value”; the firmware discards it for the room setpoint, the heating circuit
-flow temperature and the DHW setpoints.
+All requests use command byte `0x40`. The size is given in the command byte of the response (`4F` 1 byte,
+`4B` 2 bytes, `43` 4 bytes); the firmware reads exactly that many bytes, 2-byte values signed.
+
+**“No value”:** in 2-byte values `0x8000` means “no value”. On the measured installation the boiler answers
+`0x2527`/0 and `0x273B`/2 this way (`582: 4B 27 25 00 00 80 00 00`), and once the outdoor temperature in PDO
+`0x201` and the hot water in PDO `0x241` showed `0x8000` for a moment. cg089 saw it for system pressure and
+temperature after restarting the installation ([issue #2](https://github.com/jvejmelka/weishaupt-wem-can-esphome/issues/2)). The firmware discards `0x8000` and `0x7FFF`
+in all 2-byte values from SDO frames and in the temperatures of the PDOs; the last valid value stays. Earlier
+versions always read boiler responses as 4 bytes regardless of the length – `0x8000` then appeared as
+327.68 bar or 3276.8 °C. There is no range filter per value (such as 0–3 bar): it would hide real
+conditions like overpressure or frost at the outdoor sensor.
 
 <!-- REGISTER:BEGIN eigene-anfragen -->
 <!-- erzeugt aus register.yaml von werkzeuge/register_erzeugen.py - nicht von Hand aendern -->
@@ -706,7 +713,8 @@ with its evidence into the tables of sections 3 and 4.
 
 - Only objects of modules that exist on the measured installation are included (boiler, system, heating
   circuit 1, hot water). Objects for a second heating circuit, extension modules and solar are in the
-  sources.
+  sources – most completely in [`wem_codes.py`](https://github.com/geronet1/wem-python/blob/main/wem_codes.py) by geronet1 (just under
+  200 objects for the heating circuit extension module and solar; not checked on any installation here).
 - Where the source gives a JSON address, the CAN index is converted with the offsets from
   [section 5](#mapping-json-object--can-object). The offsets were measured on a WTC-GW 15-B; whether they
   hold for every object of a module has only been checked for the examples listed there.
@@ -811,7 +819,7 @@ with its evidence into the tables of sections 3 and 4.
 
 **Sources**
 
-- [geronet1/wem-python](https://github.com/geronet1/wem-python) – object list of the bus logger (`wem_codes.py`)
+- [geronet1/wem-python](https://github.com/geronet1/wem-python) – object list of the bus logger (`wem_codes.py`, MIT licence)
 - [BorgNumberOne/Weishaupt_CanApiJson](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) – address table of the JSON interface with Modbus registers
 - [kraiz/hassio-weishaupt](https://github.com/kraiz/hassio-weishaupt) – sensor list of the Home Assistant integration (MIT licence)
 - [BorgNumberOne/Weishaupt_CanApiJson, Pull Request #10 (ChristophKomenda)](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/pull/10) – heating circuit parameters of the JSON interface

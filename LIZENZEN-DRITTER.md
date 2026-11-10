@@ -64,9 +64,9 @@ SOFTWARE.
 
 ## Ohne übernommenen Code
 
-Aus [MenkeC/Weishaupt-C3supermini](https://github.com/MenkeC/Weishaupt-C3supermini),
-[geronet1/wem-python](https://github.com/geronet1/wem-python) und
-[BorgNumberOne/Weishaupt_CanApiJson](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) (alle ohne Lizenzangabe)
+Aus [MenkeC/Weishaupt-C3supermini](https://github.com/MenkeC/Weishaupt-C3supermini) und
+[BorgNumberOne/Weishaupt_CanApiJson](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) (beide ohne Lizenzangabe)
+sowie aus [geronet1/wem-python](https://github.com/geronet1/wem-python) (MIT seit 10.11.2026)
 stammen nur Protokollangaben – Adressen, Faktoren, Bedeutungen; Code ist von dort nicht übernommen. Die Herkunft je
 Objekt steht in [`register.yaml`](register.yaml) (`quelle:`), die Projekte unter „Quellen“ in der [README](README.md).
 

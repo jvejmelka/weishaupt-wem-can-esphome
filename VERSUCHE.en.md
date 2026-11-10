@@ -105,7 +105,7 @@ order is the function itself.
 |---|---|---|---|
 | 2 | `0x2539`/2, `0x253A`/2, `0x253B`/2 | Room setpoint reduced, normal, comfort | 0.1 °C; nested limits (sub 3/4 = neighbouring value), reduced from −100.0, comfort up to 300.0 |
 | 2 | `0x2533`/2 | Heating circuit operating mode | 1 byte; 2 = time program 1, 3 = time program 2 |
-| 2 | `0x254B`/2 | Heating curve slope | 0.1; 100–250 |
+| 2 | `0x254B`/2 | Heating curve slope | 0.1; 100–250 (depends on the heating circuit type, see below) |
 | 2 | `0x25AD`/2 | Heating curve parallel shift | 0.1 K; −500…500. The RG2 steps by 0.5 K, the display rounds to whole K (5 → "1 K") |
 | 2 | `0x2587`/2 | Party/heating pause function | 0 off, 1 on |
 | 2 | `0x2589`/2 | Party room setpoint level | 1 reduced, 3 comfort |
@@ -122,6 +122,15 @@ Each value was changed on the RG2, checked by the WEM's acknowledgement on the b
 firmware's display) and set back afterwards. `0x2539` is the reduced room setpoint in MI 2 and the DHW setpoint in MI 3.
 The party menu suggests the rounded-down current time as start and three hours later as end; the WEM may have
 something else stored.
+
+**The slope limits depend on the heating circuit type** – pointed out by
+[ChristophKomenda](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/issues/8#issuecomment-6763314919): according to the Weishaupt
+documentation, “Universal” allows 1.5–40.0, “Radiator 60” 8.0–20.0 and “Radiator 70” 10.0–25.0. The limits read here,
+100–250 (`0x254B`/3 and /4), match “Radiator 70”; which type is set on the measured WEM has not been looked up yet. On his
+WTC-GW 15-B (heating circuit type “Universal”, slope 8.5) he read both objects via the JSON interface and
+[compared them with the controller display](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/issues/8#issuecomment-6708250969):
+`02 00 254B 02` (slope) and `02 00 25AD 02` (parallel shift, changed back and forth three times). The objects are thus
+confirmed on two installations; the limits apply per setting.
 
 **DHW program (MI 3, `0x2580`):** same layout as the heating time programs, the upper word was `0x3288` here. The flags
 before each day block (sub 3, 19, 35, …) were `01` for the Monday–Friday group and `02` for Saturday/Sunday; the RG2 read

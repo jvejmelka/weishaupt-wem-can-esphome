@@ -112,7 +112,7 @@ letzte Auftrag ist die Funktion selbst.
 |---|---|---|---|
 | 2 | `0x2539`/2, `0x253A`/2, `0x253B`/2 | Raumsoll Absenk, Normal, Komfort | 0,1 °C; Grenzen verschachtelt (Sub 3/4 = Nachbarwert), Absenk ab −100,0, Komfort bis 300,0 |
 | 2 | `0x2533`/2 | Betriebsart Heizkreis | 1 Byte; 2 = Zeitprogramm 1, 3 = Zeitprogramm 2 |
-| 2 | `0x254B`/2 | Heizkurve Steilheit | 0,1; 100–250 |
+| 2 | `0x254B`/2 | Heizkurve Steilheit | 0,1; 100–250 (je Heizkreistyp, siehe unten) |
 | 2 | `0x25AD`/2 | Heizkurve Parallelverschiebung | 0,1 K; −500…500. Das RG2 stellt in 0,5-K-Schritten, die Anzeige rundet auf ganze K (5 → „1 K“) |
 | 2 | `0x2587`/2 | Party/Heizpause Funktion | 0 Aus, 1 Ein |
 | 2 | `0x2589`/2 | Party Raumsoll-Stufe | 1 Absenk, 3 Komfort |
@@ -128,6 +128,15 @@ letzte Auftrag ist die Funktion selbst.
 Jeder Wert wurde am RG2 verstellt, an der Quittung des WEM am Bus kontrolliert (Betriebsarten zusätzlich an der
 Anzeige der Firmware) und danach zurückgestellt. `0x2539` ist bei MI 2 das Raumsoll Absenk, bei MI 3 das Warmwasser-Soll. Das Party-Menü schlägt als
 Beginn die abgerundete Uhrzeit und als Ende drei Stunden später vor; im WEM kann anderes gespeichert sein.
+
+**Die Grenzen der Steilheit hängen vom Heizkreistyp ab** – Hinweis von
+[ChristophKomenda](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/issues/8#issuecomment-6763314919): Nach der Weishaupt-Unterlage
+gilt für „Universal“ 1,5–40,0, für „Heizkörper 60“ 8,0–20,0 und für „Heizkörper 70“ 10,0–25,0. Die hier gelesenen Grenzen
+100–250 (`0x254B`/3 und /4) passen zu „Heizkörper 70“; welcher Typ am gemessenen WEM eingestellt ist, ist noch nicht
+nachgesehen. An seiner WTC-GW 15-B (Heizkreistyp „Universal“, Steilheit 8,5) hat er beide Objekte über die
+JSON-Schnittstelle gelesen und [mit der Anzeige am Gerät verglichen](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/issues/8#issuecomment-6708250969):
+`02 00 254B 02` (Steilheit) und `02 00 25AD 02` (Parallelverschiebung, dreimal hin und zurück verstellt). Die Objekte
+sind damit an zwei Anlagen belegt, die Grenzen gelten je Einstellung.
 
 **Warmwasser-Programm (MI 3, `0x2580`):** gleicher Aufbau wie die Heiz-Zeitprogramme, das obere Wort war hier `0x3288`.
 Die Kennwerte vor jedem Tagesblock (Sub 3, 19, 35, …) waren `01` für die Gruppe Montag–Freitag und `02` für Samstag/Sonntag;

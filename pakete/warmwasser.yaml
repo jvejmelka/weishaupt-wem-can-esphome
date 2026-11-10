@@ -26,7 +26,7 @@ canbus:
       # PDO 0x241, Bytes 6-7: Warmwassertemperatur
       - can_id: 0x241
         then:
-          - lambda: 'id(wem_warmwasser).publish_state(reg::pdo_wert(reg::WARMWASSER, x));'
+          - lambda: 'float w; if (reg::pdo_lesen(reg::WARMWASSER, x, w)) id(wem_warmwasser).publish_state(w);'
       # PDO 0x182: Kesselstatus 15 = Warmwasserbetrieb
       - can_id: 0x182
         then:
@@ -47,8 +47,8 @@ canbus:
                 id(ww_betriebsart).publish_state(wc::ww_name(b, "unbekannt"));
                 bf::status().ww_gelesen(b, id(wcan)->unix_zeit());
               } else if (reg::ist(reg::WW_SOLL_AKT, idx, sub) || reg::ist(reg::WW_SOLL_NORMAL, idx, sub)) {
-                int16_t v = (int16_t)((x[5] << 8) | x[4]);
-                if (v == (int16_t) 0x8000) return;
+                int32_t v;
+                if (!reg::sdo_roh(x, v)) return;   // 0x8000 = kein Wert
                 if (reg::ist(reg::WW_SOLL_AKT, idx, sub)) { float w = reg::wert(reg::WW_SOLL_AKT, v); id(ww_soll_akt).publish_state(w); bf::status().setze_f(bf::status().ww_soll_akt, w); }
                 else { float w = reg::wert(reg::WW_SOLL_NORMAL, v); id(ww_soll_normal).publish_state(w); bf::status().setze_f(bf::status().ww_soll_normal, w); }
               }
