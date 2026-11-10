@@ -8,10 +8,18 @@ JSON interface. Measured on a **WTC-GW 15-B** with WEM system unit; where a stat
 from third-party sources or is merely plausible, this is noted.
 
 > **By default** the firmware never writes to the bus: on the bus it only issues read requests (SDO,
-> command byte `0x40`), and switching goes through the WEM's JSON interface. From v35, switching the
-> heating circuit and hot water can be moved to CAN ([Writing via CAN](#writing-via-can-from-v35-off-by-default)) –
-> the firmware then writes via SDO to the WEM (node 1), without JSON. The measured installation has been
-> running this way since 26 Oct 2026. **The firmware never writes to the boiler (node 2).**
+> command byte `0x40`), and switching goes through the WEM's JSON interface. Writing on the bus only
+> happens once it is switched on:
+>
+> - **Switching via CAN** (from v35): heating circuit and hot water go via SDO to the WEM (node 1),
+>   without JSON. The measured installation has been running this way since 26 Oct 2026
+>   ([Writing via CAN](#writing-via-can-from-v35-off-by-default)).
+> - **Free CAN writing** (experts): single objects, on the WEM (node 1) only.
+> - **CAN tunnel** (experiment, branch `can-tunnel`): forwards unfiltered whatever the device at the
+>   other end sends – including write requests, for example those of a room unit
+>   ([section 10b](#10b-can-tunnel-over-wlan-experiment-branch-can-tunnel)).
+>
+> The firmware has no write commands of its own to the boiler (node 2).
 
 - [1. Overview](#1-overview)
 - [2. Passive listening and on-demand reading](#2-passive-listening-and-on-demand-reading)
@@ -754,8 +762,8 @@ with its evidence into the tables of sections 3 and 4.
   hold for every object of a module has only been checked for the examples listed there.
 - The system module also contains objects for buffer tank, cascade, plate heat exchanger and circulation.
   Whether they return a value on an installation without these functions is unverified.
-- Many boiler objects are installer-level settings. This is about reading only: the firmware never
-  writes to the boiler (node 2), not even when switching via CAN – that goes to the WEM.
+- Many boiler objects are installer-level settings. This is about reading only: the firmware has no
+  write commands of its own to the boiler (node 2); switching via CAN goes to the WEM as well.
 - The list is maintained in [`register-uebernommen.yaml`](register-uebernommen.yaml).
 
 <!-- REGISTER:BEGIN uebernommen -->

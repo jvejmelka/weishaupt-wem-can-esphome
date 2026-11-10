@@ -8,10 +8,18 @@ schaltet. Gemessen an einer **WTC-GW 15-B** mit WEM-Systemgerät; wo eine Angabe
 Quellen stammt oder nur plausibel ist, steht das dabei.
 
 > **Ab Werk** schreibt die Firmware nie auf den Bus: Am Bus stellt sie nur Lese-Anfragen (SDO,
-> Kommandobyte `0x40`), geschaltet wird über die JSON-Schnittstelle des WEM. Ab v35 lässt sich das
-> Schalten von Heizkreis und Warmwasser auf CAN umstellen ([Schreiben per CAN](#schreiben-per-can-ab-v35-ab-werk-aus)) –
-> dann schreibt sie per SDO an den WEM (Knoten 1), ohne JSON. So läuft die gemessene Anlage seit dem
-> 26.10.2026. **An den Kessel (Knoten 2) schreibt die Firmware nie.**
+> Kommandobyte `0x40`), geschaltet wird über die JSON-Schnittstelle des WEM. Geschrieben wird am Bus
+> erst, wenn man es einschaltet:
+>
+> - **Schalten per CAN** (ab v35): Heizkreis und Warmwasser gehen per SDO an den WEM (Knoten 1), ohne
+>   JSON. So läuft die gemessene Anlage seit dem 26.10.2026
+>   ([Schreiben per CAN](#schreiben-per-can-ab-v35-ab-werk-aus)).
+> - **Freies CAN-Schreiben** (Experten): einzelne Objekte, nur am WEM (Knoten 1).
+> - **CAN-Tunnel** (Versuch, Zweig `can-tunnel`): reicht ungefiltert weiter, was das Gerät am anderen
+>   Ende sendet – auch Schreibaufträge, etwa die eines Raumgeräts
+>   ([Abschnitt 10b](#10b-can-tunnel-über-wlan-versuch-zweig-can-tunnel)).
+>
+> Eigene Schreibbefehle an den Kessel (Knoten 2) hat die Firmware nicht.
 
 - [1. Überblick](#1-überblick)
 - [2. Mithören und Lesen auf Anforderung](#2-mithören-und-lesen-auf-anforderung)
@@ -731,8 +739,8 @@ Tabellen der Abschnitte 3 und 4.
   gemessen; ob sie für jedes Objekt eines Moduls gelten, ist nur an den dort genannten Beispielen geprüft.
 - Zum Systemmodul gehören auch Objekte für Pufferspeicher, Kaskade, Plattenwärmetauscher und Zirkulation.
   Ob sie an einer Anlage ohne diese Funktionen einen Wert liefern, ist ungeprüft.
-- Viele Kesselobjekte sind Einstellwerte der Fachmann-Ebene. Hier geht es nur ums Lesen: Die Firmware
-  schreibt nie an den Kessel (Knoten 2), auch nicht beim Schalten per CAN – das geht an den WEM.
+- Viele Kesselobjekte sind Einstellwerte der Fachmann-Ebene. Hier geht es nur ums Lesen: Eigene
+  Schreibbefehle an den Kessel (Knoten 2) hat die Firmware nicht, auch das Schalten per CAN geht an den WEM.
 - Gepflegt wird die Liste in [`register-uebernommen.yaml`](register-uebernommen.yaml).
 
 <!-- REGISTER:BEGIN uebernommen -->
