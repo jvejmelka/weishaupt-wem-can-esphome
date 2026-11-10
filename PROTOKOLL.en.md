@@ -23,6 +23,7 @@ added one). **This table is the one place for it**; README, INSTALL and the othe
 > | **CAN reading** (SDO, command byte `0x40`) | own read requests to the WEM (node 1) and the boiler (node 2): on a schedule, on occasion (operating modes, WEM only), for verification after switching, by hand | schedule <!--ab-werk:can_anfragen-->off<!--/ab-werk--> (switch “Eigene CAN-Anfragen”), everything else on |
 > | **CAN writing to the WEM** (SDO, node 1) | switching heating circuit (`0x2933`/2) and hot water (`0x2A20`/2) – directly on the bus, without JSON | **<!--ab-werk:can_schalten-->on<!--/ab-werk-->** since v42 (v35–v41: could be enabled) |
 > | **Free CAN writing** (experts) | single objects by hand, on the WEM (node 1) only, `0x2000`–`0x5FFF` only | <!--ab-werk:can_frei-->off<!--/ab-werk--> |
+> | **DHW push** (“Warmwasser-Push”; Olimex variant only, package `kraiz-per-can` by cg089) | one button writes `1` to `0x2A49`/2 of the WEM (node 1): fixed target, fixed value, with minimum interval and verification on the bus. The switch “Freies CAN-Schreiben” does not apply to this button ([OLIMEX-ESP32-EVB.md](OLIMEX-ESP32-EVB.md#warmwasser-push), German). | not included in the main file (WeAct); in the Olimex variant on button press only |
 > | **JSON writing** (HTTP to the WEM) | fallback for switching when “Schalten per CAN statt JSON” is off. Up to v34 this was the only way. Also the field “Schreibbefehl über WEM (Experten)”, which always goes via JSON. | unused as long as nobody uses the fallback or the write field |
 > | **JSON reading** (HTTP to the WEM) | by hand only: “Werte per JSON abrufen” (one request, from v42), files on the SD card. Never on a schedule – the WEM does not tolerate polling. | on button press only |
 > | **CAN tunnel** (experiment, branch `can-tunnel`) | forwards unfiltered whatever the device at the other end sends – including the write requests of a room unit ([VERSUCHE.en.md, section 10b](VERSUCHE.en.md#10b-can-tunnel-over-wlan-experiment-branch-can-tunnel)) | not included |
@@ -269,7 +270,12 @@ bus by themselves. They are read even when “Eigene CAN-Anfragen” is off, but
 - when another rule triggers ([FIRMWARE.en.md, section 6a](FIRMWARE.en.md#6a-rules-reading-operating-modes-on-suspicion)),
 - after the firmware's own DHW switching command,
 - on request: button “Status lesen” (“read status”; expert interface, phone app) or MQTT `<gerät>/cmd/status`.
-  Requests are accepted at most every 10 s and are only sent while the bus is alive.
+  Requests are accepted at most every 10 s.
+
+Event-triggered reads, too, are only sent while the bus is alive and after the start-up pause. An
+event during the pause is kept (“angefordert – Anlaufpause, liest danach”, i.e. “requested – start-up
+pause, reads afterwards”) and read once afterwards – since v42 for DHW as well; up to v41 the DHW
+part already read during the pause.
 
 The heating circuit operating mode is read at most every 2 min – except on explicit request and when a rule triggers (then the minimum interval of the rule applies). Known gap: a change
 between two time programs at the display does not change the status bits and goes unnoticed until

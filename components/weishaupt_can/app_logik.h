@@ -17,7 +17,8 @@ namespace ap {
 
 // Werte, die laenger nicht aktualisiert wurden, gelten als veraltet (wie VERALTET_MS der Docker-App)
 static const uint32_t VERALTET_MS = 10UL * 60 * 1000;
-// Zusatzwerte aelter als das blendet die App aus (wie ZUSATZ_MAX_ALTER_MS)
+// Zusatzwerte aelter als das zeigt die App als "--" (wie ZUSATZ_MAX_ALTER_MS der Docker-App);
+// was aelter als 10 min ist, zeigt die Oberflaeche gedimmt mit seinem Alter (app.js, ZUSATZ_BETAGT_S)
 static const uint32_t ZUSATZ_MAX_ALTER_MS = 2UL * 60 * 60 * 1000;
 
 // Login-Schutz wie die Docker-App: 5 Fehlversuche je Adresse in 15 min -> 15 min Sperre

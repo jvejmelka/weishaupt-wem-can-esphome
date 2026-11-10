@@ -9,7 +9,7 @@ interval:
     then:
       - lambda: |-
           uint32_t jetzt = millis();
-          id(wcan)->anlass.ww_takt(id(wcan)->bus.tot(jetzt), jetzt);
+          id(wcan)->anlass.ww_takt(id(wcan)->bus.senden_erlaubt(jetzt), jetzt);
       - if:
           condition:
             lambda: 'return id(wcan)->anlass.ww_jetzt;'

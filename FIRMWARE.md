@@ -169,5 +169,6 @@ alle loeschen
 
 Der Name ist alles vor dem ersten Wort mit `=` (darf Leerzeichen enthalten); Werte ohne
 Leerzeichen. Ein vorhandener Eintrag gleichen Namens wird ersetzt. Ergebnis in **Zusatz Meldung**,
-die Liste in **Zusatzanzeigen**. In der Docker-App gelten Werte älter als 10 min als „--“, in der App auf dem Board erst nach 2 Stunden – bei Sensoren,
-die nur alle paar Minuten senden (Batteriegeräte), ist das Alter entsprechend hoch.
+die Liste in **Zusatzanzeigen**. Die App (auf dem Board und in Docker gleich) zeigt Werte, die älter als
+10 min sind, gedimmt mit ihrem Alter („20,6 °C (35 min)“) – Batteriegeräte senden oft nur bei Änderung –
+und nach 2 Stunden als „--“ (Docker-App: Umgebungsvariable `ZUSATZ_MAX_ALTER_MS`).

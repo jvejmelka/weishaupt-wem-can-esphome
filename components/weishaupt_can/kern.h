@@ -101,7 +101,7 @@ struct Bus {
 
 // Text "Eigene CAN-Anfragen" (an = Stand des Schalters)
 inline std::string anfragen_text(bool an, const Bus &b, uint32_t j) {
-  if (!an) return "aus - nur mithoeren (Betriebsarten bei Anlass)";
+  if (!an) return "aus - keine Abfragen im Takt (Betriebsarten bei Anlass)";
   if (b.seit == 0 || j - b.letzter_frame >= BUS_STILL_MS) return "aus - Bus schweigt";
   uint32_t pause = b.pause_ms, seit = j - b.seit;
   if (seit <= pause) return "Anlaufpause, noch " + std::to_string((pause - seit) / 60000 + 1) + " min nur mithoeren";
@@ -139,14 +139,17 @@ struct Anlass {
     if (hk_letzte_lesung != 0 && jetzt - hk_letzte_lesung < HK_MINDESTABSTAND_MS) return;
     hk_erledigt = a; hk_letzte_lesung = jetzt | 1; hk_jetzt = true;
   }
-  // 5-s-Takt Warmwasser (Paket warmwasser): 8 s nach dem Anlass, nur bei lebendem Bus
-  void ww_takt(bool bus_tot, uint32_t jetzt) {
+  // 5-s-Takt Warmwasser (Paket warmwasser): 8 s nach dem Anlass, nur wenn gesendet werden darf
+  // (Bus lebt UND Anlaufpause vorbei, wie beim Heizkreis). Bis v41 genuegte "Bus lebt": ein Anlass
+  // in der Anlaufpause (Status lesen, Statusbits, Schaltbefehl) fuehrte dann zu drei Leseanfragen
+  // an den WEM mitten in der Pause. Ab v42 bleibt der Anlass stehen und wird danach gelesen.
+  void ww_takt(bool bus_ok, uint32_t jetzt) {
     ww_jetzt = false;
     uint32_t a = anlass_ms;
     if (ww_ms != 0 && (a == 0 || (int32_t) (ww_ms - a) > 0)) a = ww_ms;
     if (a == 0 || a == ww_erledigt) return;
     if (jetzt - a < 8000) return;
-    if (bus_tot) return;
+    if (!bus_ok) return;
     ww_erledigt = a; ww_jetzt = true;
   }
 

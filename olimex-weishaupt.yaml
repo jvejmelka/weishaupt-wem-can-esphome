@@ -23,7 +23,7 @@
 substitutions:
   geraet: olimex-weishaupt
   anzeigename: Weishaupt Heizung
-  firmware: "v42-dev vom 28.10.2026 (Olimex ESP32-EVB)"
+  firmware: "v42-dev vom 10.11.2026 (Olimex ESP32-EVB)"
   # RESTORE_DEFAULT_OFF = keine Abfragen im Takt, RESTORE_DEFAULT_ON = eigene Leseanfragen im Weishaupt-Takt
   can_anfragen_start: RESTORE_DEFAULT_OFF
   # Sprache der Stoermeldungen und des Fehler-Klartexts: "false" = Deutsch, "true" = Englisch (fehlercodes.yaml)

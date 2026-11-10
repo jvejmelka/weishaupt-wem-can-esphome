@@ -23,6 +23,7 @@ hierher. Die Angaben „an“/„aus“ in der Spalte „Ab Werk“ werden aus d
 > | **CAN lesen** (SDO, Kommandobyte `0x40`) | eigene Leseanfragen an den WEM (Knoten 1) und den Kessel (Knoten 2): im Takt, bei Anlass (Betriebsarten, nur WEM), zur Kontrolle nach dem Schalten, von Hand | Takt <!--ab-werk:can_anfragen-->aus<!--/ab-werk--> (Schalter „Eigene CAN-Anfragen“), alles andere an |
 > | **CAN schreiben an den WEM** (SDO, Knoten 1) | Heizkreis (`0x2933`/2) und Warmwasser (`0x2A20`/2) schalten – direkt am Bus, ohne JSON | **<!--ab-werk:can_schalten-->an<!--/ab-werk-->** seit v42 (v35–v41 einschaltbar) |
 > | **Freies CAN-Schreiben** (Experten) | einzelne Objekte von Hand, nur am WEM (Knoten 1), nur `0x2000`–`0x5FFF` | <!--ab-werk:can_frei-->aus<!--/ab-werk--> |
+> | **Warmwasser-Push** (nur Olimex-Variante, Paket `kraiz-per-can` von cg089) | ein Knopf schreibt `1` auf `0x2A49`/2 des WEM (Knoten 1): festes Ziel, fester Wert, mit Mindestabstand und Kontrolle am Bus. Der Schalter „Freies CAN-Schreiben“ gilt für diesen Knopf nicht ([OLIMEX-ESP32-EVB.md](OLIMEX-ESP32-EVB.md#warmwasser-push)). | in der Hauptdatei (WeAct) nicht eingebunden; in der Olimex-Variante nur auf Knopfdruck |
 > | **JSON schreiben** (HTTP an den WEM) | Rückweg fürs Schalten, wenn „Schalten per CAN statt JSON“ aus ist. Bis v34 war das der einzige Weg. Dazu das Feld „Schreibbefehl über WEM (Experten)“, das immer über JSON geht. | ungenutzt, solange niemand den Rückweg oder das Schreibfeld benutzt |
 > | **JSON lesen** (HTTP an den WEM) | nur von Hand: „Werte per JSON abrufen“ (eine Anfrage, ab v42), Dateien der SD-Karte. Nie im Takt – der WEM verträgt kein Polling. | nur auf Knopfdruck |
 > | **CAN-Tunnel** (Versuch, Zweig `can-tunnel`) | reicht ungefiltert weiter, was das Gerät am anderen Ende sendet – auch die Schreibaufträge eines Raumgeräts ([VERSUCHE.md, Abschnitt 10b](VERSUCHE.md#10b-can-tunnel-über-wlan-versuch-zweig-can-tunnel)) | nicht enthalten |
@@ -268,7 +269,11 @@ Bus. Sie werden gelesen, auch wenn „Eigene CAN-Anfragen“ aus ist, aber nur
 - wenn eine andere Regel auslöst ([FIRMWARE.md, Abschnitt 6a](FIRMWARE.md#6a-regeln-betriebsarten-bei-verdacht-lesen)),
 - nach einem eigenen Warmwasser-Schaltbefehl,
 - auf Wunsch: Knopf „Status lesen“ (Experten-Oberfläche, Handy-App) bzw. MQTT `<gerät>/cmd/status`.
-  Wünsche werden höchstens alle 10 s angenommen, gesendet wird nur bei lebendem Bus.
+  Wünsche werden höchstens alle 10 s angenommen.
+
+Auch Anlass-Lesungen gehen nur bei lebendem Bus und nach der Anlaufpause hinaus. Ein Anlass in der
+Pause bleibt stehen („angefordert – Anlaufpause, liest danach“) und wird danach einmal gelesen –
+seit v42 auch beim Warmwasser; bis v41 las der Warmwasser-Teil schon in der Pause.
 
 Die Heizkreis-Betriebsart wird dabei höchstens alle 2 min gelesen – außer auf ausdrücklichen Wunsch und wenn eine Regel auslöst (dann gilt der Mindestabstand der Regel). Bekannte Lücke: ein Wechsel
 zwischen zwei Zeitprogrammen am Display ändert die Statusbits nicht und bleibt bis zum nächsten

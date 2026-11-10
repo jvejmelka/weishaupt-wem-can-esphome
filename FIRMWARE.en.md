@@ -172,5 +172,6 @@ alle loeschen
 
 The name is everything before the first word containing `=` (may contain spaces); values without
 spaces. An existing entry with the same name is replaced. Result in **Zusatz Meldung** (additional-display message),
-the list in **Zusatzanzeigen** (additional displays). In the Docker app, values older than 10 min are shown as “--”, in the app on the board only after 2 hours – for sensors
-that only transmit every few minutes (battery devices), the age is correspondingly high.
+the list in **Zusatzanzeigen** (additional displays). The app (the same on the board and in Docker) shows values older than
+10 min dimmed together with their age (“20,6 °C (35 min)”) – battery devices often transmit only on change –
+and as “--” after 2 hours (Docker app: environment variable `ZUSATZ_MAX_ALTER_MS`).

@@ -295,6 +295,7 @@ html, body {
 .zusatz-item { white-space: nowrap; }
 .zusatz-item .zwert { font-family: var(--mono); color: var(--text); margin-left: .3rem; }
 .zusatz-item.alt .zwert { color: var(--muted); }
+.zusatz-item .zalter { font-size: .85em; }
 .zusatz-item.an .zwert { color: var(--amber); font-weight: 700; }
 .zusatz-item.an .zwert::before { content: '◉ '; color: var(--amber); animation: pulse 1s ease infinite; }
 

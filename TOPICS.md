@@ -27,7 +27,7 @@ Zeiten sind Unix-Sekunden der Board-Uhr (SNTP), `null` solange die Uhr nicht ges
 ```json
 {
   "v": 1,
-  "firmware": "v42-dev vom 28.10.2026",
+  "firmware": "v42-dev vom 10.11.2026",
   "zeit": 1790510646,
   "heizkreis": {
     "vorgabe": 1, "vorgabe_text": "Standby",
