@@ -95,9 +95,9 @@ gruppen:
       - {index: 0x291C, sub: 2, name: "Obere Grenze des Vorlaufsolls", name_en: "Flow setpoint, upper limit", faktor: 0.1, einheit: "°C", json: "02 00 251C 02", quelle: [komenda]}
       - {index: 0x292C, sub: 2, name: "Vorlaufsoll im Sonderniveau", name_en: "Flow setpoint, special level", faktor: 0.1, einheit: "°C", json: "02 00 252C 02", modbus: 113, quelle: [kraiz, borg]}
       - {index: 0x293A, sub: 2, name: "Raumsoll Normal", name_en: "Room setpoint, normal", faktor: 0.1, einheit: "°C", json: "02 00 253A 02", modbus: 107, quelle: [kraiz, borg],
-         hinweis: "JSON-Adresse am RG2 mitgeschnitten (Abschnitt 10a)", hinweis_en: "JSON address seen on the RG2 (section 10a)"}
+         hinweis: "JSON-Adresse am RG2 mitgeschnitten (VERSUCHE.md, Abschnitt 10a)", hinweis_en: "JSON address seen on the RG2 (VERSUCHE.en.md, section 10a)"}
       - {index: 0x293B, sub: 2, name: "Raumsoll Komfort", name_en: "Room setpoint, comfort", faktor: 0.1, einheit: "°C", json: "02 00 253B 02", modbus: 106, quelle: [kraiz, borg],
-         hinweis: "JSON-Adresse am RG2 mitgeschnitten (Abschnitt 10a)", hinweis_en: "JSON address seen on the RG2 (section 10a)"}
+         hinweis: "JSON-Adresse am RG2 mitgeschnitten (VERSUCHE.md, Abschnitt 10a)", hinweis_en: "JSON address seen on the RG2 (VERSUCHE.en.md, section 10a)"}
       - {index: 0x2954, sub: 2, name: "Frostschutzgrenze der Außentemperatur", name_en: "Frost protection limit, outdoor temperature", faktor: 0.1, einheit: "°C", json: "02 00 2554 02", quelle: [komenda]}
       - {index: 0x2969, sub: 2, name: "Vorlaufsoll Absenk", name_en: "Flow setpoint, setback", faktor: 0.1, einheit: "°C", json: "02 00 2569 02", modbus: 112, quelle: [kraiz, borg]}
       - {index: 0x296A, sub: 2, name: "Vorlaufsoll Normal", name_en: "Flow setpoint, normal", faktor: 0.1, einheit: "°C", json: "02 00 256A 02", modbus: 111, quelle: [kraiz, borg]}

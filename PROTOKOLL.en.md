@@ -7,6 +7,9 @@ firmware picks up by passive listening, what it requests itself, and how it swit
 and via its JSON interface. Measured on a **WTC-GW 15-B** with WEM system unit; where a statement comes only
 from third-party sources or is merely plausible, this is noted.
 
+What the firmware offers for operation (expert interface, all settings, rules, additional displays) is described in
+[FIRMWARE.en.md](FIRMWARE.en.md); the captures of the WEM-RG2 room unit and the CAN tunnel in [VERSUCHE.en.md](VERSUCHE.en.md).
+
 ## Ways to the heating system
 
 The ways the firmware talks to the heating system and which of them are on by default (as of v42 – every version
@@ -22,7 +25,7 @@ added one). **This table is the one place for it**; README, INSTALL and the othe
 > | **Free CAN writing** (experts) | single objects by hand, on the WEM (node 1) only, `0x2000`–`0x5FFF` only | <!--ab-werk:can_frei-->off<!--/ab-werk--> |
 > | **JSON writing** (HTTP to the WEM) | fallback for switching when “Schalten per CAN statt JSON” is off. Up to v34 this was the only way. Also the field “Schreibbefehl über WEM (Experten)”, which always goes via JSON. | unused as long as nobody uses the fallback or the write field |
 > | **JSON reading** (HTTP to the WEM) | by hand only: “Werte per JSON abrufen” (one request, from v42), files on the SD card. Never on a schedule – the WEM does not tolerate polling. | on button press only |
-> | **CAN tunnel** (experiment, branch `can-tunnel`) | forwards unfiltered whatever the device at the other end sends – including the write requests of a room unit ([section 10b](#10b-can-tunnel-over-wlan-experiment-branch-can-tunnel)) | not included |
+> | **CAN tunnel** (experiment, branch `can-tunnel`) | forwards unfiltered whatever the device at the other end sends – including the write requests of a room unit ([VERSUCHE.en.md, section 10b](VERSUCHE.en.md#10b-can-tunnel-over-wlan-experiment-branch-can-tunnel)) | not included |
 >
 > **The firmware never writes to the boiler (node 2)** – only read requests go there. Writing goes to the
 > WEM. Details: [Listening and reading](#2-passive-listening-and-on-demand-reading),
@@ -36,15 +39,18 @@ added one). **This table is the one place for it**; README, INSTALL and the othe
 - [2. Passive listening and on-demand reading](#2-passive-listening-and-on-demand-reading)
 - [3. What is picked up by passive listening](#3-what-is-picked-up-by-passive-listening)
 - [4. What is read on demand](#4-what-is-read-on-demand)
-- [5. Writing via the WEM (JSON)](#5-writing-via-the-wem-json)
-- [6. Web interface: reading and writing](#6-web-interface-reading-and-writing)
-- [6a. Rules: reading operating modes on suspicion](#6a-rules-reading-operating-modes-on-suspicion)
-- [6b. Additional displays for the phone app](#6b-additional-displays-for-the-phone-app)
+- [5. Writing at the WEM: via JSON and via CAN](#5-writing-at-the-wem-via-json-and-via-can)
+- [6. Web interface: reading and writing](FIRMWARE.en.md#6-web-interface-reading-and-writing) → FIRMWARE.en.md
+- [6a. Rules: reading operating modes on suspicion](FIRMWARE.en.md#6a-rules-reading-operating-modes-on-suspicion) → FIRMWARE.en.md
+- [6b. Additional displays for the phone app](FIRMWARE.en.md#6b-additional-displays-for-the-phone-app) → FIRMWARE.en.md
 - [7. Finding new objects: scan and diff](#7-finding-new-objects-scan-and-diff)
 - [7a. Objects taken from other projects (unverified)](#7a-objects-taken-from-other-projects-unverified)
 - [8. When the WEM locks up](#8-when-the-wem-locks-up)
 - [9. Example: heating circuit to “Time program 1”](#9-example-heating-circuit-to-time-program-1)
 - [10. Example: DHW off](#10-example-dhw-off)
+- [10a. WEM-RG2 room unit on the bus](VERSUCHE.en.md#10a-wem-rg2-room-unit-on-the-bus-capture-november-2026) → VERSUCHE.en.md
+- [10b. CAN tunnel over WLAN](VERSUCHE.en.md#10b-can-tunnel-over-wlan-experiment-branch-can-tunnel) → VERSUCHE.en.md
+- [10c. Fault messages on the bus and error codes](#10c-fault-messages-on-the-bus-and-error-codes)
 - [11. Sources](#11-sources)
 
 ## 1. Overview
@@ -260,7 +266,7 @@ bus by themselves. They are read even when “Eigene CAN-Anfragen” is off, but
 - once after the start-up pause,
 - when the status bits change (PDO `0x1C1`, e.g. on a change at the display or in the portal) –
   with package `verdacht` (included in the main file) through the rules R3 and R5 instead,
-- when another rule triggers ([section 6a](#6a-rules-reading-operating-modes-on-suspicion)),
+- when another rule triggers ([FIRMWARE.en.md, section 6a](FIRMWARE.en.md#6a-rules-reading-operating-modes-on-suspicion)),
 - after the firmware's own DHW switching command,
 - on request: button “Status lesen” (“read status”; expert interface, phone app) or MQTT `<gerät>/cmd/status`.
   Requests are accepted at most every 10 s and are only sent while the bus is alive.
@@ -441,7 +447,7 @@ flow temperature and the DHW setpoints.
 | 1 | `0x2907`/2 | 0.1 °C | 60 s | s | Vorlauf Heizkreis | plausible (JSON MI 02 `0x2507` actual flow temperature, +0x400) |
 | 1 | `0x2640`/3 | 0.1 °C | 60 s | – | Vorlaufsoll Anforderung | plausible (50 °C observed with DHW on, 23 °C with off) |
 | 1 | `0x2958`/2 | 0.1 °C | 5 min | m | Raumsoll aktuell | plausible (JSON MI 02 `0x2558`, +0x400) |
-| 1 | `0x2933`/2 | Code 1–8, see [section 5](#5-writing-via-the-wem-json) | event, at most every 2 min | m | Heizkreis Betriebsart | **verified** (for standby, time program 1–3, summer. **Comfort, normal, setback never observed**) |
+| 1 | `0x2933`/2 | Code 1–8, see [section 5](#5-writing-at-the-wem-via-json-and-via-can) | event, at most every 2 min | m | Heizkreis Betriebsart | **verified** (for standby, time program 1–3, summer. **Comfort, normal, setback never observed**) |
 | 1 | `0x2A20`/2 | 1 on, 2 off | event | – | Warmwasser Betriebsart | **verified** (switched and seen on the display) |
 | 1 | `0x2A2C`/2 | 0.1 °C | event | m | Warmwasser Soll aktuell | plausible (JSON MI 03 `0x252C`, +0x500; 8.0 °C with DHW off) |
 | 1 | `0x2A39`/2 | 0.1 °C | event | m | Warmwasser Soll normal | plausible (JSON MI 03 `0x2539`, +0x500) |
@@ -459,7 +465,13 @@ go to “unknown”; if the WEM requests one of them itself, it comes back via p
 
 Feedback from other installations is welcome – especially measurements with the burner running.
 
-## 5. Writing via the WEM (JSON)
+<a id="5-writing-via-the-wem-json"></a>
+
+## 5. Writing at the WEM: via JSON and via CAN
+
+First the way through the WEM's JSON interface (the only one up to v34, today the fallback and the way of the write field), then the
+[mapping JSON object → CAN object](#mapping-json-object--can-object) and
+[writing via CAN](#writing-via-can-from-v35-default-since-v42), which the firmware uses for switching by default since v42.
 
 ### The request
 
@@ -515,7 +527,7 @@ The heating circuit codes are listed this way in the Weishaupt register table. T
 is not listed there; it was found by scan and diff (see [section 7](#7-finding-new-objects-scan-and-diff)).
 
 Further objects can be written via the write field of the expert interface, but only in the
-modules MI 01, 02 and 03 (see [section 6](#6-web-interface-reading-and-writing)).
+modules MI 01, 02 and 03 (see [FIRMWARE.en.md, section 6](FIRMWARE.en.md#6-web-interface-reading-and-writing)).
 
 ### Verified read objects: heat quantities
 
@@ -611,7 +623,7 @@ concerned other objects or the boiler.
    (up to v37: heating circuit before DHW).
 2. Once per second the firmware checks the queue. Between two commands there is a **minimum
    interval** from the last send: via CAN <!--ab-werk:abstand_can-->10<!--/ab-werk--> s by default, via JSON <!--ab-werk:abstand_json-->60<!--/ab-werk--> s (both adjustable,
-   limits in the table under [Einstellungen](#einstellungen-settings)).
+   limits in the table under [Einstellungen](FIRMWARE.en.md#einstellungen-settings)).
 3. **Via CAN (default):** one SDO download to the WEM (`0x601`, `0x2933`/2 or `0x2A20`/2, 1 byte).
    After 1 s the firmware evaluates the response: acknowledgement `60` = confirmed; abort `80` =
    “rejected”, the operation ends; no response = the bus is checked anyway.
@@ -631,163 +643,15 @@ concerned other objects or the boiler.
 
 ## 6. Web interface: reading and writing
 
-This is the board's **expert interface** (the ESPHome web interface): from v42 at
-`http://<Board>/experten`, user `admin` with the expert password; with package `app`,
-`http://<Board>/` is the app. It is divided into groups. The
-names here are those from the firmware (German, with English translations in parentheses).
-
-### Lesebefehl (read command, read only)
-
-| Element | Function |
-|---|---|
-| **Lesebefehl (KN IDX SUB hex)** (read command) | input `NODE INDEX SUB` in hex, e.g. `01 2933 02` |
-| **Lesen** (read) | sends a read request (`0x40`) to node `0x600 + KN` – only if the bus is alive |
-| **Lesebefehl Antwort** (read command response) | `01 2933/02 = 2 (0x02, 1 Byte)` or `… Abbruch 06020000 (Objekt fehlt?)` (abort, object missing?); with a dead bus “Bus tot - nicht gesendet” (bus dead – not sent) |
-| **Lesebefehl Rohdaten** (read command raw data, from v33) | every frame of the last read command, `>` sent, `<` received, e.g. `>403F270000000000 <413F270008000000 …` |
-
-The read command reads long objects automatically in segments (from v33); with suffix `B` (e.g.
-`01 273F 00 B`) by block – on the boiler (node 02) only while “Lange Lesebefehle auch am Kessel” is on.
-
-The same works via MQTT: `<gerät>/cmd/lesen` with `01 2933 02`.
-
-### Operating modes: read status
-
-| Element | Function |
-|---|---|
-| **Status lesen** (read status; button) | reads the heating circuit operating mode (`0x2933`/2) and – with package warmwasser – `0x2A20`, `0x2A2C`, `0x2A39` (each subindex 2) once from node 1, and after a restart of the board once the status bits (`0x274D`). Read requests only, no WEM JSON. Group “Betriebsarten und Sollwerte” |
-| **Status gelesen** (status read) | `27.09. 09:32:51 gelesen` (read), during the request `09:32:46 angefordert ...` (requested), with a dead bus `… Bus schweigt - nicht gelesen` (bus silent – not read) |
-
-Via MQTT: `<gerät>/cmd/status` with any payload. At most one request every 10 s.
-
-### Switching (via WEM, verification on the bus)
-
-| Element | Function |
-|---|---|
-| **Heizkreis Betriebsart setzen** (set heating circuit operating mode) | selection Standby … Absenk; shows the value on the bus after each verification read |
-| **Warmwasser setzen** (set DHW) | selection Ein / Aus (on / off) |
-| **Warteschlange** (queue) | pending commands with source, e.g. `1. Heizkreis -> Zeitprogramm 1 (MQTT) - naechster Befehl ab 14:03:12` (next command from 14:03:12), otherwise `leer` (empty) |
-| **Ergebnis letzter Schaltbefehl** (result of last switching command) | progress and result as plain text, see [section 5](#sequence-in-the-firmware) (deprecated – structured: `befehl/status`, [TOPICS.md](TOPICS.md) (German)) |
-| **Warteschlange leeren** (clear queue) | discards all pending commands (is logged) |
-| **Schaltprotokoll** (switching log) | the last ten commands with time, source and result; via MQTT retained under `<gerät>/schaltprotokoll`. Empty after a reboot |
-
-### Schreibbefehl über WEM (write command via WEM; experts)
-
-| Element | Function |
-|---|---|
-| **Schreibbefehl (MI MX OX OS WERT hex)** (write command; WERT = value) | e.g. `03 00 2520 02 02` = DHW off. WERT 1–4 hex digits; the length (VS) is derived from it |
-| **Schreiben** (write) | builds `CM 03` and sends it via JSON. **Only MI 01, 02, 03** – the boiler is locked. The interval for commands via JSON applies (<!--ab-werk:abstand_json-->60<!--/ab-werk--> s by default) |
-| **Schreibbefehl Antwort** (write command response) | `OK, WEM bestaetigt (VG …)` (WEM confirmed), `abgelehnt (CM=05): Objekt unbekannt oder nicht schreibbar - VG …` (rejected: object unknown or not writable), `unklare Antwort, HTTP …` (unclear response) or `WEM nicht erreichbar` (WEM unreachable) |
-
-The write field does **not** verify on the bus and has no queue. Before writing, look at the
-object on the bus using the read command and apply the mapping from
-[section 5](#mapping-json-object--can-object). Every `CM 05` response costs one of the
-ten slots from [section 8](#8-when-the-wem-locks-up).
-
-### Further groups
-
-- **Schreiben per CAN:** the switches “Schalten per CAN statt JSON” and “Freies CAN-Schreiben”, the
-  field for the free write command and the interval via CAN – described under [Writing via CAN](#writing-via-can-from-v35-default-since-v42).
-- **SD-Karte des WEM (Dateien lesen):** fetch a file, system table – described under
-  [Nodes and modules](#nodes-and-modules).
-- Package `json-lesen` (group “Einstellungen”): button “Werte per JSON abrufen”, message “JSON-Abruf”
-  and “Mindestabstand JSON-Abruf (s)” – described under
-  [Why JSON is never polled](#why-json-is-never-polled).
-
-### Einstellungen (settings)
-
-| Element | Function |
-|---|---|
-| **Eigene CAN-Anfragen** (own CAN requests) | on = read requests at the rates from [section 2](#rate-of-own-requests); off = passive listening only. Persists across reboots; initial state via `can_anfragen_start` in the main file |
-| **CAN-Rohmitschnitt nach MQTT** (raw CAN capture to MQTT) | every received frame as `ID:DATEN` (ID:DATA) to `<gerät>/canraw` (package `mqtt`); always on during a scan |
-| **Heizung: IP-Adresse** (heating: IP address) | address of the WEM for everything that runs over HTTP: switching via JSON, write command, SD files, manual refresh |
-| **Waechter: Neustart nach Minuten ohne Bus (0 = aus)** (watchdog: reboot after minutes without bus, 0 = off) | reboots the board if no frame has arrived for that long (bus-off trap) |
-
-**All settings with their default value.** The table is generated from the code (`werkzeuge/einstellungen_erzeugen.py`: `restore_mode` and `initial_value` in `pakete/*.yaml`, the list of the settings page in `app_server.cpp`); CI fails if it does not match the code. The same holds for every “default” stated elsewhere in the documentation.
-
-<!-- EINSTELLUNGEN:BEGIN -->
-| Setting (name on the board) | Default | Range | Package | Group on the settings page | Changing it needs |
-|---|---|---|---|---|---|
-| Schalten per CAN statt JSON (Heizkreis, Warmwasser) | **on** | – | `wem-schalten` | Schalten | admin login |
-| Abstand zwischen Befehlen per CAN (s) | 10 | 5–300 | `wem-schalten` | Schalten | admin login |
-| Abstand zwischen Befehlen per JSON (s) | 60 | 60–600 | `wem-schalten` | Schalten | admin login |
-| Mindestabstand JSON-Abruf (s) | 300 | 120–3600 | `json-lesen` | Schalten | admin login |
-| Eigene CAN-Anfragen | **off** | – | `kessel` | Lesen | admin login and expert password |
-| Lange Lesebefehle auch am Kessel | **on** | – | `kessel` | Lesen | admin login and expert password |
-| SD-Dateien abrufen | **on** | – | `wem-schalten` | Lesen | admin login and expert password |
-| R1 Warmwasser am Display oder Portal umgeschaltet | **on** | – | `verdacht` | Regeln | admin login |
-| R2 Warmwasserbetrieb trotz Aus | **on** | – | `verdacht` | Regeln | admin login |
-| R3 Heizung ein oder Standby | **on** | – | `verdacht` | Regeln | admin login |
-| R4 Heizanforderung passt nicht | **off** | – | `verdacht` | Regeln | admin login |
-| R5 uebrige Statusbits geaendert | **off** | – | `verdacht` | Regeln | admin login |
-| Eigene Regeln (Hauptschalter) | **off** | – | `verdacht` | Regeln | admin login |
-| Freies CAN-Schreiben (Experten) | **off** | – | `wem-schalten` | Experten | admin login and expert password |
-| CAN-Rohmitschnitt nach MQTT | **off** | – | `mqtt` | Experten | admin login and expert password |
-| Waechter: Neustart nach Minuten ohne Bus (0 = aus) | 5 | 0–120 | `kessel` | Experten | admin login and expert password |
-| R1 Mindestabstand (min) | 1 | 1–1440 | `verdacht` | – | expert interface |
-| R2 Mindestabstand (min) | 10 | 1–1440 | `verdacht` | – | expert interface |
-| R3 Mindestabstand (min) | 1 | 1–1440 | `verdacht` | – | expert interface |
-| R4 Mindestabstand (min) | 30 | 1–1440 | `verdacht` | – | expert interface |
-| R5 Mindestabstand (min) | 5 | 1–1440 | `verdacht` | – | expert interface |
-| Regeln: hoechstens pro Stunde (alle zusammen) | 6 | 1–60 | `verdacht` | – | expert interface |
-<!-- EINSTELLUNGEN:END -->
-
-“Changing it needs” applies with the package `app`: the settings page requires the admin login, and in the groups “Lesen” (reading) and “Experten” (experts) the expert password as well. Settings without a group are not on the settings page but in the expert interface (`/experten`); the values of the rules can also be set by file and MQTT ([REGELN.md](REGELN.md), German). “(optional)” means: the package is not included in `weishaupt-wem-can.yaml`.
+Moved to [FIRMWARE.en.md](FIRMWARE.en.md#6-web-interface-reading-and-writing).
 
 ## 6a. Rules: reading operating modes on suspicion
 
-Package `verdacht.yaml` reads the operating modes **only** when passive listening suggests a
-change – exclusively read requests (`0x40`) to node 1, never JSON, no fixed schedule, with a
-minimum interval per rule and a cap per hour. **In detail: [REGELN.md](REGELN.md) (German).**
-
-| Rule | Trigger on the bus | reads | Default |
-|---|---|---|---|
-| R1 | WEM requests `2101/0A`, `2102/0D`, `2102/01` from the boiler (SDO block upload `0xA4` or upload `0x40`) | DHW | <!--ab-werk:vd_r1-->on<!--/ab-werk--> |
-| R2 | Boiler status 15 or `0x252B` = `0F` while DHW is known to be “off” | DHW | <!--ab-werk:vd_r2-->on<!--/ab-werk--> |
-| R3 | Standby bit `0x1000` in `0x1C1` changes | heating circuit | <!--ab-werk:vd_r3-->on<!--/ab-werk--> |
-| R4 | Heat demand does not match the known heating circuit operating mode | heating circuit | <!--ab-werk:vd_r4-->off<!--/ab-werk--> |
-| R5 | other status bits in `0x1C1` change | heating circuit | <!--ab-werk:vd_r5-->off<!--/ab-werk--> |
-
-Disabled rules keep running in **shadow mode** (they report “would have triggered” but do not read).
-All rules rest for 2 min after the firmware's own switching command; R1 also rests for 5 min after a
-restart of the WEM (heartbeat `0x701` = `00`), and R5 does not read when R3 is already reading at the
-same moment. Custom rules (short form “CAN ID + mask + pattern”, from v30 also sequences, edges and
-conditions) are experimental and have their own master switch. Configure via the expert interface, file `<gerät>/cmd/regeln` or command
-`<gerät>/cmd/regel`; state under `<gerät>/regeln/stand`, log under
-`<gerät>/verdacht/protokoll`, events under `<gerät>/verdacht/ereignis`.
+Moved to [FIRMWARE.en.md](FIRMWARE.en.md#6a-rules-reading-operating-modes-on-suspicion).
 
 ## 6b. Additional displays for the phone app
 
-Package `zusatz.yaml` (from v24) has nothing to do with the boiler bus: it only manages a **list
-of third-party MQTT topics** (up to 6) that the phone app displays in addition – e.g. room temperatures or whether
-a heat pump is running. The board stores the list persistently and
-publishes it retained under `<gerät>/app/zusatz`. **Who reads the topics depends on the app:** the
-Docker app subscribes to them itself, and the board does not read them. With package `app` (app on the
-board, from v38) the board subscribes to the topics of the list itself – its MQTT account needs read access.
-
-| Field | Meaning |
-|---|---|
-| `name` | display name, 1–24 bytes |
-| `topic` | MQTT topic without wildcards `+`/`#` |
-| `feld` | JSON field in the payload, nested with a dot (`aenergy.total`); if absent, the payload itself is the number |
-| `einheit` | up to 8 bytes, e.g. `°C` (3 bytes) |
-| `art` | `wert` (default) shows the number; `laeuft` shows “läuft” (running) from `schwelle` (threshold, default 1) upwards, otherwise “aus” (off) |
-
-Configuration: JSON `{"version":N,"eintraege":[…]}` to `<gerät>/cmd/zusatz` (retained possible,
-checksum as with `cmd/regeln`) on the settings page of the app (package `app`) or in the expert interface, field **Zusatz-Befehl** (additional-display command):
-
-```
-Wohnzimmer topic=sensoren/wz/temp feld=tC einheit=°C
-WP topic=sensoren/wp/status feld=apower einheit=W art=laeuft schwelle=50
-WP loeschen
-alle loeschen
-```
-
-(`loeschen` = delete, `alle loeschen` = delete all; `Wohnzimmer` = living room, `WP` = heat pump.)
-
-The name is everything before the first word containing `=` (may contain spaces); values without
-spaces. An existing entry with the same name is replaced. Result in **Zusatz Meldung** (additional-display message),
-the list in **Zusatzanzeigen** (additional displays). In the Docker app, values older than 10 min are shown as “--”, in the app on the board only after 2 hours – for sensors
-that only transmit every few minutes (battery devices), the age is correspondingly high.
+Moved to [FIRMWARE.en.md](FIRMWARE.en.md#6b-additional-displays-for-the-phone-app).
 
 ## 7. Finding new objects: scan and diff
 
@@ -896,8 +760,8 @@ with its evidence into the tables of sections 3 and 4.
 | `0x291B`/2 | Flow setpoint, lower limit | 0.1 °C | `02 00 251B 02` | – | [ChristophKomenda](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/pull/10) | – |
 | `0x291C`/2 | Flow setpoint, upper limit | 0.1 °C | `02 00 251C 02` | – | [ChristophKomenda](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/pull/10) | – |
 | `0x292C`/2 | Flow setpoint, special level | 0.1 °C | `02 00 252C 02` | 113 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | read by the package `kraiz-per-can` |
-| `0x293A`/2 | Room setpoint, normal | 0.1 °C | `02 00 253A 02` | 107 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | JSON address seen on the RG2 (section 10a); read by the package `kraiz-per-can` |
-| `0x293B`/2 | Room setpoint, comfort | 0.1 °C | `02 00 253B 02` | 106 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | JSON address seen on the RG2 (section 10a); read by the package `kraiz-per-can` |
+| `0x293A`/2 | Room setpoint, normal | 0.1 °C | `02 00 253A 02` | 107 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | JSON address seen on the RG2 (VERSUCHE.en.md, section 10a); read by the package `kraiz-per-can` |
+| `0x293B`/2 | Room setpoint, comfort | 0.1 °C | `02 00 253B 02` | 106 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | JSON address seen on the RG2 (VERSUCHE.en.md, section 10a); read by the package `kraiz-per-can` |
 | `0x2954`/2 | Frost protection limit, outdoor temperature | 0.1 °C | `02 00 2554 02` | – | [ChristophKomenda](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/pull/10) | – |
 | `0x2969`/2 | Flow setpoint, setback | 0.1 °C | `02 00 2569 02` | 112 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | read by the package `kraiz-per-can` |
 | `0x296A`/2 | Flow setpoint, normal | 0.1 °C | `02 00 256A 02` | 111 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | read by the package `kraiz-per-can` |
@@ -1167,175 +1031,11 @@ How the object `0x2A20`/2 was found is described in [section 7](#7-finding-new-o
 
 ## 10a. WEM-RG2 room unit on the bus (capture, November 2026)
 
-Captured on a WTC-GW 15-B with a used WEM-RG2 2.1 (software 453.210). At first listening only; on 8 Nov 2026 the RG2
-ran over the CAN tunnel (section 10b), and values were deliberately changed on the RG2 and set back to see the write side.
-The board itself wrote nothing; it only passed on the RG2's frames.
-
-### Commissioning
-
-The RG2 appeared as node 4 (`0x704`, SDO `0x604`/`0x584`, channel to the WEM `0x6C4`/`0x684`). It needs a DC supply
-(manual 15–30 V, base label 12–26 V, at most 0.7 W) and shows “Waiting for commissioning ready” without a bus. Commissioning
-worked **only after a cold start of boiler and RG2 together**: the WEM queries `0x1018/1`, opens the assistant after “System has detected new
-devices”, and node 4 then appears in `systable.csv` with its modules (`TERMINAL1`, `GROUND2`).
-
-If the RG2 simply keeps running during a WEM restart, ours did not answer this query and lost its node address (LSS query afterwards:
-`FF`). This was a single attempt over the CAN tunnel (10b); the cause is not proven.
-
-After commissioning the WEM transfers a **menu bundle of about 1.6 MB** by SDO block to `0x20F4/0`
-(`604: C6 F4 20 00 00 10 00 00`, blocks of 4096 bytes) with multi-language text and parameter tables. It took about 25 minutes at up to
-16,000 frames per minute. The content belongs to Weishaupt and is not reproduced here.
-
-### Reading through 0x5E00
-
-The RG2 orders values with a segmented SDO write to `0x5E00/4`; the WEM delivers them with a segmented SDO write to `0x5E00/1`:
-
-```
-6C4 → WEM   order      01 MI MX OXlo OXhi OS 04 <counter> 00
-604 → RG2   delivery   02 MI MX OXlo OXhi OS 00 xx xx <value>
-```
-
-The value is 1, 2 or 4 bytes (little endian) or a string. **The same object number means something else per MI**: `0x253E` is time
-program 1 on MI 2 and the statistics on MI 9.
-
-| MI | Object/sub | Meaning | Scale | Checked against |
-|---|---|---|---|---|
-| 1 | `0x2562`/2, 3 | time hour, minute | 1 | RG2 |
-| 1 | `0x2563`/2–5 | year, month, day, weekday | 1 | RG2 |
-| 1 | `0x26B1`/2 | outside temperature | 0.1 °C | portal |
-| 1 | `0x27B9`/2, `0x27BA`/2 | outside temperature minimum, maximum (one comparison) | 0.1 °C | portal |
-| 2 | `0x2507`/2 | heating circuit flow | 0.1 °C | portal |
-| 2 | `0x2533`/2 | operating mode (2 = time program 1) | 1 | RG2 |
-| 2 | `0x2539`, `0x253A`, `0x253B` | room setpoint setback, normal, comfort; sub 2 value, 3 min, 4 max | 0.1 °C | RG2, portal |
-| 2 | `0x254B`/2–4 | heating curve slope, min, max | 0.1 | portal |
-| 2 | `0x25AD`/2–4 | heating curve parallel shift, min, max | 0.1 K | portal |
-| 2 | `0x257B`/2–4 | summer/winter limit, min, max | 0.1 °C | portal |
-| 2 | `0x2582`/2 | summer/winter function | 0/1 | portal |
-| 2 | `0x2104`/4, 3: `0x2105`/4 | module name (`\HZK0`, `\WW0`) | text | RG2 |
-| 3 | `0x2529`/2 | hot water | 0.1 °C | portal |
-
-**Time programs (MI 2):** `0x253E`, `0x253F`, `0x2551` for programs 1, 2, 3. Sub 2 = `0x0F`; one block of 16 subs per day, Monday from sub 4
-(sub 3 marker `01`), each further day 16 higher, up to 10 entries. Each entry has 4 bytes: the lower word is `level << 12 | start minute`
-with level 1 setback, 2 normal, 3 comfort. The upper word was always `0x3188` here; its meaning is open. Example: `0x2168` = normal from
-06:00 (360 min), `0x1537` = setback from 22:15. In operation the RG2 fetches today’s block.
-
-**Statistics (MI 9, `0x253E`):** 4 bytes, unit 0.01 kWh, “energy total”: subs 26–37 days, 38–49 months, 50–54 years, newest first. Shortly
-after midnight the days had not moved on yet. Sums match to 0.01 kWh: month = sum of days, year = sum of months plus the running previous day. **Over several
-years these heat values were 20–50 % above our gas meter (gross calorific value)**, which is physically too high; use them for comparison only. After a
-boiler restart the running day is largely lost (hypothesis from one case).
-
-### PDO 0x184
-
-The RG2 sends this on its own, without a request: on a change, after 1 s at the earliest, otherwise about once a minute.
-Bytes 0–1 room temperature (0.1 °C, signed), bytes 2–3 room humidity (0.1 %), bytes 4–5 mostly `0000`, at times changing
-(after a start e.g. falling from `0x0352` in steps of 50, otherwise slowly rising and falling); the meaning is open.
-
-The **room sensor correction** in the RG2 menu applies to the transmitted value (−0.5 K → bytes 0–1 lower by 5), and the
-humidity is recalculated for the corrected temperature. It does not use the bus, nor do brightness, night mode, limits and
-the light ring. Without correction the used RG2 read 2–4 K above a reference sensor in the same room; inside a closed
-plastic box together with the board and the voltage converter the offset rose slowly (self-heating suspected). If no room
-sensor is assigned in the WEM, it keeps controlling by outdoor temperature only – the room value then does not change the
-flow setpoint.
-
-### Writing via 0x5E00
-
-A changed value takes the same path as an order, only with type byte `03`; the WEM acknowledges with `04`:
-
-```
-6C4 → WEM   order        03 MI MX OXlo OXhi OS 04 <counter> 00 <value>
-604 → RG2   acknowledge  04 MI MX OXlo OXhi OS 00 00 00
-```
-
-Type bytes: `01` read, `02` delivery, `03` write, `04` write acknowledged. The value is little endian, 1 or 2 bytes
-depending on the object (order 10 or 11 bytes). Example room setpoint normal to 20.5 °C:
-`03 02 00 3A 25 02 04 00 00 CD 00` → acknowledge `04 02 00 3A 25 02 00 00 00`.
-
-One confirmation on the RG2 gives **one** order with the final value; intermediate steps while turning are not written.
-Party and holiday write the whole set one after another on confirmation; the counter counts down to `00`, and the last
-order is the function itself.
-
-| MI | Object/sub | Meaning | Values |
-|---|---|---|---|
-| 2 | `0x2539`/2, `0x253A`/2, `0x253B`/2 | Room setpoint reduced, normal, comfort | 0.1 °C; nested limits (sub 3/4 = neighbouring value), reduced from −100.0, comfort up to 300.0 |
-| 2 | `0x2533`/2 | Heating circuit operating mode | 1 byte; 2 = time program 1, 3 = time program 2 |
-| 2 | `0x254B`/2 | Heating curve slope | 0.1; 100–250 |
-| 2 | `0x25AD`/2 | Heating curve parallel shift | 0.1 K; −500…500. The RG2 steps by 0.5 K, the display rounds to whole K (5 → "1 K") |
-| 2 | `0x2587`/2 | Party/heating pause function | 0 off, 1 on |
-| 2 | `0x2589`/2 | Party room setpoint level | 1 reduced, 3 comfort |
-| 2 | `0x2593`/2, /3 | Party start hour, minute | 1 |
-| 2 | `0x2588`/2, /3 | Party end hour, minute | 1 |
-| 2 | `0x258A`/2 | Holiday function | 0 off, 1 on |
-| 2 | `0x2586`/2 | Holiday room setpoint | 0 frost, 1 reduced |
-| 2 | `0x2584`/2–4, `0x2585`/2–4 | Holiday start, end | year − 2000, month, day |
-| 3 | `0x2539`/2 | DHW setpoint normal | 0.1 °C |
-| 3 | `0x2520`/2 | DHW operating mode | 1 on, 2 off |
-| 3 | `0x2549`/2 | DHW push | 1 = trigger; whether the WEM resets the value is open |
-
-Each value was changed on the RG2, checked by the WEM's acknowledgement on the bus (operating modes also on the
-firmware's display) and set back afterwards. `0x2539` is the reduced room setpoint in MI 2 and the DHW setpoint in MI 3.
-The party menu suggests the rounded-down current time as start and three hours later as end; the WEM may have
-something else stored.
-
-**DHW program (MI 3, `0x2580`):** same layout as the heating time programs, the upper word was `0x3288` here. The flags
-before each day block (sub 3, 19, 35, …) were `01` for the Monday–Friday group and `02` for Saturday/Sunday; the RG2 read
-only the Monday (sub 4–13) and the Saturday block (sub 84–93).
-
-### Device list, failure, restart
-
-- Opening the **device list** on the boiler display: each time the WEM writes `604: 23 F0 20 01 01 00 00 04` (`0x20F0`/1 =
-  `0x04000001`), the RG2 acknowledges and its light ring flashes green (interpretation: identify the device). The WEM also
-  sends `011: 01 F0 20 00 00 00 00 04`.
-- **RG2 start:** it sends `011: 01 F0 20 00 00 00 00 1C` and goes `704:00` → `704:7F` → `704:05` in about 20 s. With the
-  WEM running it kept node 4 without intervention – directly on the bus and over the CAN tunnel.
-- **RG2 failure:** 30 s after the last heartbeat the WEM reports `081: FF FF 01 02 05 DD 01 00` (`0x05DD` = **warning 1501**, connection to RG2 no. 1 lost, see section 10c) and
-  clears it as soon as the RG2 is back. The device list then shows it under "inactive devices".
+Moved to [VERSUCHE.en.md](VERSUCHE.en.md#10a-wem-rg2-room-unit-on-the-bus-capture-november-2026).
 
 ## 10b. CAN tunnel over WLAN (experiment, branch `can-tunnel`)
 
-> **Not to be confused with the project itself:** the project is the "ESP bridge" – one board connecting the CAN bus
-> to the home network. The **CAN tunnel** is different: two boards extend the CAN bus itself over WLAN.
-
-Two boards of this project join two CAN buses over WLAN: board A sits at the boiler on the real bus, board B sits on the
-desk with the room unit and forms a small bus of its own with it. This lets you operate and capture an RG2 without running
-a cable to the boiler room. The RG2 needs its own supply there (DC 15–30 V, we used a step-up converter set to 24 V).
-
-**How it works.** Each board sends every frame it receives on its own bus via UDP (port 47011) to the configured peer
-and puts what arrives from there on its own bus. Only packets from the peer's address are accepted. A packet is
-`'W' 'B' seq id_lo id_hi(+0x80 = RTR) len d0…d7`; the board counts lost packets from the sequence number. Every 10 s
-there is a status line (from/to bus, lost, errors, bus-off); optionally a text capture goes to a computer via UDP
-(port 47012). The round trip order → delivery was 25–35 ms.
-
-**Protection.** The tunnel does not filter: everything the RG2 sends reaches the WEM, including write orders. It is
-meant for experiments only. Board A only sends if something came from the bus in the last 3 s – with the boiler switched
-off the error counter otherwise rose to bus-off. Board B does not use this lock, so that the WEM's requests reach the
-silent RG2. Both try a recovery every 10 s if the CAN controller is in bus-off.
-
-**Switch** "CAN-Tunnel (Experten)": it turns itself on once after every restart as soon as WLAN is up. Switched off by
-hand it stays off until the next restart.
-
-**Including it** (addresses are placeholders):
-
-```yaml
-substitutions:
-  tunnel_ziel: "<peer-ip>"
-  tunnel_log: ""              # or <ip-of-a-computer> for the capture
-  tunnel_name: "B1"           # tag in the capture
-  tunnel_nur_bei_bus: "true"  # board at the boiler: true, board at the room unit: false
-
-packages:
-  can_tunnel: !include pakete/can-tunnel.yaml
-```
-
-**What worked:** commissioning the RG2, reading and writing all values from section 10a, restarting the RG2 and
-restarting board B, each without intervention.
-
-**Known problems:**
-- Cold start of the boiler with the tunnel running (5 Nov 2026, older firmware): the RG2 kept running, did not answer
-  `0x1018/1` and lost its node address (LSS: `FF`). Directly on the bus, with a joint cold start, it worked. Not yet
-  repeated with the current state.
-- Firmware update: on the board at the boiler `esphome upload` (port 3232) failed several times with "receiving chunk
-  result: Unknown error"; the log showed `canbus took a long time … (3–5 s)`. Uploading in the browser (`/update`)
-  worked every time. Stopping the CAN controller during the update (in the branch) did not remove the warning; the cause
-  is open.
+Moved to [VERSUCHE.en.md](VERSUCHE.en.md#10b-can-tunnel-over-wlan-experiment-branch-can-tunnel).
 
 ## 10c. Fault messages on the bus and error codes
 

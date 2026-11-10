@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Prueft relative Links in allen .md-Dateien des Repositories: Datei vorhanden und,
-falls ein #Anker angegeben ist, Ueberschrift vorhanden (GitHub-Schreibweise).
+falls ein #Anker angegeben ist, Ueberschrift (GitHub-Schreibweise) oder <a id="..."> vorhanden.
 Externe Links (http, https, mailto) werden nicht abgerufen."""
 import os, re, sys, unicodedata
 
 WURZEL = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LINK = re.compile(r'(?<!!)\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)')
 UEBERSCHRIFT = re.compile(r'^(#{1,6})\s+(.*?)\s*#*\s*$')
+HTML_ANKER = re.compile(r'<a\s+(?:id|name)="([^"]+)"\s*>')   # alte Anker umbenannter Abschnitte
 
 
 def slug(text):
@@ -29,6 +30,8 @@ def anker(pfad):
             if zeile.lstrip().startswith('```'):
                 im_code = not im_code
                 continue
+            if not im_code:
+                ergebnis.update(a.lower() for a in HTML_ANKER.findall(zeile))
             m = None if im_code else UEBERSCHRIFT.match(zeile)
             if not m:
                 continue

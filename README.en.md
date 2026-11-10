@@ -135,7 +135,7 @@ Comment out unneeded lines under `packages:`.
 | `wem-schalten.yaml` | heating circuit switching, queue, log | no |
 | `warmwasser-schalten.yaml` | DHW on/off (requires `wem-schalten` and `warmwasser`) | no |
 | `verdacht.yaml` | **Rules:** read the operating modes only when passive listening suggests a change; fixed rules R1–R5 individually switchable (default: R1–R3 <!--ab-werk:vd_r1-->on<!--/ab-werk-->, R4/R5 <!--ab-werk:vd_r4-->off<!--/ab-werk-->; disabled ones keep running in shadow mode), plus custom rules (experimental, own master switch, default <!--ab-werk:vd_eigene_haupt-->off<!--/ab-werk-->); configurable via web, file and MQTT (requires `warmwasser`). Details: [REGELN.md](REGELN.md) (German) | no |
-| `zusatz.yaml` | **Extra displays for the phone app:** list of up to 6 third-party MQTT topics (e.g. room temperatures, "heat pump running"), configurable via web and file. The board manages the list; the values are fetched by the app – the Docker app subscribes to the topics itself, with the package `app` the board subscribes to them (requires `mqtt`). Details: [PROTOKOLL.en.md, section 6b](PROTOKOLL.en.md#6b-additional-displays-for-the-phone-app) | no |
+| `zusatz.yaml` | **Extra displays for the phone app:** list of up to 6 third-party MQTT topics (e.g. room temperatures, "heat pump running"), configurable via web and file. The board manages the list; the values are fetched by the app – the Docker app subscribes to the topics itself, with the package `app` the board subscribes to them (requires `mqtt`). Details: [FIRMWARE.en.md, section 6b](FIRMWARE.en.md#6b-additional-displays-for-the-phone-app) | no |
 | `app.yaml` | **Phone app served by the board itself** (from v38): `http://<board>/`, own login (`app_benutzer`/`app_passwort` in `secrets.yaml`), no server needed (needs `wem-schalten`, `warmwasser-schalten`) | no |
 | `json-lesen.yaml` | **Fetch values via JSON** (from v42): one request with seven objects to the WEM, manual only (button in the expert interface and on the settings page, ↻ in the app on the board when the CAN bus is silent), never periodic; for boards without a CAN cable or during a bus outage (requires `wem-schalten`, `warmwasser`) | no |
 | `feste-ip.yaml` | static IP instead of DHCP | no |
@@ -229,10 +229,14 @@ Example installation with heat pump and PV (setpoints, measurements, what you se
 The documents at a glance:
 
 - [INSTALL.md](INSTALL.md) (German) – step by step from the board to the phone app
-- [PROTOKOLL.en.md](PROTOKOLL.en.md) – CAN bus, WEM JSON, mapping and failure patterns; WEM-RG2 room unit reading and
-  writing ([10a](PROTOKOLL.en.md#10a-wem-rg2-room-unit-on-the-bus-capture-november-2026)), CAN tunnel over WLAN
-  ([10b](PROTOKOLL.en.md#10b-can-tunnel-over-wlan-experiment-branch-can-tunnel), experiment in branch `can-tunnel`), fault
-  messages and error codes ([10c](PROTOKOLL.en.md#10c-fault-messages-on-the-bus-and-error-codes))
+- [PROTOKOLL.en.md](PROTOKOLL.en.md) – the bus: [all ways to the heating system](PROTOKOLL.en.md#ways-to-the-heating-system),
+  CAN bus, WEM JSON, mapping JSON → CAN, writing via CAN, failure patterns, fault messages and error codes
+  ([10c](PROTOKOLL.en.md#10c-fault-messages-on-the-bus-and-error-codes))
+- [FIRMWARE.en.md](FIRMWARE.en.md) – operating the firmware: expert interface,
+  [all settings](FIRMWARE.en.md#einstellungen-settings) with their factory values, rules, additional displays
+- [VERSUCHE.en.md](VERSUCHE.en.md) – WEM-RG2 room unit reading and writing
+  ([10a](VERSUCHE.en.md#10a-wem-rg2-room-unit-on-the-bus-capture-november-2026)), CAN tunnel over WLAN
+  ([10b](VERSUCHE.en.md#10b-can-tunnel-over-wlan-experiment-branch-can-tunnel), experiment in branch `can-tunnel`)
 - [REGELN.md](REGELN.md) (German) – rules R1–R5 and custom rules: when the board re-reads operating modes
 - [ANLAGE.md](ANLAGE.md) (German) – example installation with heat pump and PV
 - [IDEEN.md](IDEEN.md) (German) – what could still be built: database and Grafana, H2 lockout,
@@ -527,7 +531,7 @@ with the source for each object and without firmware constants
 
 **Defaults:** whether a switch ships on or off and which initial value a number has is defined only in the
 packages (`restore_mode`, `initial_value`). [`werkzeuge/einstellungen_erzeugen.py`](werkzeuge/einstellungen_erzeugen.py)
-writes the [table of all settings](PROTOKOLL.en.md#einstellungen-settings) and every default stated in the documentation from it.
+writes the [table of all settings](FIRMWARE.en.md#einstellungen-settings) and every default stated in the documentation from it.
 
 On every push, all four run in [GitHub Actions](https://github.com/jvejmelka/weishaupt-wem-can-esphome/actions/workflows/ci.yml), and in addition the
 firmware is compiled with ESPHome 2026.9.1 and a dummy `secrets.yaml` (from `secrets.yaml.example`)
@@ -568,7 +572,7 @@ Open questions that can only be resolved on other installations or in a differen
 | Heating circuit codes 6–8 (Comfort, Normal, Setback) have never been seen on the bus | a capture of a switch to these operating modes |
 | Switching via the WEM portal or WEM app has never been captured | a raw capture during a portal switch (see [PROTOKOLL.en.md](PROTOKOLL.en.md#detecting-passively-what-works-and-what-does-not)) |
 | Back-calculation of the room setpoint level only calibrated for outdoor temperatures of 12.9–15.2 °C | winter data (outdoor temperature 0–8 °C, 10–15 min steady state per operating mode) |
-| WEM-RG2: reading and writing are captured ([PROTOKOLL.en.md, 10a](PROTOKOLL.en.md#10a-wem-rg2-room-unit-on-the-bus-capture-november-2026)); open are other room units (RG1, WEM-RF), several room units and room compensation | captures, see [IDEEN.md, idea 4](IDEEN.md#gesucht-jemand-mit-weishaupt-raumgerät-am-bus) (German) |
+| WEM-RG2: reading and writing are captured ([VERSUCHE.en.md, 10a](VERSUCHE.en.md#10a-wem-rg2-room-unit-on-the-bus-capture-november-2026)); open are other room units (RG1, WEM-RF), several room units and room compensation | captures, see [IDEEN.md, idea 4](IDEEN.md#gesucht-jemand-mit-weishaupt-raumgerät-am-bus) (German) |
 
 Please open a [GitHub issue](https://github.com/jvejmelka/weishaupt-wem-can-esphome/issues), with a
 summary rather than raw files (those may contain serial numbers and device identifiers).

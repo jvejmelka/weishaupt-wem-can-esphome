@@ -7,6 +7,9 @@ Firmware davon mithört, was sie selbst anfragt und wie sie am WEM schaltet – 
 JSON-Schnittstelle. Gemessen an einer **WTC-GW 15-B** mit WEM-Systemgerät; wo eine Angabe nur aus fremden
 Quellen stammt oder nur plausibel ist, steht das dabei.
 
+Was die Firmware zum Bedienen anbietet (Experten-Oberfläche, alle Einstellungen, Regeln, Zusatzanzeigen), steht in
+[FIRMWARE.md](FIRMWARE.md); die Mitschnitte zum Raumgerät WEM-RG2 und der CAN-Tunnel in [VERSUCHE.md](VERSUCHE.md).
+
 ## Wege zur Heizung
 
 Auf welchen Wegen die Firmware mit der Heizung spricht und was davon ab Werk an ist (Stand v42 – mit jeder Fassung
@@ -22,7 +25,7 @@ hierher. Die Angaben „an“/„aus“ in der Spalte „Ab Werk“ werden aus d
 > | **Freies CAN-Schreiben** (Experten) | einzelne Objekte von Hand, nur am WEM (Knoten 1), nur `0x2000`–`0x5FFF` | <!--ab-werk:can_frei-->aus<!--/ab-werk--> |
 > | **JSON schreiben** (HTTP an den WEM) | Rückweg fürs Schalten, wenn „Schalten per CAN statt JSON“ aus ist. Bis v34 war das der einzige Weg. Dazu das Feld „Schreibbefehl über WEM (Experten)“, das immer über JSON geht. | ungenutzt, solange niemand den Rückweg oder das Schreibfeld benutzt |
 > | **JSON lesen** (HTTP an den WEM) | nur von Hand: „Werte per JSON abrufen“ (eine Anfrage, ab v42), Dateien der SD-Karte. Nie im Takt – der WEM verträgt kein Polling. | nur auf Knopfdruck |
-> | **CAN-Tunnel** (Versuch, Zweig `can-tunnel`) | reicht ungefiltert weiter, was das Gerät am anderen Ende sendet – auch die Schreibaufträge eines Raumgeräts ([Abschnitt 10b](#10b-can-tunnel-über-wlan-versuch-zweig-can-tunnel)) | nicht enthalten |
+> | **CAN-Tunnel** (Versuch, Zweig `can-tunnel`) | reicht ungefiltert weiter, was das Gerät am anderen Ende sendet – auch die Schreibaufträge eines Raumgeräts ([VERSUCHE.md, Abschnitt 10b](VERSUCHE.md#10b-can-tunnel-über-wlan-versuch-zweig-can-tunnel)) | nicht enthalten |
 >
 > **In den Kessel (Knoten 2) schreibt die Firmware nie** – dorthin gehen nur Leseanfragen. Geschrieben wird
 > am WEM. Einzelheiten: [Mithören und Lesen](#2-mithören-und-lesen-auf-anforderung),
@@ -36,15 +39,18 @@ hierher. Die Angaben „an“/„aus“ in der Spalte „Ab Werk“ werden aus d
 - [2. Mithören und Lesen auf Anforderung](#2-mithören-und-lesen-auf-anforderung)
 - [3. Was mitgehört wird](#3-was-mitgehört-wird)
 - [4. Was auf Anforderung gelesen wird](#4-was-auf-anforderung-gelesen-wird)
-- [5. Schreiben über den WEM (JSON)](#5-schreiben-über-den-wem-json)
-- [6. Weboberfläche: lesen und schreiben](#6-weboberfläche-lesen-und-schreiben)
-- [6a. Regeln: Betriebsarten bei Verdacht lesen](#6a-regeln-betriebsarten-bei-verdacht-lesen)
-- [6b. Zusatzanzeigen für die Handy-App](#6b-zusatzanzeigen-für-die-handy-app)
+- [5. Schreiben am WEM: über JSON und per CAN](#5-schreiben-am-wem-über-json-und-per-can)
+- [6. Weboberfläche: lesen und schreiben](FIRMWARE.md#6-weboberfläche-lesen-und-schreiben) → FIRMWARE.md
+- [6a. Regeln: Betriebsarten bei Verdacht lesen](FIRMWARE.md#6a-regeln-betriebsarten-bei-verdacht-lesen) → FIRMWARE.md
+- [6b. Zusatzanzeigen für die Handy-App](FIRMWARE.md#6b-zusatzanzeigen-für-die-handy-app) → FIRMWARE.md
 - [7. Neue Objekte finden: Scan und Differenz](#7-neue-objekte-finden-scan-und-differenz)
 - [7a. Übernommene Objekte aus anderen Projekten (ungeprüft)](#7a-übernommene-objekte-aus-anderen-projekten-ungeprüft)
 - [8. Wann sich der WEM aufhängt](#8-wann-sich-der-wem-aufhängt)
 - [9. Beispiel: Heizkreis auf „Zeitprogramm 1“](#9-beispiel-heizkreis-auf-zeitprogramm-1)
 - [10. Beispiel: Warmwasser aus](#10-beispiel-warmwasser-aus)
+- [10a. Raumgerät WEM-RG2 am Bus](VERSUCHE.md#10a-raumgerät-wem-rg2-am-bus-mitschnitt-november-2026) → VERSUCHE.md
+- [10b. CAN-Tunnel über WLAN](VERSUCHE.md#10b-can-tunnel-über-wlan-versuch-zweig-can-tunnel) → VERSUCHE.md
+- [10c. Störmeldungen am Bus und Fehlercodes](#10c-störmeldungen-am-bus-und-fehlercodes)
 - [11. Quellen](#11-quellen)
 
 ## 1. Überblick
@@ -259,7 +265,7 @@ Bus. Sie werden gelesen, auch wenn „Eigene CAN-Anfragen“ aus ist, aber nur
 - einmal nach der Anlaufpause,
 - wenn sich die Statusbits ändern (PDO `0x1C1`, etwa bei einer Umstellung am Display oder im Portal) –
   mit Paket `verdacht` (in der Hauptdatei eingebunden) stattdessen über die Regeln R3 und R5,
-- wenn eine andere Regel auslöst ([Abschnitt 6a](#6a-regeln-betriebsarten-bei-verdacht-lesen)),
+- wenn eine andere Regel auslöst ([FIRMWARE.md, Abschnitt 6a](FIRMWARE.md#6a-regeln-betriebsarten-bei-verdacht-lesen)),
 - nach einem eigenen Warmwasser-Schaltbefehl,
 - auf Wunsch: Knopf „Status lesen“ (Experten-Oberfläche, Handy-App) bzw. MQTT `<gerät>/cmd/status`.
   Wünsche werden höchstens alle 10 s angenommen, gesendet wird nur bei lebendem Bus.
@@ -432,7 +438,7 @@ den Warmwasser-Sollwerten.
 | 1 | `0x2907`/2 | 0,1 °C | 60 s | s | Vorlauf Heizkreis | plausibel (JSON MI 02 `0x2507` Vorlaufisttemperatur, +0x400) |
 | 1 | `0x2640`/3 | 0,1 °C | 60 s | – | Vorlaufsoll Anforderung | plausibel (50 °C bei Warmwasser Ein, 23 °C bei Aus beobachtet) |
 | 1 | `0x2958`/2 | 0,1 °C | 5 min | m | Raumsoll aktuell | plausibel (JSON MI 02 `0x2558`, +0x400) |
-| 1 | `0x2933`/2 | Code 1–8, s. [Abschnitt 5](#5-schreiben-über-den-wem-json) | Anlass, höchstens alle 2 min | m | Heizkreis Betriebsart | **belegt** (für Standby, Zeitprogramm 1–3, Sommer. **Komfort, Normal, Absenk nie beobachtet**) |
+| 1 | `0x2933`/2 | Code 1–8, s. [Abschnitt 5](#5-schreiben-am-wem-über-json-und-per-can) | Anlass, höchstens alle 2 min | m | Heizkreis Betriebsart | **belegt** (für Standby, Zeitprogramm 1–3, Sommer. **Komfort, Normal, Absenk nie beobachtet**) |
 | 1 | `0x2A20`/2 | 1 Ein, 2 Aus | Anlass | – | Warmwasser Betriebsart | **belegt** (geschaltet und am Display gesehen) |
 | 1 | `0x2A2C`/2 | 0,1 °C | Anlass | m | Warmwasser Soll aktuell | plausibel (JSON MI 03 `0x252C`, +0x500; 8,0 °C bei Warmwasser Aus) |
 | 1 | `0x2A39`/2 | 0,1 °C | Anlass | m | Warmwasser Soll normal | plausibel (JSON MI 03 `0x2539`, +0x500) |
@@ -445,7 +451,13 @@ blieben, auf „unbekannt“; fragt der WEM einen davon selbst ab, kommt er übe
 
 Rückmeldungen von anderen Anlagen sind willkommen – besonders Messungen bei laufendem Brenner.
 
-## 5. Schreiben über den WEM (JSON)
+<a id="5-schreiben-über-den-wem-json"></a>
+
+## 5. Schreiben am WEM: über JSON und per CAN
+
+Zuerst der Weg über die JSON-Schnittstelle des WEM (bis v34 der einzige, heute der Rückweg und der Weg des Schreibfelds), danach die
+[Abbildung JSON-Objekt → CAN-Objekt](#abbildung-json-objekt--can-objekt) und das
+[Schreiben per CAN](#schreiben-per-can-ab-v35-seit-v42-vorgabe), mit dem die Firmware seit v42 ab Werk schaltet.
 
 ### Die Anfrage
 
@@ -496,7 +508,7 @@ Die Heizkreis-Codes stehen so in der Weishaupt-Registertabelle. Die Warmwasser-B
 dort nicht; sie wurde per Scan und Differenz gefunden (s. [Abschnitt 7](#7-neue-objekte-finden-scan-und-differenz)).
 
 Über das Schreibfeld der Experten-Oberfläche lassen sich weitere Objekte schreiben, aber nur in den
-Modulen MI 01, 02 und 03 (s. [Abschnitt 6](#6-weboberfläche-lesen-und-schreiben)).
+Modulen MI 01, 02 und 03 (s. [FIRMWARE.md, Abschnitt 6](FIRMWARE.md#6-weboberfläche-lesen-und-schreiben)).
 
 ### Belegte Leseobjekte: Wärmemengen
 
@@ -592,7 +604,7 @@ Geräte SDO-Schreiben ablehnen, betrafen vermutlich andere Objekte oder den Kess
    Eingangs (bis v37: Heizkreis vor Warmwasser).
 2. Einmal pro Sekunde prüft die Firmware die Warteschlange. Zwischen zwei Befehlen liegt ein
    **Mindestabstand** ab dem letzten Senden: per CAN ab Werk <!--ab-werk:abstand_can-->10<!--/ab-werk--> s, über JSON <!--ab-werk:abstand_json-->60<!--/ab-werk--> s (beide
-   einstellbar, Grenzen in der Tabelle unter [Einstellungen](#einstellungen)).
+   einstellbar, Grenzen in der Tabelle unter [Einstellungen](FIRMWARE.md#einstellungen)).
 3. **Per CAN (Vorgabe):** ein SDO-Download an den WEM (`0x601`, `0x2933`/2 bzw. `0x2A20`/2, 1 Byte).
    Nach 1 s wertet die Firmware die Antwort aus: Quittung `60` = bestätigt; Abbruch `80` =
    „abgelehnt“, der Vorgang ist beendet; keine Antwort = es wird trotzdem am Bus geprüft.
@@ -611,160 +623,15 @@ Geräte SDO-Schreiben ablehnen, betrafen vermutlich andere Objekte oder den Kess
 
 ## 6. Weboberfläche: lesen und schreiben
 
-Gemeint ist die **Experten-Oberfläche** des Boards (die ESPHome-Weboberfläche): ab v42 unter
-`http://<Board>/experten`, Benutzer `admin` mit dem Experten-Passwort; unter `http://<Board>/` liegt
-mit Paket `app` die App. Sie ist in Gruppen geteilt. Die Namen hier sind die aus der Firmware.
-
-### Lesebefehl (nur lesen)
-
-| Element | Funktion |
-|---|---|
-| **Lesebefehl (KN IDX SUB hex)** | Eingabe `KNOTEN INDEX SUB` in hex, z. B. `01 2933 02` |
-| **Lesen** | sendet eine Lese-Anfrage (`0x40`) an Knoten `0x600 + KN` – nur, wenn der Bus lebt |
-| **Lesebefehl Antwort** | `01 2933/02 = 2 (0x02, 1 Byte)` oder `… Abbruch 06020000 (Objekt fehlt?)`; bei totem Bus „Bus tot - nicht gesendet“ |
-| **Lesebefehl Rohdaten** (ab v33) | jede Nachricht des letzten Lesebefehls, `>` gesendet, `<` empfangen, z. B. `>403F270000000000 <413F270008000000 …` |
-
-Lange Objekte liest der Lesebefehl automatisch in Teilstücken (ab v33), mit Zusatz `B` (z. B.
-`01 273F 00 B`) per Block – am Kessel (Knoten 02) nur, solange „Lange Lesebefehle auch am Kessel“ an ist.
-
-Dasselbe geht per MQTT: `<gerät>/cmd/lesen` mit `01 2933 02`.
-
-### Betriebsarten: Status lesen
-
-| Element | Funktion |
-|---|---|
-| **Status lesen** (Knopf) | liest Heizkreis-Betriebsart (`0x2933`/2) und – mit Paket warmwasser – `0x2A20`, `0x2A2C`, `0x2A39` (je Subindex 2) einmal von Knoten 1, nach einem Neustart des Boards dazu einmal die Statusbits (`0x274D`). Nur Leseanfragen, kein WEM-JSON. Gruppe „Betriebsarten und Sollwerte“ |
-| **Status gelesen** | `27.09. 09:32:51 gelesen`, während der Anforderung `09:32:46 angefordert ...`, bei totem Bus `… Bus schweigt - nicht gelesen` |
-
-Per MQTT: `<gerät>/cmd/status` mit beliebigem Inhalt. Höchstens ein Wunsch alle 10 s.
-
-### Schalten (über WEM, Kontrolle am Bus)
-
-| Element | Funktion |
-|---|---|
-| **Heizkreis Betriebsart setzen** | Auswahl Standby … Absenk; zeigt nach jeder Kontroll-Lesung den Wert am Bus |
-| **Warmwasser setzen** | Auswahl Ein / Aus |
-| **Warteschlange** | vorgemerkte Befehle mit Quelle, z. B. `1. Heizkreis -> Zeitprogramm 1 (MQTT) - naechster Befehl ab 14:03:12`, sonst `leer` |
-| **Ergebnis letzter Schaltbefehl** | Fortschritt und Ergebnis als Klartext, s. [Abschnitt 5](#ablauf-in-der-firmware) (veraltet – strukturiert: `befehl/status`, [TOPICS.md](TOPICS.md)) |
-| **Warteschlange leeren** | verwirft alle vorgemerkten Befehle (wird protokolliert) |
-| **Schaltprotokoll** | die letzten zehn Befehle mit Uhrzeit, Quelle und Ergebnis; per MQTT retained unter `<gerät>/schaltprotokoll`. Nach einem Neustart leer |
-
-### Schreibbefehl über WEM (Experten)
-
-| Element | Funktion |
-|---|---|
-| **Schreibbefehl (MI MX OX OS WERT hex)** | z. B. `03 00 2520 02 02` = Warmwasser Aus. WERT 1–4 Hexziffern; die Länge (VS) ergibt sich daraus |
-| **Schreiben** | baut `CM 03` und sendet über JSON. **Nur MI 01, 02, 03** – der Kessel ist gesperrt. Es gilt der Abstand für Befehle über JSON (ab Werk <!--ab-werk:abstand_json-->60<!--/ab-werk--> s) |
-| **Schreibbefehl Antwort** | `OK, WEM bestaetigt (VG …)`, `abgelehnt (CM=05): Objekt unbekannt oder nicht schreibbar - VG …`, `unklare Antwort, HTTP …` oder `WEM nicht erreichbar` |
-
-Das Schreibfeld prüft **nicht** am Bus nach und kennt keine Warteschlange. Vor dem Schreiben das
-Objekt über den Lesebefehl am Bus ansehen und die Abbildung aus
-[Abschnitt 5](#abbildung-json-objekt--can-objekt) anwenden. Jede `CM 05`-Antwort kostet einen der
-zehn Plätze aus [Abschnitt 8](#8-wann-sich-der-wem-aufhängt).
-
-### Weitere Gruppen
-
-- **Schreiben per CAN:** die Schalter „Schalten per CAN statt JSON“ und „Freies CAN-Schreiben“, das
-  Feld für den freien Schreibbefehl und der Abstand per CAN – beschrieben unter [Schreiben per CAN](#schreiben-per-can-ab-v35-seit-v42-vorgabe).
-- **SD-Karte des WEM (Dateien lesen):** Datei holen und Systemtabelle – beschrieben unter
-  [Knoten und Module](#knoten-und-module).
-- Paket `json-lesen` (Gruppe „Einstellungen“): Knopf „Werte per JSON abrufen“, Meldung „JSON-Abruf“
-  und „Mindestabstand JSON-Abruf (s)“ – beschrieben unter
-  [Warum nie über JSON gepollt wird](#warum-nie-über-json-gepollt-wird).
-
-### Einstellungen
-
-| Element | Funktion |
-|---|---|
-| **Eigene CAN-Anfragen** | an = Leseanfragen im Takt aus [Abschnitt 2](#takt-der-eigenen-anfragen); aus = nur mithören. Bleibt über Neustarts erhalten; Startzustand über `can_anfragen_start` in der Hauptdatei |
-| **CAN-Rohmitschnitt nach MQTT** | jeder empfangene Frame als `ID:DATEN` nach `<gerät>/canraw` (Paket `mqtt`); während eines Scans immer an |
-| **Heizung: IP-Adresse** | Adresse des WEM für alles, was über HTTP läuft: Schalten über JSON, Schreibbefehl, SD-Dateien, Abruf von Hand |
-| **Waechter: Neustart nach Minuten ohne Bus (0 = aus)** | startet das Board neu, wenn so lange kein Frame kam (Bus-off-Falle) |
-
-**Alle Einstellungen mit ihrem Wert ab Werk.** Die Tabelle wird aus dem Code erzeugt (`werkzeuge/einstellungen_erzeugen.py`: `restore_mode` und `initial_value` in `pakete/*.yaml`, Liste der Einstellungsseite in `app_server.cpp`); die CI schlägt fehl, wenn sie nicht zum Code passt. Dasselbe gilt für jede Angabe „ab Werk“ an anderer Stelle der Doku.
-
-<!-- EINSTELLUNGEN:BEGIN -->
-| Einstellung (Name auf dem Board) | Ab Werk | Bereich | Paket | Gruppe der Einstellungsseite | Ändern braucht |
-|---|---|---|---|---|---|
-| Schalten per CAN statt JSON (Heizkreis, Warmwasser) | **an** | – | `wem-schalten` | Schalten | Admin-Anmeldung |
-| Abstand zwischen Befehlen per CAN (s) | 10 | 5–300 | `wem-schalten` | Schalten | Admin-Anmeldung |
-| Abstand zwischen Befehlen per JSON (s) | 60 | 60–600 | `wem-schalten` | Schalten | Admin-Anmeldung |
-| Mindestabstand JSON-Abruf (s) | 300 | 120–3600 | `json-lesen` | Schalten | Admin-Anmeldung |
-| Eigene CAN-Anfragen | **aus** | – | `kessel` | Lesen | Admin-Anmeldung und Experten-Passwort |
-| Lange Lesebefehle auch am Kessel | **an** | – | `kessel` | Lesen | Admin-Anmeldung und Experten-Passwort |
-| SD-Dateien abrufen | **an** | – | `wem-schalten` | Lesen | Admin-Anmeldung und Experten-Passwort |
-| R1 Warmwasser am Display oder Portal umgeschaltet | **an** | – | `verdacht` | Regeln | Admin-Anmeldung |
-| R2 Warmwasserbetrieb trotz Aus | **an** | – | `verdacht` | Regeln | Admin-Anmeldung |
-| R3 Heizung ein oder Standby | **an** | – | `verdacht` | Regeln | Admin-Anmeldung |
-| R4 Heizanforderung passt nicht | **aus** | – | `verdacht` | Regeln | Admin-Anmeldung |
-| R5 uebrige Statusbits geaendert | **aus** | – | `verdacht` | Regeln | Admin-Anmeldung |
-| Eigene Regeln (Hauptschalter) | **aus** | – | `verdacht` | Regeln | Admin-Anmeldung |
-| Freies CAN-Schreiben (Experten) | **aus** | – | `wem-schalten` | Experten | Admin-Anmeldung und Experten-Passwort |
-| CAN-Rohmitschnitt nach MQTT | **aus** | – | `mqtt` | Experten | Admin-Anmeldung und Experten-Passwort |
-| Waechter: Neustart nach Minuten ohne Bus (0 = aus) | 5 | 0–120 | `kessel` | Experten | Admin-Anmeldung und Experten-Passwort |
-| R1 Mindestabstand (min) | 1 | 1–1440 | `verdacht` | – | Experten-Oberfläche |
-| R2 Mindestabstand (min) | 10 | 1–1440 | `verdacht` | – | Experten-Oberfläche |
-| R3 Mindestabstand (min) | 1 | 1–1440 | `verdacht` | – | Experten-Oberfläche |
-| R4 Mindestabstand (min) | 30 | 1–1440 | `verdacht` | – | Experten-Oberfläche |
-| R5 Mindestabstand (min) | 5 | 1–1440 | `verdacht` | – | Experten-Oberfläche |
-| Regeln: hoechstens pro Stunde (alle zusammen) | 6 | 1–60 | `verdacht` | – | Experten-Oberfläche |
-<!-- EINSTELLUNGEN:END -->
-
-„Ändern braucht“ gilt mit dem Paket `app`: Die Einstellungsseite verlangt die Admin-Anmeldung, in den Gruppen „Lesen“ und „Experten“ zusätzlich das Experten-Passwort. Was dort keine Gruppe hat, steht nicht auf der Einstellungsseite, sondern in der Experten-Oberfläche (`/experten`); die Werte der Regeln lassen sich auch per Datei und MQTT setzen ([REGELN.md](REGELN.md)). „(wahlweise)“ heißt: Das Paket ist in `weishaupt-wem-can.yaml` nicht eingebunden.
+Ausgelagert nach [FIRMWARE.md](FIRMWARE.md#6-weboberfläche-lesen-und-schreiben).
 
 ## 6a. Regeln: Betriebsarten bei Verdacht lesen
 
-Paket `verdacht.yaml` liest die Betriebsarten **nur dann**, wenn das Mithören eine Änderung
-vermuten lässt – ausschließlich Leseanfragen (`0x40`) an Knoten 1, nie JSON, kein Raster, mit
-Mindestabstand je Regel und Obergrenze pro Stunde. **Ausführlich: [REGELN.md](REGELN.md).**
-
-| Regel | Auslöser am Bus | liest | Vorgabe |
-|---|---|---|---|
-| R1 | WEM fragt den Kessel `2101/0A`, `2102/0D`, `2102/01` (SDO Block-Upload `0xA4` oder Upload `0x40`) | Warmwasser | <!--ab-werk:vd_r1-->an<!--/ab-werk--> |
-| R2 | Kesselstatus 15 bzw. `0x252B` = `0F` bei bekanntem Warmwasser „Aus“ | Warmwasser | <!--ab-werk:vd_r2-->an<!--/ab-werk--> |
-| R3 | Standby-Bit `0x1000` in `0x1C1` ändert sich | Heizkreis | <!--ab-werk:vd_r3-->an<!--/ab-werk--> |
-| R4 | Heizanforderung passt nicht zur bekannten Heizkreis-Betriebsart | Heizkreis | <!--ab-werk:vd_r4-->aus<!--/ab-werk--> |
-| R5 | übrige Statusbits in `0x1C1` ändern sich | Heizkreis | <!--ab-werk:vd_r5-->aus<!--/ab-werk--> |
-
-Ausgeschaltete Regeln laufen im **Schattenmodus** weiter (melden „wäre ausgelöst“, lesen nicht).
-Alle Regeln ruhen 2 min nach einem eigenen Schaltbefehl; R1 ruht außerdem 5 min nach einem Neustart
-des WEM (Heartbeat `0x701` = `00`), und R5 liest nicht, wenn R3 im selben Augenblick schon liest.
-Eigene Regeln (Kurzform „CAN-ID + Maske + Muster“, ab v30 auch Folgen, Flanken und Bedingungen)
-sind experimentell und haben einen eigenen Hauptschalter. Einstellen per Experten-Oberfläche, Datei `<gerät>/cmd/regeln` oder Befehl
-`<gerät>/cmd/regel`; Stand unter `<gerät>/regeln/stand`, Protokoll unter
-`<gerät>/verdacht/protokoll`, Ereignisse unter `<gerät>/verdacht/ereignis`.
+Ausgelagert nach [FIRMWARE.md](FIRMWARE.md#6a-regeln-betriebsarten-bei-verdacht-lesen).
 
 ## 6b. Zusatzanzeigen für die Handy-App
 
-Paket `zusatz.yaml` (ab v24) hat mit dem Kesselbus nichts zu tun: es verwaltet nur eine **Liste
-fremder MQTT-Topics** (bis 6), die die Handy-App zusätzlich anzeigt – z. B. Raumtemperaturen oder ob
-eine Wärmepumpe läuft. Das Board speichert die Liste dauerhaft und
-veröffentlicht sie retained unter `<gerät>/app/zusatz`. **Wer die Topics liest, hängt von der App ab:**
-Die Docker-App abonniert sie selbst, das Board liest sie dann nicht. Mit Paket `app` (App auf dem
-Board, ab v38) abonniert das Board die Topics der Liste selbst – sein MQTT-Konto braucht dafür Leserecht.
-
-| Feld | Bedeutung |
-|---|---|
-| `name` | Anzeigename, 1–24 Byte |
-| `topic` | MQTT-Topic ohne Platzhalter `+`/`#` |
-| `feld` | JSON-Feld im Payload, verschachtelt mit Punkt (`aenergy.total`); fehlt es, ist der Payload selbst die Zahl |
-| `einheit` | bis 8 Byte, z. B. `°C` (3 Byte) |
-| `art` | `wert` (Vorgabe) zeigt die Zahl; `laeuft` zeigt „läuft“ ab `schwelle` (Vorgabe 1), sonst „aus“ |
-
-Einstellen: JSON `{"version":N,"eintraege":[…]}` an `<gerät>/cmd/zusatz` (retained möglich,
-Prüfsumme wie bei `cmd/regeln`) auf der Einstellungsseite der App (Paket `app`) oder in der Experten-Oberfläche, Feld **Zusatz-Befehl**:
-
-```
-Wohnzimmer topic=sensoren/wz/temp feld=tC einheit=°C
-WP topic=sensoren/wp/status feld=apower einheit=W art=laeuft schwelle=50
-WP loeschen
-alle loeschen
-```
-
-Der Name ist alles vor dem ersten Wort mit `=` (darf Leerzeichen enthalten); Werte ohne
-Leerzeichen. Ein vorhandener Eintrag gleichen Namens wird ersetzt. Ergebnis in **Zusatz Meldung**,
-die Liste in **Zusatzanzeigen**. In der Docker-App gelten Werte älter als 10 min als „--“, in der App auf dem Board erst nach 2 Stunden – bei Sensoren,
-die nur alle paar Minuten senden (Batteriegeräte), ist das Alter entsprechend hoch.
+Ausgelagert nach [FIRMWARE.md](FIRMWARE.md#6b-zusatzanzeigen-für-die-handy-app).
 
 ## 7. Neue Objekte finden: Scan und Differenz
 
@@ -873,8 +740,8 @@ Tabellen der Abschnitte 3 und 4.
 | `0x291B`/2 | Untere Grenze des Vorlaufsolls | 0,1 °C | `02 00 251B 02` | – | [ChristophKomenda](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/pull/10) | – |
 | `0x291C`/2 | Obere Grenze des Vorlaufsolls | 0,1 °C | `02 00 251C 02` | – | [ChristophKomenda](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/pull/10) | – |
 | `0x292C`/2 | Vorlaufsoll im Sonderniveau | 0,1 °C | `02 00 252C 02` | 113 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | liest das Paket `kraiz-per-can` |
-| `0x293A`/2 | Raumsoll Normal | 0,1 °C | `02 00 253A 02` | 107 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | JSON-Adresse am RG2 mitgeschnitten (Abschnitt 10a); liest das Paket `kraiz-per-can` |
-| `0x293B`/2 | Raumsoll Komfort | 0,1 °C | `02 00 253B 02` | 106 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | JSON-Adresse am RG2 mitgeschnitten (Abschnitt 10a); liest das Paket `kraiz-per-can` |
+| `0x293A`/2 | Raumsoll Normal | 0,1 °C | `02 00 253A 02` | 107 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | JSON-Adresse am RG2 mitgeschnitten (VERSUCHE.md, Abschnitt 10a); liest das Paket `kraiz-per-can` |
+| `0x293B`/2 | Raumsoll Komfort | 0,1 °C | `02 00 253B 02` | 106 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | JSON-Adresse am RG2 mitgeschnitten (VERSUCHE.md, Abschnitt 10a); liest das Paket `kraiz-per-can` |
 | `0x2954`/2 | Frostschutzgrenze der Außentemperatur | 0,1 °C | `02 00 2554 02` | – | [ChristophKomenda](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/pull/10) | – |
 | `0x2969`/2 | Vorlaufsoll Absenk | 0,1 °C | `02 00 2569 02` | 112 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | liest das Paket `kraiz-per-can` |
 | `0x296A`/2 | Vorlaufsoll Normal | 0,1 °C | `02 00 256A 02` | 111 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | liest das Paket `kraiz-per-can` |
@@ -1130,182 +997,11 @@ Wie das Objekt `0x2A20`/2 gefunden wurde, steht in [Abschnitt 7](#7-neue-objekte
 
 ## 10a. Raumgerät WEM-RG2 am Bus (Mitschnitt, November 2026)
 
-Mitgeschnitten an einer Anlage mit WTC-GW 15-B und einem gebrauchten WEM-RG2 2.1 (Software
-453.210). Zuerst nur lesend am Bus; am 08.11.2026 lief das RG2 über den CAN-Tunnel (Abschnitt 10b), und am RG2
-wurden gezielt Werte verstellt und wieder zurückgestellt, um die Schreibseite zu sehen. Das Board selbst hat dabei
-nichts geschrieben, es hat nur die Frames des RG2 weitergereicht.
-
-### Aufnahme in die Anlage
-
-Das RG2 meldete sich als Knoten 4 (`0x704`, SDO `0x604`/`0x584`, Kanal zum WEM `0x6C4`/`0x684`).
-Es braucht DC-Versorgung (Anleitung 15–30 V, Aufdruck am Sockel 12–26 V, höchstens 0,7 W) und zeigt ohne
-Bus „Waiting for commissioning ready“. Die Aufnahme lief **erst nach einem Kaltstart von Therme und RG2
-gemeinsam**: Der WEM fragt `0x1018/1`, startet nach „System hat neue Geräte erkannt“ den Assistenten, und danach steht
-Knoten 4 mit seinen Modulen (`TERMINAL1`, `GROUND2`) in der `systable.csv`.
-
-Läuft das RG2 bei einem Neustart des WEM einfach weiter, antwortete es bei uns nicht auf diese Abfrage und
-verlor seine Knotenadresse (LSS-Abfrage danach: `FF`). Das war ein einzelner Versuch über den CAN-Tunnel (10b);
-die Ursache ist nicht bewiesen.
-
-Nach der Aufnahme überträgt der WEM ein **Menü-Paket von rund 1,6 MB** per SDO-Block auf `0x20F4/0`
-(`604: C6 F4 20 00 00 10 00 00`, Blöcke zu 4096 Byte) mit Texten in vielen Sprachen und Parametertabellen. Das
-dauerte rund 25 Minuten bei bis zu 16.000 Telegrammen pro Minute. Der Inhalt gehört Weishaupt und steht deshalb nicht hier.
-
-### Lesen über 0x5E00
-
-Das RG2 bestellt Werte mit einem geteilten SDO-Schreiben auf `0x5E00/4`, der WEM liefert sie mit einem geteilten
-SDO-Schreiben auf `0x5E00/1`:
-
-```
-6C4 → WEM   Bestellung   01 MI MX OXlo OXhi OS 04 <Zähler> 00
-604 → RG2   Lieferung    02 MI MX OXlo OXhi OS 00 xx xx <Wert>
-```
-
-Der Wert ist 1, 2 oder 4 Byte (little endian) oder eine Zeichenkette. **Dieselbe Objektnummer bedeutet je MI etwas anderes**:
-`0x253E` ist bei MI 2 das Zeitprogramm 1, bei MI 9 die Statistik.
-
-| MI | Objekt/Sub | Bedeutung | Skalierung | Geprüft gegen |
-|---|---|---|---|---|
-| 1 | `0x2562`/2, 3 | Uhrzeit Stunde, Minute | 1 | RG2 |
-| 1 | `0x2563`/2–5 | Jahr, Monat, Tag, Wochentag | 1 | RG2 |
-| 1 | `0x26B1`/2 | Außentemperatur | 0,1 °C | Portal |
-| 1 | `0x27B9`/2, `0x27BA`/2 | Außentemperatur Minimum, Maximum (ein Abgleich) | 0,1 °C | Portal |
-| 2 | `0x2507`/2 | Vorlauf Heizkreis | 0,1 °C | Portal |
-| 2 | `0x2533`/2 | Betriebsart (2 = Zeitprogramm 1) | 1 | RG2 |
-| 2 | `0x2539`, `0x253A`, `0x253B` | Raumsoll Absenk, Normal, Komfort; Sub 2 Wert, 3 Min, 4 Max | 0,1 °C | RG2, Portal |
-| 2 | `0x254B`/2–4 | Heizkurve Steilheit, Min, Max | 0,1 | Portal |
-| 2 | `0x25AD`/2–4 | Heizkurve Parallelverschiebung, Min, Max | 0,1 K | Portal |
-| 2 | `0x257B`/2–4 | So/Wi-Grenze, Min, Max | 0,1 °C | Portal |
-| 2 | `0x2582`/2 | So/Wi-Funktion | 0/1 | Portal |
-| 2 | `0x2104`/4, 3: `0x2105`/4 | Modulname (`\HZK0`, `\WW0`) | Text | RG2 |
-| 3 | `0x2529`/2 | Warmwasser | 0,1 °C | Portal |
-
-**Zeitprogramme (MI 2):** `0x253E`, `0x253F`, `0x2551` für Programm 1, 2, 3. Sub 2 = `0x0F`; je Tag ein Block von 16 Subs,
-Montag ab Sub 4 (Sub 3 Kennwert `01`), jeder weitere Tag 16 höher, bis zu 10 Einträge. Jeder Eintrag ist 4 Byte: das untere
-Wort ist `Niveau << 12 | Startminute` mit Niveau 1 Absenk, 2 Normal, 3 Komfort. Das obere Wort war bei uns immer `0x3188`,
-seine Bedeutung ist offen. Beispiel: `0x2168` = Normal ab 06:00 (360 min), `0x1537` = Absenk ab 22:15. Das RG2 holt im
-Betrieb den heutigen Tag.
-
-**Statistik (MI 9, `0x253E`):** 4 Byte, Einheit 0,01 kWh, „Energie gesamt“: Sub 26–37 Tage, Sub 38–49 Monate, Sub 50–54 Jahre, jeweils
-neueste zuerst. Die Tage waren kurz nach Mitternacht noch nicht weitergerückt. Summen passen auf 0,01 kWh: Monat = Summe der Tage,
-Jahr = Summe der Monate plus laufender Vortag. **Diese Wärmemengen lagen bei uns über mehrere Jahre 20–50 % über dem Gaszähler
-(Hs)**, also physikalisch zu hoch; sie taugen nur zum Vergleich untereinander. Nach einem Neustart der Therme ist der laufende Tag
-weitgehend verloren (These aus einem Fall).
-
-### PDO 0x184
-
-Das RG2 sendet von sich aus, ohne Anfrage: bei einer Änderung, frühestens nach 1 s, sonst etwa einmal pro Minute.
-Byte 0–1 Raumtemperatur (0,1 °C, mit Vorzeichen), Byte 2–3 Raumfeuchte (0,1 %), Byte 4–5 meist `0000`, zeitweise
-veränderlich (nach einem Start zum Beispiel von `0x0352` in Schritten von 50 fallend, sonst langsam steigend und fallend);
-die Bedeutung ist offen.
-
-Die **Korrektur Raumfühler** im RG2-Menü wirkt auf den gesendeten Wert (−0,5 K → Byte 0–1 um 5 kleiner), die Feuchte wird
-dabei auf die korrigierte Temperatur umgerechnet. Sie geht nicht über den Bus, ebenso wenig Helligkeit, Nachtmodus,
-Grenzwerte und Leuchtring. Ohne Korrektur lag die Temperatur des gebrauchten RG2 2–4 K über einem Vergleichsfühler im
-selben Raum; in einer geschlossenen Kunststoffbox zusammen mit Board und Spannungswandler stieg die Abweichung langsam
-(Eigenerwärmung vermutet). Ist im WEM kein Raumfühler zugeordnet, regelt er weiter nur nach der Außentemperatur – der
-Raumwert ändert dann das Vorlaufsoll nicht.
-
-### Schreiben über 0x5E00
-
-Ein geänderter Wert geht denselben Weg wie eine Bestellung, nur mit Kennbyte `03`; der WEM quittiert mit `04`:
-
-```
-6C4 → WEM   Auftrag     03 MI MX OXlo OXhi OS 04 <Zähler> 00 <Wert>
-604 → RG2   Quittung    04 MI MX OXlo OXhi OS 00 00 00
-```
-
-Kennbytes: `01` Lesen, `02` Lieferung, `03` Schreiben, `04` Schreiben bestätigt. Der Wert ist little endian, 1 oder 2 Byte
-je nach Objekt (Auftrag 10 oder 11 Byte). Beispiel Raumsoll Normal auf 20,5 °C:
-`03 02 00 3A 25 02 04 00 00 CD 00` → Quittung `04 02 00 3A 25 02 00 00 00`.
-
-Ein Bestätigen am RG2 ergibt **einen** Auftrag mit dem Endwert; Zwischenschritte beim Drehen werden nicht geschrieben.
-Party und Urlaub schreiben beim Bestätigen den ganzen Satz hintereinander; der Zähler zählt dabei bis `00` herunter, der
-letzte Auftrag ist die Funktion selbst.
-
-| MI | Objekt/Sub | Bedeutung | Werte |
-|---|---|---|---|
-| 2 | `0x2539`/2, `0x253A`/2, `0x253B`/2 | Raumsoll Absenk, Normal, Komfort | 0,1 °C; Grenzen verschachtelt (Sub 3/4 = Nachbarwert), Absenk ab −100,0, Komfort bis 300,0 |
-| 2 | `0x2533`/2 | Betriebsart Heizkreis | 1 Byte; 2 = Zeitprogramm 1, 3 = Zeitprogramm 2 |
-| 2 | `0x254B`/2 | Heizkurve Steilheit | 0,1; 100–250 |
-| 2 | `0x25AD`/2 | Heizkurve Parallelverschiebung | 0,1 K; −500…500. Das RG2 stellt in 0,5-K-Schritten, die Anzeige rundet auf ganze K (5 → „1 K“) |
-| 2 | `0x2587`/2 | Party/Heizpause Funktion | 0 Aus, 1 Ein |
-| 2 | `0x2589`/2 | Party Raumsoll-Stufe | 1 Absenk, 3 Komfort |
-| 2 | `0x2593`/2, /3 | Party Beginn Stunde, Minute | 1 |
-| 2 | `0x2588`/2, /3 | Party Ende Stunde, Minute | 1 |
-| 2 | `0x258A`/2 | Urlaub Funktion | 0 Aus, 1 Ein |
-| 2 | `0x2586`/2 | Urlaub Raumsoll | 0 Frost, 1 Absenk |
-| 2 | `0x2584`/2–4, `0x2585`/2–4 | Urlaub Beginn, Ende | Jahr − 2000, Monat, Tag |
-| 3 | `0x2539`/2 | Warmwasser-Soll Normal | 0,1 °C |
-| 3 | `0x2520`/2 | Betriebsart Warmwasser | 1 Ein, 2 Aus |
-| 3 | `0x2549`/2 | Warmwasser-Push | 1 = auslösen; ob der WEM den Wert zurücksetzt, ist offen |
-
-Jeder Wert wurde am RG2 verstellt, an der Quittung des WEM am Bus kontrolliert (Betriebsarten zusätzlich an der
-Anzeige der Firmware) und danach zurückgestellt. `0x2539` ist bei MI 2 das Raumsoll Absenk, bei MI 3 das Warmwasser-Soll. Das Party-Menü schlägt als
-Beginn die abgerundete Uhrzeit und als Ende drei Stunden später vor; im WEM kann anderes gespeichert sein.
-
-**Warmwasser-Programm (MI 3, `0x2580`):** gleicher Aufbau wie die Heiz-Zeitprogramme, das obere Wort war hier `0x3288`.
-Die Kennwerte vor jedem Tagesblock (Sub 3, 19, 35, …) waren `01` für die Gruppe Montag–Freitag und `02` für Samstag/Sonntag;
-das RG2 las nur den Montags- (Sub 4–13) und den Samstagsblock (Sub 84–93).
-
-### Geräteliste, Ausfall, Neustart
-
-- **Geräteliste** am Therme-Display öffnen: Der WEM schreibt jedes Mal `604: 23 F0 20 01 01 00 00 04` (`0x20F0`/1 =
-  `0x04000001`), das RG2 quittiert, und sein Leuchtring blinkt grün (Deutung: Gerät identifizieren). Dazu sendet der WEM
-  `011: 01 F0 20 00 00 00 00 04`.
-- **Start des RG2:** Es sendet `011: 01 F0 20 00 00 00 00 1C` und läuft `704:00` → `704:7F` → `704:05` in rund 20 s hoch.
-  Bei laufendem WEM behielt es seinen Knoten 4 ohne Eingriff – direkt am Bus wie über den CAN-Tunnel.
-- **Ausfall des RG2:** 30 s nach dem letzten Lebenszeichen meldet der WEM `081: FF FF 01 02 05 DD 01 00` (`0x05DD` = **Warnung 1501**, Verbindung zu RG2 Nr. 1 unterbrochen, s. Abschnitt 10c)
-  und löscht die Meldung, sobald das RG2 wieder da ist. In der Geräteliste steht es dann unter „Nicht aktive Geräte“.
+Ausgelagert nach [VERSUCHE.md](VERSUCHE.md#10a-raumgerät-wem-rg2-am-bus-mitschnitt-november-2026).
 
 ## 10b. CAN-Tunnel über WLAN (Versuch, Zweig `can-tunnel`)
 
-> **Abgrenzung:** Das Projekt als Ganzes ist die „ESP-Brücke“ – ein Board vermittelt zwischen CAN-Bus und Heimnetz.
-> Der **CAN-Tunnel** ist etwas anderes: Zwei Boards verlängern den CAN-Bus selbst über das WLAN.
-
-Zwei Boards dieses Projekts verbinden zwei CAN-Busse über das WLAN: Board A hängt an der Therme am echten Bus, Board B
-steht mit dem Raumgerät am Schreibtisch und bildet mit ihm einen kleinen eigenen Bus. So lässt sich ein RG2 bedienen und
-mitschneiden, ohne ein Kabel in den Heizraum zu ziehen. Das RG2 braucht dort eine eigene Versorgung (DC 15–30 V, bei uns
-ein Aufwärtswandler auf 24 V).
-
-**Ablauf.** Jedes Board schickt jeden Frame, den es auf seinem eigenen Bus empfängt, per UDP (Port 47011) an die
-eingetragene Gegenstelle und sendet, was von dort kommt, auf seinen Bus. Angenommen werden nur Pakete von der Adresse der
-Gegenstelle. Ein Paket ist `'W' 'B' Folge id_lo id_hi(+0x80 = RTR) Länge d0…d7`; aus der Folgenummer zählt das Board
-verlorene Pakete. Alle 10 s entsteht eine Statuszeile (vom/zum Bus, verloren, Fehler, Bus-off), auf Wunsch geht ein
-Textmitschnitt per UDP (Port 47012) an einen Rechner. Der Rundlauf Bestellung → Lieferung lag bei 25–35 ms.
-
-**Schutz.** Der Tunnel filtert nicht: Alles, was das RG2 sendet, kommt am WEM an, auch Schreibaufträge. Er ist
-nur für Versuche gedacht. Board A sendet nur, wenn in den letzten 3 s etwas vom Bus kam – bei ausgeschalteter Therme
-stieg sonst der Fehlerzähler bis zum Bus-off. Board B nutzt diese Sperre nicht, damit Anfragen des WEM das stumme RG2
-erreichen. Beide versuchen alle 10 s einen Wiederanlauf, falls der CAN-Baustein im Bus-off steht.
-
-**Schalter** „CAN-Tunnel (Experten)“: Er schaltet sich nach jedem Neustart einmal selbst ein, sobald das WLAN steht. Von
-Hand ausgeschaltet bleibt er bis zum nächsten Neustart aus.
-
-**Einbinden** (Adressen sind Platzhalter):
-
-```yaml
-substitutions:
-  tunnel_ziel: "<ip-der-gegenstelle>"
-  tunnel_log: ""              # oder <ip-eines-rechners> für den Mitschnitt
-  tunnel_name: "B1"           # Kürzel im Mitschnitt
-  tunnel_nur_bei_bus: "true"  # Board an der Therme: true, Board am Raumgerät: false
-
-packages:
-  can_tunnel: !include pakete/can-tunnel.yaml
-```
-
-**Was geklappt hat:** Aufnahme des RG2, Lesen und Schreiben aller Werte aus Abschnitt 10a, Neustart des RG2 und Neustart
-von Board B jeweils ohne Eingriff.
-
-**Bekannte Probleme:**
-- Kaltstart der Therme bei laufendem Tunnel (05.11.2026, ältere Firmware): Das RG2 lief weiter, antwortete nicht auf
-  `0x1018/1` und verlor seine Knotenadresse (LSS: `FF`). Direkt am Bus, mit gemeinsamem Kaltstart, ging es. Mit dem
-  heutigen Stand noch nicht wiederholt.
-- Firmware-Update: Am Board an der Therme brach `esphome upload` (Port 3232) mehrfach mit „receiving chunk result:
-  Unknown error“ ab; das Log zeigte `canbus took a long time … (3–5 s)`. Das Hochladen im Browser (`/update`) klappte
-  jedes Mal. Ein Anhalten des CAN-Bausteins während des Updates (im Zweig) hat die Warnung nicht beseitigt; die Ursache
-  ist offen.
+Ausgelagert nach [VERSUCHE.md](VERSUCHE.md#10b-can-tunnel-über-wlan-versuch-zweig-can-tunnel).
 
 ## 10c. Störmeldungen am Bus und Fehlercodes
 

@@ -436,7 +436,7 @@ PROTOKOLL.md und README.md erzeugt – beides nie von Hand ändern.
 **Einstellungen und ihre Werte ab Werk** stehen ebenfalls nur im Code: `restore_mode` (Schalter) und
 `initial_value` (Zahlen) in `pakete/*.yaml`, die Startwerte `…_start` in der Hauptdatei. Wer dort etwas
 ändert, lässt `python3 werkzeuge/einstellungen_erzeugen.py` laufen. Es schreibt die Tabelle in
-[PROTOKOLL.md](PROTOKOLL.md#einstellungen) neu und jede Angabe, die in der Doku zwischen
+[FIRMWARE.md](FIRMWARE.md#einstellungen) neu und jede Angabe, die in der Doku zwischen
 `<!--ab-werk:ID-->` und `<!--/ab-werk-->` steht (ID = `id` des Schalters oder der Zahl). Neue Textstellen,
 die eine Vorgabe nennen, bekommen diese Marke – dann kann die Doku dem Code nicht mehr widersprechen.
 Der Generator bricht ab, wenn die Einstellungsseite (`EINSTELLUNGEN` in `app_server.cpp`) einen Namen

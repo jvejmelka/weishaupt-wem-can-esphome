@@ -126,7 +126,7 @@ Nicht benötigte Zeilen unter `packages:` auskommentieren.
 | `wem-schalten.yaml` | Heizkreis schalten, Warteschlange, Protokoll | nein |
 | `warmwasser-schalten.yaml` | Warmwasser Ein/Aus (braucht `wem-schalten` und `warmwasser`) | nein |
 | `verdacht.yaml` | **Regeln:** Betriebsarten nur lesen, wenn das Mithören eine Änderung vermuten lässt; feste Regeln R1–R5 einzeln schaltbar (Vorgabe: R1–R3 <!--ab-werk:vd_r1-->an<!--/ab-werk-->, R4/R5 <!--ab-werk:vd_r4-->aus<!--/ab-werk-->; ausgeschaltete laufen im Schattenmodus weiter), dazu eigene Regeln (experimentell, eigener Hauptschalter, Vorgabe <!--ab-werk:vd_eigene_haupt-->aus<!--/ab-werk-->); einstellbar per Web, Datei und MQTT (braucht `warmwasser`). Details: [REGELN.md](REGELN.md) | nein |
-| `zusatz.yaml` | **Zusatzanzeigen für die Handy-App:** Liste von bis zu 6 fremden MQTT-Topics (z. B. Raumtemperaturen, „Wärmepumpe läuft“), einstellbar per Web und Datei. Das Board verwaltet die Liste; die Werte holt die App – die Docker-App abonniert die Topics selbst, mit dem Paket `app` abonniert sie das Board (braucht `mqtt`). Details: [PROTOKOLL.md, Abschnitt 6b](PROTOKOLL.md#6b-zusatzanzeigen-für-die-handy-app) | nein |
+| `zusatz.yaml` | **Zusatzanzeigen für die Handy-App:** Liste von bis zu 6 fremden MQTT-Topics (z. B. Raumtemperaturen, „Wärmepumpe läuft“), einstellbar per Web und Datei. Das Board verwaltet die Liste; die Werte holt die App – die Docker-App abonniert die Topics selbst, mit dem Paket `app` abonniert sie das Board (braucht `mqtt`). Details: [FIRMWARE.md, Abschnitt 6b](FIRMWARE.md#6b-zusatzanzeigen-für-die-handy-app) | nein |
 | `app.yaml` | **Handy-App direkt auf dem Board** (ab v38): `http://<board>/`, eigener Login (`app_benutzer`/`app_passwort` in `secrets.yaml`), kein Server nötig (braucht `wem-schalten`, `warmwasser-schalten`) | nein |
 | `json-lesen.yaml` | **Werte per JSON abrufen** (ab v42): eine Anfrage mit sieben Objekten an den WEM, nur von Hand (Knopf in der Experten-Oberfläche und auf der Einstellungsseite, ↻ in der App auf dem Board bei stillem CAN-Bus), nie im Takt; für Boards ohne CAN-Kabel oder bei Busausfall (braucht `wem-schalten`, `warmwasser`) | nein |
 | `feste-ip.yaml` | feste IP statt DHCP | nein |
@@ -216,10 +216,14 @@ Beispielanlage mit Wärmepumpe und PV (Sollwerte, Messungen, was man am Bus sieh
 Die Dokumente im Überblick:
 
 - [INSTALL.md](INSTALL.md) – Schritt für Schritt vom Board bis zur Handy-App
-- [PROTOKOLL.md](PROTOKOLL.md) – CAN-Bus, WEM-JSON, Abbildung und Fehlerbilder; Raumgerät WEM-RG2 lesen und
-  schreiben ([10a](PROTOKOLL.md#10a-raumgerät-wem-rg2-am-bus-mitschnitt-november-2026)), CAN-Tunnel über WLAN
-  ([10b](PROTOKOLL.md#10b-can-tunnel-über-wlan-versuch-zweig-can-tunnel), Versuch im Zweig `can-tunnel`), Störmeldungen und
-  Fehlercodes ([10c](PROTOKOLL.md#10c-störmeldungen-am-bus-und-fehlercodes))
+- [PROTOKOLL.md](PROTOKOLL.md) – der Bus: [alle Wege zur Heizung](PROTOKOLL.md#wege-zur-heizung), CAN-Bus, WEM-JSON,
+  Abbildung JSON → CAN, Schreiben per CAN, Fehlerbilder, Störmeldungen und Fehlercodes
+  ([10c](PROTOKOLL.md#10c-störmeldungen-am-bus-und-fehlercodes))
+- [FIRMWARE.md](FIRMWARE.md) – die Firmware bedienen: Experten-Oberfläche, [alle Einstellungen](FIRMWARE.md#einstellungen)
+  mit ihren Werkswerten, Regeln, Zusatzanzeigen
+- [VERSUCHE.md](VERSUCHE.md) – Raumgerät WEM-RG2 lesen und schreiben
+  ([10a](VERSUCHE.md#10a-raumgerät-wem-rg2-am-bus-mitschnitt-november-2026)), CAN-Tunnel über WLAN
+  ([10b](VERSUCHE.md#10b-can-tunnel-über-wlan-versuch-zweig-can-tunnel), Versuch im Zweig `can-tunnel`)
 - [REGELN.md](REGELN.md) – die Regeln R1–R5 und eigene Regeln: wann das Board Betriebsarten nachliest
 - [ANLAGE.md](ANLAGE.md) – Beispielanlage mit Wärmepumpe und PV
 - [IDEEN.md](IDEEN.md) – was sich noch bauen ließe: Datenbank und Grafana, H2-Sperre,
@@ -507,7 +511,7 @@ Objekt, ohne Firmware-Konstanten ([PROTOKOLL, Abschnitt 7a](PROTOKOLL.md#7a-übe
 
 **Einstellungen ab Werk:** welcher Schalter an oder aus ausgeliefert wird und welchen Startwert eine Zahl hat, steht
 nur in den Paketen (`restore_mode`, `initial_value`). [`werkzeuge/einstellungen_erzeugen.py`](werkzeuge/einstellungen_erzeugen.py)
-schreibt daraus die [Tabelle aller Einstellungen](PROTOKOLL.md#einstellungen) und jede Angabe „ab Werk“ in der Doku.
+schreibt daraus die [Tabelle aller Einstellungen](FIRMWARE.md#einstellungen) und jede Angabe „ab Werk“ in der Doku.
 
 Bei jedem Push laufen alle vier in [GitHub Actions](https://github.com/jvejmelka/weishaupt-wem-can-esphome/actions/workflows/ci.yml), dazu wird die
 Firmware mit ESPHome 2026.9.1 und einer Dummy-`secrets.yaml` (aus `secrets.yaml.example`)
@@ -548,7 +552,7 @@ Offene Punkte, die sich nur an anderen Anlagen oder zu anderer Jahreszeit kläre
 | Heizkreis-Codes 6–8 (Komfort, Normal, Absenk) wurden nie am Bus gesehen | Mitschnitt einer Umschaltung auf diese Betriebsarten |
 | Umschaltungen über WEM-Portal oder WEM-App wurden nie mitgeschnitten | Rohmitschnitt während einer Portal-Umschaltung (s. [PROTOKOLL.md](PROTOKOLL.md#passiv-erkennen-was-geht-und-was-nicht)) |
 | Rückrechnung der Raumsoll-Stufe nur für AT 12,9–15,2 °C geeicht | Winterdaten (AT 0–8 °C, je Betriebsart 10–15 min stationär) |
-| WEM-RG2: Lesen und Schreiben ist mitgeschnitten ([PROTOKOLL.md, 10a](PROTOKOLL.md#10a-raumgerät-wem-rg2-am-bus-mitschnitt-november-2026)); offen sind andere Raumgeräte (RG1, WEM-RF), mehrere Raumgeräte und die Raumaufschaltung | Mitschnitte, s. [IDEEN.md, Idee 4](IDEEN.md#gesucht-jemand-mit-weishaupt-raumgerät-am-bus) |
+| WEM-RG2: Lesen und Schreiben ist mitgeschnitten ([VERSUCHE.md, 10a](VERSUCHE.md#10a-raumgerät-wem-rg2-am-bus-mitschnitt-november-2026)); offen sind andere Raumgeräte (RG1, WEM-RF), mehrere Raumgeräte und die Raumaufschaltung | Mitschnitte, s. [IDEEN.md, Idee 4](IDEEN.md#gesucht-jemand-mit-weishaupt-raumgerät-am-bus) |
 
 Bitte als [GitHub-Issue](https://github.com/jvejmelka/weishaupt-wem-can-esphome/issues), mit
 Zusammenfassung statt Rohdateien (die können Seriennummern und Gerätekennungen enthalten).

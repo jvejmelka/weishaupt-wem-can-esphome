@@ -837,7 +837,7 @@ TEST(register_json_schreiben_wie_v27) {
 // ---------------------------------------------------------------- Stoermeldungen (EMCY 0x081/0x082)
 TEST(fehlercodes_emcy) {
   namespace fc = fehlercodes;
-  // RG2 nicht erreichbar: Warnung 1501 (Muster wie in PROTOKOLL.md, Abschnitt 10a)
+  // RG2 nicht erreichbar: Warnung 1501 (Muster wie in VERSUCHE.md, Abschnitt 10a)
   auto m = fc::emcy({0xFF, 0xFF, 0x01, 0x02, 0x05, 0xDD, 0x01, 0x00});
   PRUEFE(m.gueltig && m.aktiv && m.typ == 'W' && m.nr == 1501);
   PRUEFE(m.text == "W 1501: Verbindung zum Raumgerät RG2 unterbrochen (Teilnehmer 1)");

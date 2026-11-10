@@ -5,7 +5,7 @@ Quelle ist der Code: pakete/*.yaml (restore_mode, initial_value, min/max), die S
 weishaupt-wem-can.yaml (substitutions) und die Liste der Einstellungsseite in
 components/weishaupt_can/app_server.cpp (EINSTELLUNGEN, nur_experte).
 
-Erzeugt in PROTOKOLL.md und PROTOKOLL.en.md
+Erzeugt in FIRMWARE.md und FIRMWARE.en.md
   - die Tabelle zwischen  <!-- EINSTELLUNGEN:BEGIN -->  und  <!-- EINSTELLUNGEN:END -->
 und in allen .md-Dateien im Wurzelverzeichnis
   - den Wert zwischen  <!--ab-werk:ID-->  und  <!--/ab-werk-->   (ID = id des Schalters oder der Zahl;
@@ -32,7 +32,7 @@ WURZEL = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)
 HAUPT = "weishaupt-wem-can.yaml"
 HAUPT_WEITERE = ["olimex-weishaupt.yaml"]
 APP_SERVER = os.path.join("components", "weishaupt_can", "app_server.cpp")
-TABELLE_IN = ["PROTOKOLL.md", "PROTOKOLL.en.md"]
+TABELLE_IN = ["FIRMWARE.md", "FIRMWARE.en.md"]
 
 B_AN, B_AUS = "<!-- EINSTELLUNGEN:BEGIN -->", "<!-- EINSTELLUNGEN:END -->"
 MARKE = re.compile(r"<!--ab-werk:([a-z0-9_]+)-->(.*?)<!--/ab-werk-->", re.S)
