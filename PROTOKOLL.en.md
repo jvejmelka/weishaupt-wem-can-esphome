@@ -718,6 +718,8 @@ with its evidence into the tables of sections 3 and 4.
 - Where the source gives a JSON address, the CAN index is converted with the offsets from
   [section 5](#mapping-json-object--can-object). The offsets were measured on a WTC-GW 15-B; whether they
   hold for every object of a module has only been checked for the examples listed there.
+- The network objects of the WEM (module MI 06) are known as JSON addresses only and have their own table
+  further down – without values, because those would describe your own home network.
 - The system module also contains objects for buffer tank, cascade, plate heat exchanger and circulation.
   Whether they return a value on an installation without these functions is unverified.
 - Many boiler objects are installer-level settings. This is about reading only: the firmware has no
@@ -811,6 +813,21 @@ with its evidence into the tables of sections 3 and 4.
 | `0x2A51`/2 | Hot water pump | 0 off, 1 on | `03 00 2551 02` | 137 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | read by the package `kraiz-per-can` |
 | `0x2A57`/2 | Circulation return temperature | 0.1 °C | `03 00 2557 02` | 136 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | read by the package `kraiz-per-can` |
 
+**Network of the WEM (JSON module MI 06, JSON address only)**
+
+This only says **where** the WEM keeps its network settings. None of it has been read on the measured installation, and no CAN object is known for it: no offset has been measured for MI 06 ([section 5](#mapping-json-object--can-object)). The source reads texts with command `11` (reply `12`), not with `01`. The values describe your own home network (addresses, MAC address, device name): keep them out of issues, bus logs and screenshots. This firmware neither reads nor publishes them.
+
+| JSON (MI MX OX OS) | Meaning | Length and kind | Source |
+|---|---|---|---|
+| `06 00 2507 00` | Address assignment mode | 1 byte: 1 set by hand, 3 automatic (DHCP) | [JS-DE-Tech](https://github.com/JS-DE-Tech/hacs-weishaupt-lan) |
+| `06 00 2508 00` | IP address | 4 bytes, IPv4 | [JS-DE-Tech](https://github.com/JS-DE-Tech/hacs-weishaupt-lan) |
+| `06 00 2509 00` | Subnet mask | 4 bytes, IPv4 | [JS-DE-Tech](https://github.com/JS-DE-Tech/hacs-weishaupt-lan) |
+| `06 00 250A 00` | Default gateway | 4 bytes, IPv4 | [JS-DE-Tech](https://github.com/JS-DE-Tech/hacs-weishaupt-lan) |
+| `06 00 250B 00` | DNS server | 4 bytes, IPv4 | [JS-DE-Tech](https://github.com/JS-DE-Tech/hacs-weishaupt-lan) |
+| `06 00 250C 01` … `06` | MAC address, one of its six parts per sub-object | 2 bytes each | [JS-DE-Tech](https://github.com/JS-DE-Tech/hacs-weishaupt-lan) |
+| `06 00 250E 00` | Device name on the network | text, up to 16 characters | [JS-DE-Tech](https://github.com/JS-DE-Tech/hacs-weishaupt-lan) |
+| `06 00 2511 00` | Name in the certificate (CN) | text, up to 50 characters | [JS-DE-Tech](https://github.com/JS-DE-Tech/hacs-weishaupt-lan) |
+
 **Listed in the source without a meaning**
 
 - node 2, replies of the boiler ([geronet1](https://github.com/geronet1/wem-python)): `0x2503`/1, `0x250D`/1, `0x2516`/1, `0x2523`/1, `0x2528`/1, `0x252E`/0, `0x2569`/1, `0x2569`/2, `0x256B`/1, `0x256C`/1, `0x256E`/1, `0x2574`/1, `0x2574`/2, `0x2581`/1, `0x258B`/1, `0x258C`/0, `0x2594`/1, `0x2594`/2, `0x259B`/1, `0x2716`/1, `0x2717`/1, `0x271A`/2, `0x2729`/1, `0x272A`/1, `0x272B`/1, `0x272C`/2, `0x2732`/2, `0x273B`/2, `0x273D`/1, `0x273D`/2, `0x2754`/1, `0x2754`/2, `0x2764`/2, `0x2765`/1, `0x2766`/2, `0x276A`/1, `0x2770`/2, `0x2772`/1, `0x2772`/2, `0x2778`/1, `0x2778`/2, `0x2A22`/0
@@ -823,6 +840,7 @@ with its evidence into the tables of sections 3 and 4.
 - [BorgNumberOne/Weishaupt_CanApiJson](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) – address table of the JSON interface with Modbus registers
 - [kraiz/hassio-weishaupt](https://github.com/kraiz/hassio-weishaupt) – sensor list of the Home Assistant integration (MIT licence)
 - [BorgNumberOne/Weishaupt_CanApiJson, Pull Request #10 (ChristophKomenda)](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/pull/10) – heating circuit parameters of the JSON interface
+- [JS-DE-Tech/hacs-weishaupt-lan](https://github.com/JS-DE-Tech/hacs-weishaupt-lan) – Home Assistant integration using the JSON interface (MIT licence); source of the network objects of the WEM
 
 <!-- REGISTER:END uebernommen -->
 

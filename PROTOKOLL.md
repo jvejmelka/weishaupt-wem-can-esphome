@@ -698,6 +698,8 @@ Tabellen der Abschnitte 3 und 4.
 - Nennt die Quelle eine JSON-Adresse, ist der CAN-Index mit den Versätzen aus
   [Abschnitt 5](#abbildung-json-objekt--can-objekt) umgerechnet. Die Versätze sind an einer WTC-GW 15-B
   gemessen; ob sie für jedes Objekt eines Moduls gelten, ist nur an den dort genannten Beispielen geprüft.
+- Die Netzwerk-Objekte des WEM (Modul MI 06) sind nur als JSON-Adresse bekannt und stehen weiter unten in einer
+  eigenen Tabelle – ohne Werte, denn die wären Angaben zum eigenen Heimnetz.
 - Zum Systemmodul gehören auch Objekte für Pufferspeicher, Kaskade, Plattenwärmetauscher und Zirkulation.
   Ob sie an einer Anlage ohne diese Funktionen einen Wert liefern, ist ungeprüft.
 - Viele Kesselobjekte sind Einstellwerte der Fachmann-Ebene. Hier geht es nur ums Lesen: Eigene
@@ -791,6 +793,21 @@ Tabellen der Abschnitte 3 und 4.
 | `0x2A51`/2 | Warmwasserpumpe | 0 aus, 1 ein | `03 00 2551 02` | 137 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | liest das Paket `kraiz-per-can` |
 | `0x2A57`/2 | Rücklauftemperatur der Zirkulation | 0,1 °C | `03 00 2557 02` | 136 | [kraiz](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) | liest das Paket `kraiz-per-can` |
 
+**Netzwerk des WEM (JSON-Modul MI 06, nur JSON-Adresse)**
+
+Hier steht nur, **wo** der WEM seine Netzwerkeinstellungen ablegt. An der gemessenen Anlage ist nichts davon gelesen, und ein CAN-Objekt dazu ist nicht belegt: Für MI 06 ist kein Versatz gemessen ([Abschnitt 5](#abbildung-json-objekt--can-objekt)). Texte liest die Quelle mit dem Kommando `11` (Antwort `12`), nicht mit `01`. Die Werte beschreiben das eigene Heimnetz (Adressen, MAC-Adresse, Gerätename): Sie gehören nicht in Issues, Mitschnitte oder Bildschirmfotos. Diese Firmware liest und veröffentlicht sie nicht.
+
+| JSON (MI MX OX OS) | Bedeutung | Länge und Art | Quelle |
+|---|---|---|---|
+| `06 00 2507 00` | Art der Adressvergabe | 1 Byte: 1 fest eingestellt, 3 automatisch (DHCP) | [JS-DE-Tech](https://github.com/JS-DE-Tech/hacs-weishaupt-lan) |
+| `06 00 2508 00` | IP-Adresse | 4 Byte, IPv4 | [JS-DE-Tech](https://github.com/JS-DE-Tech/hacs-weishaupt-lan) |
+| `06 00 2509 00` | Netzmaske | 4 Byte, IPv4 | [JS-DE-Tech](https://github.com/JS-DE-Tech/hacs-weishaupt-lan) |
+| `06 00 250A 00` | Standardgateway | 4 Byte, IPv4 | [JS-DE-Tech](https://github.com/JS-DE-Tech/hacs-weishaupt-lan) |
+| `06 00 250B 00` | DNS-Server | 4 Byte, IPv4 | [JS-DE-Tech](https://github.com/JS-DE-Tech/hacs-weishaupt-lan) |
+| `06 00 250C 01` … `06` | MAC-Adresse, je Subobjekt eine der sechs Stellen | je 2 Byte | [JS-DE-Tech](https://github.com/JS-DE-Tech/hacs-weishaupt-lan) |
+| `06 00 250E 00` | Gerätename im Netz | Text, bis 16 Zeichen | [JS-DE-Tech](https://github.com/JS-DE-Tech/hacs-weishaupt-lan) |
+| `06 00 2511 00` | Name im Zertifikat (CN) | Text, bis 50 Zeichen | [JS-DE-Tech](https://github.com/JS-DE-Tech/hacs-weishaupt-lan) |
+
 **In der Quelle ohne Bezeichnung**
 
 - Knoten 2, Antworten des Kessels ([geronet1](https://github.com/geronet1/wem-python)): `0x2503`/1, `0x250D`/1, `0x2516`/1, `0x2523`/1, `0x2528`/1, `0x252E`/0, `0x2569`/1, `0x2569`/2, `0x256B`/1, `0x256C`/1, `0x256E`/1, `0x2574`/1, `0x2574`/2, `0x2581`/1, `0x258B`/1, `0x258C`/0, `0x2594`/1, `0x2594`/2, `0x259B`/1, `0x2716`/1, `0x2717`/1, `0x271A`/2, `0x2729`/1, `0x272A`/1, `0x272B`/1, `0x272C`/2, `0x2732`/2, `0x273B`/2, `0x273D`/1, `0x273D`/2, `0x2754`/1, `0x2754`/2, `0x2764`/2, `0x2765`/1, `0x2766`/2, `0x276A`/1, `0x2770`/2, `0x2772`/1, `0x2772`/2, `0x2778`/1, `0x2778`/2, `0x2A22`/0
@@ -803,6 +820,7 @@ Tabellen der Abschnitte 3 und 4.
 - [BorgNumberOne/Weishaupt_CanApiJson](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) – Adresstabelle der JSON-Schnittstelle mit Modbus-Registern
 - [kraiz/hassio-weishaupt](https://github.com/kraiz/hassio-weishaupt) – Sensorliste der Home-Assistant-Integration (MIT-Lizenz)
 - [BorgNumberOne/Weishaupt_CanApiJson, Pull Request #10 (ChristophKomenda)](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/pull/10) – Heizkreis-Parameter der JSON-Schnittstelle
+- [JS-DE-Tech/hacs-weishaupt-lan](https://github.com/JS-DE-Tech/hacs-weishaupt-lan) – Home-Assistant-Integration über die JSON-Schnittstelle (MIT-Lizenz); von dort die Netzwerk-Objekte des WEM
 
 <!-- REGISTER:END uebernommen -->
 

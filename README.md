@@ -470,6 +470,9 @@ billiger, aber **ohne** galvanische Trennung.
 - [BorgNumberOne/Weishaupt_CanApiJson](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) –
   Registertabelle der WEM-JSON-Schnittstelle (`/ajax/CanApiJson.json`) mit MI/MX/OX/OS,
   Faktoren und Aktualisierungsklassen (Datenpunktliste des Weishaupt-Gateways WEM-Modbus).
+- [JS-DE-Tech/hacs-weishaupt-lan](https://github.com/JS-DE-Tech/hacs-weishaupt-lan) – Home-Assistant-Integration
+  über die JSON-Schnittstelle (MIT). Von dort stammen die Adressen der Netzwerk-Objekte des WEM
+  ([PROTOKOLL, Abschnitt 7a](PROTOKOLL.md#7a-übernommene-objekte-aus-anderen-projekten-ungeprüft)).
 - [kraiz/hassio-weishaupt](https://github.com/kraiz/hassio-weishaupt) – Home-Assistant-Integration
   über die JSON-Schnittstelle. Die Issues erklären, warum der WEM so vorsichtig behandelt werden muss:
   - [#15](https://github.com/kraiz/hassio-weishaupt/issues/15) – zehn Anfragen an nicht vorhandene

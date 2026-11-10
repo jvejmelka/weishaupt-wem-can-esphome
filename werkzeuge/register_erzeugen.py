@@ -94,6 +94,9 @@ U_FELDER = {"index", "sub", "name", "name_en", "faktor", "einheit", "einheit_en"
             "json", "modbus", "quelle", "hinweis", "hinweis_en"}
 
 
+JSON_ADRESSE = r"[0-9A-F]{2} [0-9A-F]{2} [0-9A-F]{4} [0-9A-F]{2}"
+
+
 def uebernommen_laden(objekte):
     """register-uebernommen.yaml lesen und pruefen; nichts davon darf schon in register.yaml stehen."""
     with open(UEBERNOMMEN, encoding="utf-8") as f:
@@ -125,7 +128,7 @@ def uebernommen_laden(objekte):
                 raise Fehler(f"{wo}: hinweis und hinweis_en gehoeren zusammen")
             if not o["quelle"] or any(q not in quellen for q in o["quelle"]):
                 raise Fehler(f"{wo}: unbekannte quelle {o['quelle']!r}")
-            if "json" in o and not re.fullmatch(r"[0-9A-F]{2} [0-9A-F]{2} [0-9A-F]{4} [0-9A-F]{2}", o["json"]):
+            if "json" in o and not re.fullmatch(JSON_ADRESSE, o["json"]):
                 raise Fehler(f"{wo}: json muss 'MI MX OX OS' in Hex sein")
             schluessel = (g["knoten"], o["index"], o["sub"])
             if schluessel in gesehen:
@@ -133,6 +136,23 @@ def uebernommen_laden(objekte):
             if schluessel in bekannt:
                 raise Fehler(f"{wo}: steht schon in register.yaml - hier loeschen")
             gesehen.add(schluessel)
+    js_gesehen = set()
+    for g in daten.get("nur_json") or []:
+        if set(g) != {"titel", "titel_en", "hinweis", "hinweis_en", "objekte"} or not g["objekte"]:
+            raise Fehler(f"register-uebernommen.yaml: nur_json {g.get('titel')!r} braucht titel, titel_en, hinweis, hinweis_en, objekte")
+        for o in g["objekte"]:
+            wo = f"register-uebernommen.yaml: nur_json {o.get('json')!r}"
+            if set(o) - {"sub_bis"} != {"json", "name", "name_en", "art", "art_en", "quelle"}:
+                raise Fehler(f"{wo}: braucht json, name, name_en, art, art_en, quelle (optional sub_bis)")
+            if not isinstance(o["json"], str) or not re.fullmatch(JSON_ADRESSE, o["json"]):
+                raise Fehler(f"{wo}: json muss 'MI MX OX OS' in Hex sein")
+            if "sub_bis" in o and not int(o["json"][-2:], 16) < o["sub_bis"] <= 0xFF:
+                raise Fehler(f"{wo}: sub_bis muss groesser als OS sein")
+            if not o["quelle"] or any(q not in quellen for q in o["quelle"]):
+                raise Fehler(f"{wo}: unbekannte quelle {o['quelle']!r}")
+            if o["json"] in js_gesehen:
+                raise Fehler(f"{wo}: doppelt")
+            js_gesehen.add(o["json"])
     for b in daten.get("ohne_bezeichnung") or []:
         if set(b) != {"stelle", "stelle_en", "quelle", "objekte"} or b["quelle"] not in quellen:
             raise Fehler("register-uebernommen.yaml: ohne_bezeichnung braucht stelle, stelle_en, quelle, objekte")
@@ -430,6 +450,16 @@ def t_uebernommen(daten, en=False):
         kopf = (["Object", "Meaning", "Scaling", "JSON (MI MX OX OS)", "Modbus", "Source", "Note"] if en else
                 ["Objekt", "Bedeutung", "Skalierung", "JSON (MI MX OX OS)", "Modbus", "Quelle", "Hinweis"])
         teile.append(f"**{g['titel_en' if en else 'titel']}**\n\n{tabelle(kopf, zeilen)}")
+    for g in daten.get("nur_json") or []:
+        zeilen = []
+        for o in g["objekte"]:
+            adresse = f"`{o['json']}`" + (f" … `{o['sub_bis']:02X}`" if "sub_bis" in o else "")
+            zeilen.append([adresse, o["name_en" if en else "name"], o["art_en" if en else "art"],
+                           ", ".join(link(k) for k in o["quelle"])])
+        kopf = (["JSON (MI MX OX OS)", "Meaning", "Length and kind", "Source"] if en else
+                ["JSON (MI MX OX OS)", "Bedeutung", "Länge und Art", "Quelle"])
+        teile.append(f"**{g['titel_en' if en else 'titel']}**\n\n{g['hinweis_en' if en else 'hinweis'].strip()}"
+                     f"\n\n{tabelle(kopf, zeilen)}")
     ohne = []
     for b in daten.get("ohne_bezeichnung") or []:
         liste = ", ".join(obj({"index": i, "sub": s}) for i, s in b["objekte"])
