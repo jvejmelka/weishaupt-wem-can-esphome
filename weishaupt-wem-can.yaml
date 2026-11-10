@@ -7,28 +7,36 @@
 # Diese Datei waehlt nur die Pakete aus. Alles Persoenliche steht in secrets.yaml
 # (Vorlage: secrets.yaml.example). Nicht benoetigte Pakete auskommentieren.
 #
-#   pakete/kessel.yaml               Pflicht: Kesselwerte lesen, Diagnose, WLAN-Felder (bindet das
+#   pakete/kessel.yaml               Pflicht: Kesselwerte lesen, Diagnose (bindet das
 #                                    Bauteil weishaupt_can ein, das Zustand und Logik haelt)
+#   pakete/netz-wlan.yaml            WLAN-Anzeigen und WLAN-Wechsel (Boards mit Ethernet: netz-lan.yaml,
+#                                    siehe olimex-weishaupt.yaml)
 #   pakete/warmwasser.yaml           Warmwasserwerte (nur mit Warmwasserspeicher am WTC)
 #   pakete/mqtt.yaml                 Werte und Befehle ueber MQTT
 #   pakete/homeassistant-api.yaml    native Home-Assistant-API (statt oder neben MQTT)
-#   pakete/wem-schalten.yaml         Heizkreis-Betriebsart ueber die WEM-JSON-Schnittstelle
+#   pakete/wem-schalten.yaml         Heizkreis-Betriebsart am WEM schalten (seit v42 ab Werk per CAN, Rueckweg JSON)
 #   pakete/warmwasser-schalten.yaml  Warmwasser Ein/Aus ueber WEM (braucht wem-schalten)
 #   pakete/verdacht.yaml             Regeln: Betriebsarten nur lesen, wenn das Mithoeren eine Aenderung
 #                                    vermuten laesst (R1-R5 einzeln, eigene Regeln experimentell; braucht warmwasser)
 #   pakete/zusatz.yaml               Zusatzanzeigen fuer die Handy-App (Liste fremder MQTT-Topics, braucht mqtt)
-#   pakete/app.yaml                  Heizungs-App direkt auf dem Board (http://<board>/app, ab v38)
+#   pakete/app.yaml                  Heizungs-App direkt auf dem Board (http://<board>/, ab v38)
 #   pakete/json-lesen.yaml           Werte von Hand per WEM-JSON abrufen (ohne CAN-Kabel, ab v42; braucht wem-schalten)
 #   pakete/feste-ip.yaml             feste IP statt DHCP (Empfehlung: DHCP + Router-Reservierung)
+#   pakete/kraiz-per-can.yaml        weitere Werte wie kraiz/hassio-weishaupt, per CAN gelesen; Warmwasser-Push,
+#                                    Fehlerblock des WEM (von cg089; braucht wem-schalten und eigene CAN-Anfragen)
+#   pakete/dallas.yaml               1-Wire-Bus fuer eigene DS18B20-Fuehler (von cg089, Beispiel: olimex-weishaupt.yaml)
 #
 substitutions:
   geraet: weact-can485-weishaupt       # Geraetename = MQTT-Praefix
   anzeigename: Weishaupt WTC-GW 15-B
-  firmware: "v42-dev vom 28.10.2026"
-  # Eigene CAN-Leseanfragen beim ersten Start (danach gilt der Schalter in der Weboberflaeche):
-  #   RESTORE_DEFAULT_OFF = nur mithoeren (Vorgabe, wenn die Zeile fehlt)
+  firmware: "v42-dev vom 10.11.2026"
+  # Eigene CAN-Leseanfragen im Takt beim ersten Start (danach gilt der Schalter auf dem Board):
+  #   RESTORE_DEFAULT_OFF = keine Abfragen im Takt (Vorgabe, wenn die Zeile fehlt); Lesen bei Anlass
+  #                         und Schalten am WEM gibt es trotzdem
   #   RESTORE_DEFAULT_ON  = eigene Leseanfragen im Weishaupt-Takt
   can_anfragen_start: RESTORE_DEFAULT_OFF
+  # Sprache der Stoermeldungen (Meldung WEM/Kessel): "false" = Deutsch, "true" = Englisch (fehlercodes.yaml)
+  meldungen_englisch: "false"
   # Regeln (Paket verdacht) beim ersten Start - danach gelten Weboberflaeche bzw. die
   # Regeln-Datei per MQTT (<geraet>/cmd/regeln, siehe regeln.json.example). Jede Regel einzeln:
   # Ausgeschaltete Regeln laufen im Schattenmodus weiter (melden "waere", lesen nicht). REGELN.md
@@ -57,6 +65,7 @@ external_components:
 
 packages:
   kessel: !include pakete/kessel.yaml
+  netz: !include pakete/netz-wlan.yaml
   warmwasser: !include pakete/warmwasser.yaml
   mqtt: !include pakete/mqtt.yaml
   # api: !include pakete/homeassistant-api.yaml
@@ -67,13 +76,14 @@ packages:
   app: !include pakete/app.yaml
   json_lesen: !include pakete/json-lesen.yaml
   # feste_ip: !include pakete/feste-ip.yaml
+  # kraiz: !include pakete/kraiz-per-can.yaml
 
 esphome:
   name: ${geraet}
   friendly_name: ${anzeigename}
   project:
     name: "jvejmelka.weishaupt-wem-can"
-    version: "27"
+    version: "42-dev"
 
 # Board WeAct CAN485 DevBoard V1: microSD-Steckplatz einbinden (ab v42; ohne Karte harmlos)
 weishaupt_can:
@@ -102,7 +112,7 @@ ota:
     on_error:
       then:
         - lambda: 'can_tunnel::ota_fehler();'
-  # Update im Browser (ab v40): Einstellungsseite oder /experten, Benutzer admin + Experten-Passwort (Digest, ab v42)
+  # Update im Browser (ab v40): Einstellungsseite oder /experten, Benutzer admin + Experten-Passwort (Digest ab v41, /experten ab v42)
   - platform: web_server
     on_begin:
       then:
@@ -122,9 +132,12 @@ wifi:
 
 captive_portal:
 
-# Weboberflaeche: http://<IP des Boards>, Benutzer admin.
+# ESPHome-Weboberflaeche (Experten). Mit Paket app: http://<IP des Boards>/experten, Benutzer admin und
+#   das Experten-Passwort von der Einstellungsseite - das Paket app ersetzt das Passwort unten; solange
+#   kein Experten-Passwort gesetzt ist, bleibt die Oberflaeche gesperrt. Ohne Paket app: http://<IP>/,
+#   Benutzer admin, web_password.
 #   local: true bettet JS/CSS ein - die Seite funktioniert ohne Internet.
-#   Basic Auth laeuft unverschluesselt ueber HTTP: nur im LAN betreiben.
+#   HTTP ist unverschluesselt (Digest schuetzt nur das Passwort): nur im LAN betreiben.
 web_server:
   id: experten_oberflaeche   # ab v42 unter /experten, "/" ist die App (Paket app)
   port: 80

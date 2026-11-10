@@ -9,7 +9,7 @@
 //   Scan        Objektscan (cmd/scan)
 //   Brenner     Flankenerkennung, Brennerstarts
 //   Protokoll   Schalt- und Regelprotokoll (10 Eintraege)
-//   Schalten    Sperrminute, laufender WEM-Aufruf, Schreibbefehl
+//   Schalten    Mindestabstand, laufender WEM-Aufruf, Schreibbefehl
 //   Verdacht    Laufzeitzustand der Regeln R1-R5 (Datenregeln, regelwerk.h) und der eigenen Regeln
 //   Zusatz      Zusatzanzeigen (Speicherform, Datei-Pruefsumme)
 //
@@ -101,7 +101,7 @@ struct Bus {
 
 // Text "Eigene CAN-Anfragen" (an = Stand des Schalters)
 inline std::string anfragen_text(bool an, const Bus &b, uint32_t j) {
-  if (!an) return "aus - nur mithoeren (Betriebsarten bei Anlass)";
+  if (!an) return "aus - keine Abfragen im Takt (Betriebsarten bei Anlass)";
   if (b.seit == 0 || j - b.letzter_frame >= BUS_STILL_MS) return "aus - Bus schweigt";
   uint32_t pause = b.pause_ms, seit = j - b.seit;
   if (seit <= pause) return "Anlaufpause, noch " + std::to_string((pause - seit) / 60000 + 1) + " min nur mithoeren";
@@ -139,14 +139,17 @@ struct Anlass {
     if (hk_letzte_lesung != 0 && jetzt - hk_letzte_lesung < HK_MINDESTABSTAND_MS) return;
     hk_erledigt = a; hk_letzte_lesung = jetzt | 1; hk_jetzt = true;
   }
-  // 5-s-Takt Warmwasser (Paket warmwasser): 8 s nach dem Anlass, nur bei lebendem Bus
-  void ww_takt(bool bus_tot, uint32_t jetzt) {
+  // 5-s-Takt Warmwasser (Paket warmwasser): 8 s nach dem Anlass, nur wenn gesendet werden darf
+  // (Bus lebt UND Anlaufpause vorbei, wie beim Heizkreis). Bis v41 genuegte "Bus lebt": ein Anlass
+  // in der Anlaufpause (Status lesen, Statusbits, Schaltbefehl) fuehrte dann zu drei Leseanfragen
+  // an den WEM mitten in der Pause. Ab v42 bleibt der Anlass stehen und wird danach gelesen.
+  void ww_takt(bool bus_ok, uint32_t jetzt) {
     ww_jetzt = false;
     uint32_t a = anlass_ms;
     if (ww_ms != 0 && (a == 0 || (int32_t) (ww_ms - a) > 0)) a = ww_ms;
     if (a == 0 || a == ww_erledigt) return;
     if (jetzt - a < 8000) return;
-    if (bus_tot) return;
+    if (!bus_ok) return;
     ww_erledigt = a; ww_jetzt = true;
   }
 
@@ -434,13 +437,13 @@ struct Protokoll {
 // ---------------------------------------------------------------- Schalten ueber den WEM
 
 struct Schalten {
-  uint32_t letzter_befehl = 0;   // millis() des letzten WEM-Aufrufs (Sperrminute)
+  uint32_t letzter_befehl = 0;   // millis() des letzten Befehls an den WEM (Mindestabstand)
   int ziel = 0;                  // laufender Aufruf: 0 keiner, 1 Heizkreis, 2 Warmwasser, 3 Schreibbefehl
   std::string vg;                // VG des laufenden Aufrufs
   bool senden = false;           // in diesem Durchlauf an den WEM senden
   bool pruefen = false;          // Kontroll-Leseanfrage am Bus ist raus
   Protokoll protokoll;
-  uint32_t letzter_gesehen = 0;  // Anzeige: wann die Sperrminute endet
+  uint32_t letzter_gesehen = 0;  // Anzeige: wann der Mindestabstand endet
   std::string frei_ab;
   // Schreiben per CAN (ab v35): Ergebnis des laufenden Schreibbefehls fuer die Skripte
   bool can_fertig = false;
@@ -471,7 +474,7 @@ inline std::string warteschlange_text(const bf::Schaltung &s, bool gesperrt, con
          bf::wert_text(z, s.wunsch[z].wert) + " (" + s.wunsch[z].quelle + ")";
   }
   if (w.empty()) w = "leer";
-  else if (gesperrt) w += frei_ab.empty() ? " - wartet auf die Sperrminute" : " - naechster Befehl ab " + frei_ab;
+  else if (gesperrt) w += frei_ab.empty() ? " - wartet auf den Mindestabstand" : " - naechster Befehl ab " + frei_ab;
   return w;
 }
 
@@ -649,7 +652,8 @@ template<size_t N> inline bool speicher_schreiben(std::array<char, N> &m, const 
 
 // ---------------------------------------------------------------- Schreiben per CAN (ab v35)
 
-// SDO-Download an den WEM. Ab Werk AUS (Schalter in der Weboberflaeche). Erlaubt nur Knoten 1 (WEM)
+// SDO-Download an den WEM: fuer das Schalten per CAN (seit v42 ab Werk AN) und das freie
+// CAN-Schreiben (ab Werk AUS), beides Schalter auf dem Board. Erlaubt nur Knoten 1 (WEM)
 // und nur den Herstellerbereich 0x2000-0x5FFF: nie die Kommunikationsobjekte 0x1000-0x1FFF
 // (Heartbeat, COB-IDs ...), nie den Kessel (dort schreibt der WEM selbst alle ~5 s und teilt sich
 // den SDO-Kanal mit dem Board). Bis 4 Byte in einem Frame, laengere Daten (bis 64 Byte) in

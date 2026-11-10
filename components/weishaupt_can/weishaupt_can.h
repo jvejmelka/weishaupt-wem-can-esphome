@@ -28,6 +28,7 @@
 #include "dateisystem.h"
 #include "wem_netz.h"
 #include "json_lesen.h"
+#include "fehlercodes.h"
 #include <functional>
 #ifdef USE_WC_APP
 #include "app_server.h"

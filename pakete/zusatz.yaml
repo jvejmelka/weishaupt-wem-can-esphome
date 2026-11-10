@@ -1,8 +1,8 @@
 # Paket ZUSATZ: Zusatzanzeigen fuer die Handy-App (z.B. Raumtemperaturen, Waermepumpe laeuft).
-# Braucht das Paket mqtt. Das Board liest diese Werte NICHT selbst und erzeugt keinen
-# zusaetzlichen Broker-Verkehr - es verwaltet nur die Liste (bis 6 Eintraege), speichert sie
-# dauerhaft und veroeffentlicht sie retained unter ${geraet}/app/zusatz. Die App abonniert die
-# dort genannten Topics selbst (das App-Konto braucht dafuer Leserecht auf jedes Topic).
+# Braucht das Paket mqtt. Dieses Paket verwaltet nur die Liste (bis 6 Eintraege), speichert sie
+# dauerhaft und veroeffentlicht sie retained unter ${geraet}/app/zusatz. Die Docker-App abonniert die
+# dort genannten Topics selbst (das App-Konto braucht dafuer Leserecht auf jedes Topic). Mit dem
+# Paket app abonniert sie das Board fuer die App auf dem Board (dann braucht sein Konto das Leserecht).
 #
 # Einstellen:
 #   MQTT  ${geraet}/cmd/zusatz  JSON (retained moeglich, siehe zusatz.json.example):
@@ -157,4 +157,4 @@ text_sensor:
     name: "Zusatz Hilfe"
     update_interval: 86400s
     web_server: { sorting_group_id: g_zusatz, sorting_weight: 5 }
-    lambda: 'return {"Befehl: NAME topic=... [feld=...] [einheit=...] [art=wert|laeuft] [schwelle=...]  -  NAME loeschen  -  alle loeschen. Oder JSON an cmd/zusatz. Das Board liest die Werte nicht selbst, die Handy-App abonniert die Topics."};'
+    lambda: 'return {"Befehl: NAME topic=... [feld=...] [einheit=...] [art=wert|laeuft] [schwelle=...]  -  NAME loeschen  -  alle loeschen. Oder JSON an cmd/zusatz. Die Docker-App abonniert die Topics selbst; mit dem Paket app abonniert sie das Board."};'

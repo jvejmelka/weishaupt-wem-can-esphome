@@ -1,6 +1,7 @@
 // Paket ZUSATZ (zusatz.yaml): Liste der Zusatzanzeigen fuer die Handy-App.
-// Das Board liest die Werte NICHT selbst - es verwaltet nur die Liste (Name, Topic, Feld ...)
-// und veroeffentlicht sie retained unter <geraet>/app/zusatz. Die App abonniert die Topics.
+// Hier wird nur die Liste verwaltet (Name, Topic, Feld ...) und retained unter <geraet>/app/zusatz
+// veroeffentlicht. Die Docker-App abonniert die Topics selbst; mit dem Paket app abonniert sie das
+// Board (AppServer::zusatz_abonnieren_).
 #pragma once
 // Auf dem Board kommt ArduinoJson ueber ESPHome, in den Tests (tests/) direkt.
 #if __has_include("esphome/components/json/json_util.h")

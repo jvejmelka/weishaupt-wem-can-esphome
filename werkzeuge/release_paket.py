@@ -42,6 +42,9 @@ def main() -> None:
     for art in ("factory", "ota"):
         shutil.copy(build / f"firmware.{art}.bin", ziel / f"weishaupt-wem-can.{art}.bin")
     summen = []
+    # Lizenzangaben gehoeren zu den Binaerdateien (die Firmware enthaelt ESPHome: GPL-3.0, LIZENZEN-DRITTER.md)
+    shutil.copy(WURZEL / "LICENSE", ziel / "LICENSE.txt")
+    shutil.copy(WURZEL / "LIZENZEN-DRITTER.md", ziel / "LIZENZEN-DRITTER.md")
     for f in sorted(ziel.glob("*.bin")):
         summen.append(f"{hashlib.sha256(f.read_bytes()).hexdigest()}  {f.name}")
     (ziel / "SHA256SUMS").write_text("\n".join(summen) + "\n", encoding="utf-8")

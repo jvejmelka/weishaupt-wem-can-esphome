@@ -212,7 +212,7 @@ function eigeneAufraeumen(data) {
 // Nach dem Abschluss 1 min stehen lassen (Zeit des Boards, sonst erste Sichtung), ohne Befehl keine Zeile.
 // Heizkreis und Warmwasser haben je eine eigene Zeile - ein zweiter Befehl verdraengt den ersten nicht.
 const STEHEN_MS = 60000;
-// Notbremse: das Board schliesst einen gesendeten Befehl nach spaetestens ~70 s ab (Sperrminute + 10 s);
+// Notbremse: das Board schliesst einen gesendeten Befehl nach spaetestens ~70 s ab (Mindestabstand von hoechstens 1 min + 10 s);
 // ohne Abschluss 2 min nach der letzten Phase ist er verwaist. Vorgemerkte erst, wenn ihre Wartezeit vorbei ist.
 const VERWAIST_MS = 120000;
 const SCHRITTE = ['vorgemerkt', 'an WEM gesendet', 'Bus liest nach', 'bestätigt'];
@@ -305,7 +305,11 @@ function hkZustandText(hk, bits) {
 let letzteDaten = null;
 function refreshKnoepfe() { if (letzteDaten) zeigeWuensche(letzteDaten); passeAnWennNoetig(); }
 
-// Zusatzanzeigen (Liste vom Board): "Wohnzimmer 21,3 °C · WP ◉ läuft"; Werte aelter 10 min = "--"
+// Zusatzanzeigen (Liste vom Board): "Wohnzimmer 21,3 °C · WP ◉ läuft". Werte aelter als 2 h liefert
+// der Server als "--" (Docker-App und Board gleich). Was aelter als 10 min ist, steht gedimmt mit
+// seinem Alter da und pulsiert nicht - so sieht ein alter Wert nie wie ein frischer aus.
+const ZUSATZ_BETAGT_S = 600;
+function alterText(s) { return s < 120 ? s + ' s' : Math.round(s / 60) + ' min'; }
 function zeigeZusatz(liste) {
   const block = document.getElementById('zusatzBlock');
   const box = document.getElementById('zusatzListe');
@@ -316,16 +320,23 @@ function zeigeZusatz(liste) {
     item.className = 'zusatz-item';
     const wert = document.createElement('span');
     wert.className = 'zwert';
+    const betagt = e.wert != null && e.alter_s != null && e.alter_s > ZUSATZ_BETAGT_S;
     if (e.art === 'laeuft') {
       wert.textContent = e.laeuft === true ? 'läuft' : e.laeuft === false ? 'aus' : '--';
-      item.classList.toggle('an', e.laeuft === true);
+      item.classList.toggle('an', e.laeuft === true && !betagt);
     } else {
       const nk = Math.abs(e.wert) >= 100 ? 0 : 1;
       wert.textContent = e.wert == null ? '--' :
         e.wert.toLocaleString('de-DE', { minimumFractionDigits: nk, maximumFractionDigits: nk }) + (e.einheit ? ' ' + e.einheit : '');
     }
-    if (e.wert == null) item.classList.add('alt');
-    const alter = e.alter_s == null ? 'noch kein Wert' : `vor ${e.alter_s < 120 ? e.alter_s + ' s' : Math.round(e.alter_s / 60) + ' min'}`;
+    if (e.wert == null || betagt) item.classList.add('alt');
+    if (betagt) {
+      const a = document.createElement('span');
+      a.className = 'zalter';
+      a.textContent = ` (${alterText(e.alter_s)})`;
+      wert.append(a);
+    }
+    const alter = e.alter_s == null ? 'noch kein Wert' : `vor ${alterText(e.alter_s)}`;
     item.title = `${e.name}: ${e.wert == null ? '--' : e.wert + (e.einheit ? ' ' + e.einheit : '')} (${alter})`;
     item.append(document.createTextNode(e.name), wert);
     return item;

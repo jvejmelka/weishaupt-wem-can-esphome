@@ -4,6 +4,8 @@
   - components/weishaupt_can/register_gen.h   C++-Konstanten fuer die YAML-Lambdas und das Bauteil
   - die Tabellen in PROTOKOLL.md und README.md zwischen
         <!-- REGISTER:BEGIN name -->  und  <!-- REGISTER:END name -->
+  - aus register-uebernommen.yaml (Objekte aus anderen Projekten, ungeprueft) den Block
+    "uebernommen" in PROTOKOLL.md und PROTOKOLL.en.md
 
 Aufruf (aus dem Wurzelverzeichnis oder von ueberall):
   python3 werkzeuge/register_erzeugen.py            # schreibt die Dateien
@@ -23,6 +25,11 @@ WURZEL = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)
 TABELLE = os.path.join(WURZEL, "register.yaml")
 HEADER = os.path.join(WURZEL, "components", "weishaupt_can", "register_gen.h")
 DOKU = ["PROTOKOLL.md", "README.md"]
+# Objekte aus anderen Projekten, ungeprueft: eigene Datei, keine C++-Konstanten, eigener Block.
+# In den englischen Dateien wird nur dieser Block erzeugt, die uebrigen Tabellen dort sind von Hand uebersetzt.
+UEBERNOMMEN = os.path.join(WURZEL, "register-uebernommen.yaml")
+DOKU_EN = ["PROTOKOLL.en.md"]
+KRAIZ_PAKET = os.path.join(WURZEL, "pakete", "kraiz-per-can.yaml")
 
 WEGE = {"pdo", "wem_antwort", "eigene_anfrage", "wem_schreibt", "telegramm_6c2", "wem_liest"}
 STATUS = {"belegt": "**belegt**", "plausibel": "plausibel", "unbestaetigt": "**unbestätigt**",
@@ -83,6 +90,64 @@ def laden():
     return objekte
 
 
+U_FELDER = {"index", "sub", "name", "name_en", "faktor", "einheit", "einheit_en", "werte", "werte_en",
+            "json", "modbus", "quelle", "hinweis", "hinweis_en"}
+
+
+def uebernommen_laden(objekte):
+    """register-uebernommen.yaml lesen und pruefen; nichts davon darf schon in register.yaml stehen."""
+    with open(UEBERNOMMEN, encoding="utf-8") as f:
+        daten = yaml.safe_load(f)
+    quellen = daten.get("quellen") or {}
+    for k, q in quellen.items():
+        if set(q) != {"kurz", "name", "url", "was", "was_en"} or not q["url"].startswith("https://"):
+            raise Fehler(f"register-uebernommen.yaml: quelle {k} braucht kurz, name, url (https), was, was_en")
+    bekannt = {(o["knoten"], o["index"], o.get("sub", 0)) for o in objekte if "knoten" in o and "index" in o}
+    gesehen = set()
+    for g in daten.get("gruppen") or []:
+        if set(g) != {"titel", "titel_en", "knoten", "objekte"} or g["knoten"] not in (1, 2):
+            raise Fehler(f"register-uebernommen.yaml: gruppe {g.get('titel')!r} braucht titel, titel_en, knoten (1/2), objekte")
+        for o in g["objekte"]:
+            wo = f"register-uebernommen.yaml: Knoten {g['knoten']} 0x{o.get('index', 0):04X}/{o.get('sub')}"
+            unbekannt = set(o) - U_FELDER
+            if unbekannt:
+                raise Fehler(f"{wo}: unbekannte Felder {sorted(unbekannt)}")
+            for feld in ("index", "sub", "name", "name_en", "quelle"):
+                if feld not in o:
+                    raise Fehler(f"{wo}: {feld} fehlt")
+            if not (0 <= o["index"] <= 0xFFFF and 0 <= o["sub"] <= 0xFF):
+                raise Fehler(f"{wo}: index/sub ausserhalb des Bereichs")
+            if ("faktor" in o) == ("werte" in o):
+                raise Fehler(f"{wo}: genau eines von faktor und werte angeben")
+            if "werte" in o and "werte_en" not in o:
+                raise Fehler(f"{wo}: werte_en fehlt")
+            if ("hinweis" in o) != ("hinweis_en" in o):
+                raise Fehler(f"{wo}: hinweis und hinweis_en gehoeren zusammen")
+            if not o["quelle"] or any(q not in quellen for q in o["quelle"]):
+                raise Fehler(f"{wo}: unbekannte quelle {o['quelle']!r}")
+            if "json" in o and not re.fullmatch(r"[0-9A-F]{2} [0-9A-F]{2} [0-9A-F]{4} [0-9A-F]{2}", o["json"]):
+                raise Fehler(f"{wo}: json muss 'MI MX OX OS' in Hex sein")
+            schluessel = (g["knoten"], o["index"], o["sub"])
+            if schluessel in gesehen:
+                raise Fehler(f"{wo}: doppelt")
+            if schluessel in bekannt:
+                raise Fehler(f"{wo}: steht schon in register.yaml - hier loeschen")
+            gesehen.add(schluessel)
+    for b in daten.get("ohne_bezeichnung") or []:
+        if set(b) != {"stelle", "stelle_en", "quelle", "objekte"} or b["quelle"] not in quellen:
+            raise Fehler("register-uebernommen.yaml: ohne_bezeichnung braucht stelle, stelle_en, quelle, objekte")
+        for e in b["objekte"]:
+            if not (isinstance(e, list) and len(e) == 2 and 0 <= e[0] <= 0xFFFF and 0 <= e[1] <= 0xFF):
+                raise Fehler(f"register-uebernommen.yaml: ohne_bezeichnung {b['stelle']}: Eintrag {e!r} ist nicht [Index, Sub]")
+    # was das Paket kraiz-per-can schon liest: (Knoten, Index, Sub)
+    daten["im_paket"] = set()
+    if os.path.exists(KRAIZ_PAKET):
+        text = open(KRAIZ_PAKET, encoding="utf-8").read()
+        for m in re.finditer(r"kc::anlegen\((\d+),\s*(0x[0-9A-Fa-f]+),\s*(\d+),", text):
+            daten["im_paket"].add((int(m.group(1)), int(m.group(2), 16), int(m.group(3))))
+    return daten
+
+
 def pakete_pruefen(objekte):
     """reg::-Namen in den Paketen muessen existieren, Leseanfragen zum richtigen Knoten gehen."""
     nach_id = {o["id"]: o for o in objekte}
@@ -141,7 +206,7 @@ def header(objekte):
         "",
         "constexpr uint16_t anfrage_id(const Sdo &o) { return 0x600 + o.knoten; }",
         "constexpr uint16_t antwort_id(const Sdo &o) { return 0x580 + o.knoten; }",
-        "// Lese-Anfrage (SDO-Upload, Kommandobyte 0x40) - das Einzige, was die Firmware auf den Bus schickt",
+        "// Lese-Anfrage (SDO-Upload, Kommandobyte 0x40)",
         "inline std::vector<uint8_t> lese(const Sdo &o) {",
         "  return {0x40, (uint8_t) (o.index & 0xFF), (uint8_t) (o.index >> 8), o.sub, 0, 0, 0, 0};",
         "}",
@@ -311,7 +376,49 @@ def t_uebersicht(objekte):
     return tabelle(["Stelle", "Name in der Firmware", "Weg", "Stand"], zeilen)
 
 
+def t_uebernommen(daten, en=False):
+    """Tabellen der uebernommenen, ungeprueften Objekte, je Gruppe eine; deutsch oder englisch."""
+    quellen = daten["quellen"]
+
+    def link(k):
+        return f"[{quellen[k]['kurz']}]({quellen[k]['url']})"
+
+    def skal(o):
+        if "werte" in o:
+            return o["werte_en"] if en else o["werte"]
+        z = zahl(o["faktor"])
+        einheit = o.get("einheit_en", o.get("einheit", "")) if en else o.get("einheit", "")
+        return f"{z.replace(',', '.') if en else z} {einheit}".strip()
+
+    teile = []
+    for g in daten["gruppen"]:
+        zeilen = []
+        for o in g["objekte"]:
+            hinweis = [o["hinweis_en" if en else "hinweis"]] if o.get("hinweis") else []
+            if (g["knoten"], o["index"], o["sub"]) in daten["im_paket"]:
+                hinweis.append("read by the package `kraiz-per-can`" if en else "liest das Paket `kraiz-per-can`")
+            zeilen.append([obj(o), o["name_en" if en else "name"], skal(o),
+                           f"`{o['json']}`" if o.get("json") else "–", str(o.get("modbus", "–")),
+                           ", ".join(link(k) for k in o["quelle"]), "; ".join(hinweis) or "–"])
+        kopf = (["Object", "Meaning", "Scaling", "JSON (MI MX OX OS)", "Modbus", "Source", "Note"] if en else
+                ["Objekt", "Bedeutung", "Skalierung", "JSON (MI MX OX OS)", "Modbus", "Quelle", "Hinweis"])
+        teile.append(f"**{g['titel_en' if en else 'titel']}**\n\n{tabelle(kopf, zeilen)}")
+    ohne = []
+    for b in daten.get("ohne_bezeichnung") or []:
+        liste = ", ".join(obj({"index": i, "sub": s}) for i, s in b["objekte"])
+        ohne.append(f"- {b['stelle_en' if en else 'stelle']} ({link(b['quelle'])}): {liste}")
+    if ohne:
+        titel = "**Listed in the source without a meaning**" if en else "**In der Quelle ohne Bezeichnung**"
+        teile.append(titel + "\n\n" + "\n".join(ohne))
+    legende = [f"- [{q['name']}]({q['url']}) – {q['was_en' if en else 'was']}" for q in quellen.values()]
+    teile.append(("**Sources**" if en else "**Quellen**") + "\n\n" + "\n".join(legende))
+    return "\n\n".join(teile)
+
+
+FREMD = {}
+
 BLOECKE = {
+    "uebernommen": lambda objekte: t_uebernommen(FREMD),
     "mithoeren": t_mithoeren,
     "wem-antwort": t_wem_antwort,
     "eigene-anfragen": t_eigene,
@@ -328,10 +435,25 @@ def doku_ersetzen(text, objekte, datei):
         name = m.group(1)
         if name not in BLOECKE:
             raise Fehler(f"{datei}: unbekannter Block REGISTER:{name}")
-        return f"<!-- REGISTER:BEGIN {name} -->\n{HINWEIS}\n\n{BLOECKE[name](objekte)}\n\n<!-- REGISTER:END {name} -->"
+        hinweis = HINWEIS_U if name == "uebernommen" else HINWEIS
+        return f"<!-- REGISTER:BEGIN {name} -->\n{hinweis}\n\n{BLOECKE[name](objekte)}\n\n<!-- REGISTER:END {name} -->"
     neu, n = re.subn(r"<!-- REGISTER:BEGIN ([\w-]+) -->.*?<!-- REGISTER:END \1 -->", ersatz, text, flags=re.S)
     if text.count("REGISTER:BEGIN") != n:
         raise Fehler(f"{datei}: BEGIN/END-Marken passen nicht zusammen")
+    return neu
+
+
+HINWEIS_U = ("<!-- erzeugt aus register-uebernommen.yaml von werkzeuge/register_erzeugen.py - "
+             "nicht von Hand aendern -->")
+
+
+def doku_ersetzen_en(text, datei):
+    """In den englischen Dateien nur den Block 'uebernommen' erzeugen, alles andere bleibt."""
+    marke = r"<!-- REGISTER:BEGIN uebernommen -->.*?<!-- REGISTER:END uebernommen -->"
+    neu, n = re.subn(marke, lambda m: f"<!-- REGISTER:BEGIN uebernommen -->\n{HINWEIS_U}\n\n"
+                     f"{t_uebernommen(FREMD, en=True)}\n\n<!-- REGISTER:END uebernommen -->", text, flags=re.S)
+    if n != 1:
+        raise Fehler(f"{datei}: Block REGISTER:uebernommen fehlt oder ist doppelt")
     return neu
 
 
@@ -342,10 +464,14 @@ def main():
     try:
         objekte = laden()
         pakete_pruefen(objekte)
+        FREMD.update(uebernommen_laden(objekte))
         soll = {HEADER: header(objekte)}
         for d in DOKU:
             p = os.path.join(WURZEL, d)
             soll[p] = doku_ersetzen(open(p, encoding="utf-8").read(), objekte, d)
+        for d in DOKU_EN:
+            p = os.path.join(WURZEL, d)
+            soll[p] = doku_ersetzen_en(open(p, encoding="utf-8").read(), d)
     except Fehler as e:
         print(f"FEHLER: {e}", file=sys.stderr)
         return 2

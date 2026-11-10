@@ -4,8 +4,9 @@ Schritt für Schritt vom Board in der Verpackung bis zu Werten in Home Assistant
 Rechne mit einer Stunde, die meiste Zeit geht aufs erste Kompilieren.
 
 > **Vorher lesen:** die [Sicherheitsregeln im README](README.md#sicherheitsregeln--bitte-lesen).
-> Die Firmware schreibt nie auf den Kessel und fragt den WEM nie von selbst ab – daran bitte
-> auch beim Anpassen nichts ändern.
+> Die Firmware schreibt nie auf den Kessel und ruft die JSON-Schnittstelle des WEM nie von selbst auf –
+> daran bitte auch beim Anpassen nichts ändern. Auf welchen Wegen sie mit der Heizung spricht und was ab
+> Werk an ist: [PROTOKOLL.md – Wege zur Heizung](PROTOKOLL.md#wege-zur-heizung).
 
 ## Kurzweg ohne ESPHome: fertiges Release-Image (ab v42)
 
@@ -46,14 +47,16 @@ So hat es mit einem Board frisch aus der Packung in wenigen Minuten geklappt:
    danach „Visit Device“. Den Hotspot `Weishaupt-WEM-CAN` braucht man dann nicht.
 6. In der App Benutzer, App- und Admin-Passwort festlegen, Assistent durchklicken, Experten-Passwort setzen.
 
-**Zweites Board in derselben Anlage** (z. B. zum Testen oder für ein Raumgerät): Der Assistent findet den WEM
-per Netzsuche – die gefundene Adresse **nicht übernehmen**. Es soll nur **ein** Board je Anlage den WEM über
+**Zweites Board in derselben Anlage** (z. B. zum Testen oder für ein Raumgerät): Der Assistent liest die Adresse des WEM
+bei lebendem Bus per CAN aus (ohne Bus sucht er im Netz) – die gefundene Adresse **nicht übernehmen**. Es soll nur **ein** Board je Anlage den WEM über
 JSON ansprechen; der WEM verträgt keine zusätzlichen Abfragen und kann sich sonst bis zum Stromlos-Machen
 aufhängen. „Schalten über“ auf **CAN** lassen.
 
 Schalter auf dem WeAct-Board (rechts, links = OFF, rechts = ON): oben **120 Ω CAN** (ab Werk ON – am Heizungsbus
 mitten in der Leitung auf **OFF**, nur am Ende eines eigenen kurzen Busses ON), Mitte PUPD und unten 120 Ω RS485
-(werden nicht gebraucht). Versorgung wahlweise USB-C oder Klemme **VIN/GND 5–36 V**.
+(werden nicht gebraucht). Versorgung wahlweise USB-C oder Klemme **VIN/GND 5–36 V** – aber **nicht aus den
+Klemmen „− +“ des Heizungsbusses**: das überbrückt die galvanische Trennung, Begründung unter
+[Hardware](README.md#hardware).
 
 ## 1. Was du brauchst
 
@@ -69,13 +72,14 @@ mitten in der Leitung auf **OFF**, nur am Ende eines eigenen kurzen Busses ON), 
 
 ## 2. Heizung vorbereiten
 
-1. **JSON-Schnittstelle am WEM einschalten** – nur nötig, wenn du über das Board schalten willst
-   (Pakete `wem-schalten`, `warmwasser-schalten`). Parameter **10.8.1** in der Fachmann-Ebene auf
-   *Ein*. Die IP-Adresse des WEM im Router nachsehen und möglichst fest reservieren.
+1. **JSON-Schnittstelle am WEM** – fürs Schalten per CAN (seit v42 ab Werk) nicht nötig. Gebraucht wird sie
+   nur für die Wege übers Netz: den Rückweg „Schalten über JSON“, das Schreibfeld für Experten und
+   „Werte per JSON abrufen“. Dafür Parameter **10.8.1** in der Fachmann-Ebene auf *Ein*; die IP-Adresse des
+   WEM im Router nachsehen und möglichst fest reservieren.
 2. **Wenn möglich das WEM-Portal nicht gleichzeitig mit anderen lokalen JSON-Clients betreiben.**
    Mehrere Clients gleichzeitig können die Schnittstelle sperren (siehe
    [kraiz/hassio-weishaupt #9](https://github.com/kraiz/hassio-weishaupt/issues/9)). Das Board
-   selbst fragt nur, wenn geschaltet wird.
+   selbst ruft die JSON-Schnittstelle nie von sich aus auf – nur auf Bedienung (Rückweg, Schreibfeld, Abruf von Hand).
 
 ## 3. ESPHome einrichten
 
@@ -108,10 +112,12 @@ In `secrets.yaml` eintragen:
 | `wifi_ssid`, `wifi_password` | dein WLAN |
 | `ap_password` | Notfall-Hotspot, falls das WLAN weg ist (mind. 8 Zeichen) |
 | `ota_password` | für spätere Updates übers Netz |
-| `web_password` | Weboberfläche, Benutzer `admin` |
+| `web_password` | Vorgabe für das **Admin-Passwort** der Einstellungsseite (Paket `app`); ohne Paket `app` das Passwort der ESPHome-Weboberfläche, Benutzer `admin` |
+| `app_benutzer`, `app_passwort` | Vorgaben für die Anmeldung in der Handy-App auf dem Board (Paket `app`); beide leer (`""`) = das Board verlangt beim ersten Aufruf eine Ersteinrichtung |
+| `app_proxy` | IP des Reverse Proxys, falls die App von außen über ihn erreichbar sein soll – sonst leer |
 | `mqtt_broker`, `mqtt_user`, `mqtt_password` | nur mit Paket `mqtt` |
 | `api_key` | nur mit Paket `homeassistant-api`, erzeugen mit `openssl rand -base64 32` |
-| `wem_ip` | IP des WEM, nur mit `wem-schalten`; später in der Weboberfläche änderbar |
+| `wem_ip` | IP des WEM, nur mit `wem-schalten`; später auf dem Board änderbar (Assistent, Einstellungsseite) |
 | `wem_user`, `wem_pass` | Werkszugang des WEM, **so lassen** |
 
 `secrets.yaml` gehört nie in ein Repository (steht in `.gitignore`).
@@ -144,6 +150,7 @@ packages:
     ref: main
     files:
       - pakete/kessel.yaml
+      - pakete/netz-wlan.yaml        # WLAN-Anzeigen und WLAN-Wechsel (bis v42 Teil von kessel)
       - pakete/warmwasser.yaml
       - pakete/mqtt.yaml
       # weitere Pakete nach Bedarf, siehe Abschnitt 5
@@ -172,10 +179,16 @@ In `weishaupt-wem-can.yaml` unter `packages:` nicht benötigte Zeilen mit `#` au
 
 | Du willst … | Pakete |
 |---|---|
-| nur Werte ansehen (Weboberfläche) | `kessel`, ggf. `warmwasser` |
+| nur Werte ansehen (ESPHome-Weboberfläche) | `kessel`, ggf. `warmwasser` |
 | Werte in Home Assistant / Grafana | zusätzlich `mqtt` **oder** `api` |
 | auch schalten | zusätzlich `schalten`, ggf. `warmwasser_schalten` |
-| die Handy-App | `mqtt`, `schalten` (und `warmwasser`, `warmwasser_schalten`) |
+| die Handy-App auf dem Board (samt Einstellungsseite und Assistent) | zusätzlich `app` (braucht `schalten`, `warmwasser_schalten`) |
+| die Handy-App als Docker-Container | `mqtt`, `schalten` (und `warmwasser`, `warmwasser_schalten`) |
+| Betriebsarten nachlesen, wenn am Display oder im Portal umgeschaltet wurde | `verdacht` (braucht `warmwasser`) |
+| Zusatzanzeigen in der App (Raumtemperaturen, „Wärmepumpe läuft“) | `zusatz` (braucht `mqtt`) |
+| Werte bei stillem Bus von Hand per JSON holen | `json_lesen` (braucht `schalten`, `warmwasser`) |
+
+In der Vorlage ist alles eingeschaltet außer `api`, `feste_ip` und `kraiz`.
 
 `warmwasser` nur, wenn ein Warmwasserspeicher am Gerät hängt.
 `warmwasser_schalten` braucht `schalten` und `warmwasser`.
@@ -184,8 +197,10 @@ Optional anpassen unter `substitutions:`:
 
 - `geraet` – Gerätename und MQTT-Präfix (Vorgabe `weact-can485-weishaupt`)
 - `anzeigename` – Name in Home Assistant
-- `can_anfragen_start` – **beim ersten Mal auf `RESTORE_DEFAULT_OFF` lassen**: das Board hört
-  dann nur mit und sendet selbst nichts auf den Bus.
+- `can_anfragen_start` – **beim ersten Mal auf `RESTORE_DEFAULT_OFF` lassen**: das Board fragt
+  dann nichts im Takt ab. Ganz still ist es damit nicht: die Betriebsarten liest es nach dem Start und bei
+  Anlass mit einzelnen Leseanfragen, und geschaltet wird ab Werk per CAN am WEM
+  ([alle Wege](PROTOKOLL.md#wege-zur-heizung)).
 
 Prüfen, ohne etwas zu bauen:
 
@@ -226,7 +241,12 @@ Nach dem Start verbindet sich das Board mit dem WLAN.
 
 1. IP im Router nachsehen (Gerätename wie `geraet`) und dort **fest reservieren**.
    Geht das nicht, Paket `feste-ip` einschalten und die `feste_ip_*`-Werte eintragen.
-2. Weboberfläche öffnen: `http://<IP>`, Benutzer `admin`, Passwort `web_password`.
+2. `http://<IP>/` öffnen – mit dem Paket `app` ist das die Handy-App. Mit Vorgaben in `secrets.yaml` meldest du
+   dich mit `app_benutzer`/`app_passwort` an; ohne Vorgaben legst du zuerst Benutzer, App- und Admin-Passwort fest,
+   danach öffnet sich der Einrichtungs-Assistent. Die **Experten-Oberfläche** (ESPHome: alle Werte, Schalter, Log)
+   liegt unter `http://<IP>/experten`, Benutzer `admin` – gesperrt, bis auf der Einstellungsseite (⚙, Block
+   *Expertenstufe*) ein Experten-Passwort gesetzt ist. Ohne Paket `app` liegt die ESPHome-Weboberfläche direkt
+   unter `http://<IP>/`, Benutzer `admin`, Passwort `web_password`.
 3. Ab jetzt braucht das Board kein USB mehr – ans Netzteil (**ab 1 A**, sonst Neustarts bei
    WLAN-Sendespitzen), Updates gehen per OTA.
 
@@ -235,16 +255,17 @@ Findet es kein WLAN, macht das Board nach etwa einer Minute den Hotspot **Weisha
 
 **Bekannte Fallen:**
 
-- **Lebenszeichen am Broker oder in der Weboberfläche prüfen, nicht an der Konsole.** Mit
+- **Lebenszeichen am Broker oder im Browser prüfen, nicht an der Konsole.** Mit
   abgeschaltetem UART-Log (`logger: baud_rate: 0`, in manchen Vorlagen) bleibt die serielle
   Konsole still, obwohl das Board läuft.
 - **Die LED ist die Datenverkehrs-LED des USB-Wandlers**, kein Betriebsanzeiger – am Netzteil
   bleibt sie dunkel.
-- Die Weboberfläche bringt ihre Skripte mit (`web_server: local: true`) und funktioniert ohne
-  Internet.
-- **Web-API:** Entitäten werden über ihren **Namen** angesprochen (URL-kodiert), mit Basic Auth;
+- Die Experten-Oberfläche bringt ihre Skripte mit (`web_server: local: true`), die App ist in die Firmware
+  eingebettet – beides funktioniert ohne Internet.
+- **Web-API:** Entitäten werden über ihren **Namen** angesprochen (URL-kodiert), mit Digest-Anmeldung
+  (Benutzer `admin`, Experten-Passwort);
   POST braucht einen (leeren) Körper, sonst HTTP 411:
-  `curl -u admin:<pw> -X POST -d '' "http://<IP>/switch/CAN-Rohmitschnitt%20nach%20MQTT/turn_on"`
+  `curl --digest -u admin:<Experten-Passwort> -X POST -d '' "http://<IP>/switch/CAN-Rohmitschnitt%20nach%20MQTT/turn_on"`
 
 ## 8. An den Bus anschließen
 
@@ -261,7 +282,8 @@ sonst Fachbetrieb.
 - Den **120-Ω-Abschluss auf dem Board ausgeschaltet lassen** – das Board hängt mitten am Bus.
 - H/L vertauscht schadet nichts, es kommen dann nur keine Daten.
 
-Heizung wieder einschalten. In der Weboberfläche:
+Heizung wieder einschalten. In der Experten-Oberfläche (`/experten`; die Einstellungsseite zeigt dasselbe
+knapp als „CAN-Bus: lebt (letzte Nachricht vor … s)“):
 
 - **„Letzter CAN-Frame vor“** muss bei wenigen Sekunden stehen.
 - **Außentemperatur** und **Warmwasser** erscheinen innerhalb einer Minute (der Kessel sendet sie
@@ -271,7 +293,7 @@ Kommt nichts: H und L tauschen, Adern prüfen, notfalls **−** zusätzlich aufl
 
 ## 9. Eigene Leseanfragen einschalten (optional)
 
-Erst wenn das Mithören ein paar Tage stabil läuft: in der Weboberfläche unter *Einstellungen* den
+Erst wenn das Mithören ein paar Tage stabil läuft: auf der Einstellungsseite (⚙) oder in der Experten-Oberfläche unter *Einstellungen* den
 Schalter **„Eigene CAN-Anfragen“** einschalten (den aktuellen Zustand samt Anlaufpause zeigt die
 gleichnamige Zeile unter *Diagnose*). Das Board fragt dann Kesselwerte wie Druck, Leistung oder
 Volumenstrom im Weishaupt-Takt (40 s / 60 s / 5 min) selbst ab – nur lesend, siehe
@@ -322,7 +344,8 @@ mosquitto_pub -t weact-can485-weishaupt/cmd/warmwasser -m "Ein"
 mosquitto_pub -t weact-can485-weishaupt/cmd/status     -m 1      # Betriebsarten einmal vom Bus lesen
 ```
 
-Zwischen zwei Befehlen liegt mindestens eine Minute; spätere landen in der Warteschlange.
+Zwischen zwei Befehlen liegt ein Mindestabstand (per CAN ab Werk <!--ab-werk:abstand_can-->10<!--/ab-werk--> s, über JSON <!--ab-werk:abstand_json-->60<!--/ab-werk--> s);
+spätere landen in der Warteschlange.
 
 Regeln per MQTT: `cmd/regel` (z. B. `R4 an`) und `cmd/regeln` (JSON-Datei), Ereignisse unter
 `verdacht/ereignis` – siehe [REGELN.md](REGELN.md#7-per-mqtt-schalten). Diese Rechte nur einem
@@ -330,7 +353,9 @@ Verwaltungskonto geben, nicht dem App-Konto.
 
 ## 11. Handy-App (optional)
 
-Auf einem Rechner mit Docker, der den Broker erreicht:
+Die App gibt es zweimal. **Auf dem Board** (Paket `app`, in der Vorlage eingeschaltet) ist nichts weiter zu tun:
+`http://<IP>/` öffnen, siehe [README](README.md#auf-dem-board-ab-v38-paket-appyaml). Oder **als Docker-Container**
+auf einem Rechner, der den Broker erreicht:
 
 ```
 cd app
@@ -372,7 +397,7 @@ esphome run weishaupt-wem-can.yaml --device <IP>   # per OTA
 ```
 
 `secrets.yaml` und `.env` bleiben dabei unberührt. Was sich geändert hat, steht im
-[CHANGELOG](CHANGELOG.md); die laufende Version zeigt die Weboberfläche unter *Firmware*.
+[CHANGELOG](CHANGELOG.md); die laufende Version zeigen die Einstellungsseite und die Experten-Oberfläche unter *Firmware*.
 
 ## 13. Tests (optional)
 
@@ -381,6 +406,7 @@ Wer an den Paketen etwas ändert, prüft vor dem Flashen:
 ```
 tests/run.sh                                   # Regellogik, Klassen des Bauteils, Schaltbefehle/Status-JSON, Datei-Parser, Registertabelle (g++, curl)
 python3 werkzeuge/register_erzeugen.py --pruefen  # erzeugte Dateien passen zu register.yaml (PyYAML)
+python3 werkzeuge/einstellungen_erzeugen.py --pruefen  # Angaben „ab Werk“ in der Doku passen zu den Paketen
 python3 tests/links.py                         # Links in den .md-Dateien
 esphome compile weishaupt-wem-can.yaml         # Firmware baut
 ```
@@ -409,6 +435,15 @@ PROTOKOLL.md und README.md erzeugt – beides nie von Hand ändern.
    Die CI lässt den Generator laufen und bricht ab, wenn danach etwas anders ist
    (`git diff --exit-code`); lokal geht dasselbe mit `python3 werkzeuge/register_erzeugen.py --pruefen`.
 
+**Einstellungen und ihre Werte ab Werk** stehen ebenfalls nur im Code: `restore_mode` (Schalter) und
+`initial_value` (Zahlen) in `pakete/*.yaml`, die Startwerte `…_start` in der Hauptdatei. Wer dort etwas
+ändert, lässt `python3 werkzeuge/einstellungen_erzeugen.py` laufen. Es schreibt die Tabelle in
+[FIRMWARE.md](FIRMWARE.md#einstellungen) neu und jede Angabe, die in der Doku zwischen
+`<!--ab-werk:ID-->` und `<!--/ab-werk-->` steht (ID = `id` des Schalters oder der Zahl). Neue Textstellen,
+die eine Vorgabe nennen, bekommen diese Marke – dann kann die Doku dem Code nicht mehr widersprechen.
+Der Generator bricht ab, wenn die Einstellungsseite (`EINSTELLUNGEN` in `app_server.cpp`) einen Namen
+oder einen Vorgabewert führt, den es im Paket so nicht gibt.
+
 Faustregel für den Stand: **belegt** nur mit unabhängiger Gegenprobe (Kesseldisplay,
 Wetterdienst, physikalisches Kriterium) – eine App, die dieselben Register liest, zählt nicht.
 
@@ -417,9 +452,9 @@ Wetterdienst, physikalisches Kriterium) – eine App, die dieselben Register lie
 | Beobachtung | Ursache / Abhilfe |
 |---|---|
 | „Letzter CAN-Frame vor“ steigt immer weiter | Heizung aus, Kabel ab, H/L vertauscht; der Bus-Wächter startet das Board nach der eingestellten Zeit neu |
-| Werte da, aber Rücklauf, Druck usw. bleiben leer | „Eigene CAN-Anfragen“ ist aus (Absicht beim Start) – s. Schritt 9 |
-| Schaltbefehl endet mit „abgelehnt (CM=05)“ oder „keine Rückmeldung“ | JSON-Schnittstelle am WEM aus (10.8.1), falsche `wem_ip`, oder der WEM ist gesperrt – dann hilft nur, die Heizung kurz stromlos zu machen. Danach seltener schalten |
+| Werte da, aber Abgas, Druck, Leistung, Volumenstrom bleiben leer | „Eigene CAN-Anfragen“ ist aus (Absicht beim Start) – s. Schritt 9 |
+| Schaltbefehl endet mit „abgelehnt“ oder „keine Rückmeldung“ | **Per CAN** (ab Werk; der Text beginnt mit „CAN:“): der WEM hat den Schreibbefehl abgebrochen oder nicht geantwortet – Bus prüfen („Letzter CAN-Frame vor“). **Über JSON** (Rückweg, „abgelehnt (CM=05)“): JSON-Schnittstelle am WEM aus (10.8.1), falsche `wem_ip`, oder der WEM ist gesperrt – dann hilft nur, die Heizung kurz stromlos zu machen. Danach seltener schalten |
 | Schaltbefehl kommt nicht an, `befehl/status` meldet `abgelehnt` | `text` nennt den Grund – meist ein unbekannter Wert oder ein unbekanntes JSON-Feld; siehe [TOPICS.md](TOPICS.md#schaltbefehle-mit-kennung) |
 | Handy-App zeigt keinen Fortschritt | Board-Firmware älter als v27 (kein `status/json`), oder das App-Konto darf `weact-can485-weishaupt/#` nicht lesen |
 | OTA findet das Board nicht | `esphome upload weishaupt-wem-can.yaml --device <IP>` |
-| Weboberfläche fragt nach Passwort | Benutzer `admin`, Passwort `web_password` aus `secrets.yaml` |
+| Experten-Oberfläche (`/experten`) fragt nach Passwort | Benutzer `admin`, Passwort = das **Experten-Passwort** von der Einstellungsseite (⚙, Block *Expertenstufe*); ohne gesetztes Experten-Passwort ist die Stufe gesperrt. Ohne Paket `app`: `web_password` aus `secrets.yaml` |

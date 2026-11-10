@@ -1,0 +1,32 @@
+# Paket DALLAS: 1-Wire-Bus fuer eigene Temperaturfuehler (DS18B20) und die Gruppe dafuer in der Weboberflaeche.
+# Von cg089 (Olimex ESP32-EVB, Fork cg089/weishaupt-wem-can-esphome, 31.10.2026), MIT.
+#
+# Alle Fuehler haengen parallel an einem Bus (GND, 3,3 V, Daten; externer Pull-up 4,7 kOhm gegen 3,3 V empfohlen).
+# Die Fuehler selbst stehen in der Haupt-YAML, weil jede Anlage eigene Adressen und Namen hat:
+#
+#   sensor:
+#     - platform: dallas_temp
+#       address: 0x1234567890abcd28        # ohne Adresse (index: 0 ...) schreibt ESPHome die Adressen beim Start ins Log
+#       name: "Fühler Vorlauf Heizkreis"   # "Fühler" vorn, damit sich die Namen nicht mit den Werten der Heizung mischen
+#       update_interval: 30s
+#       web_server: { sorting_group_id: g_dallas, sorting_weight: 1 }
+#
+# Beispiel mit fuenf Fuehlern: olimex-weishaupt.yaml.
+
+substitutions:
+  # Datenleitung: Olimex ESP32-EVB = GPIO16 (UEXT Pin 5). Am WeAct CAN485 einen freien Pin eintragen.
+  dallas_pin: GPIO16
+
+web_server:
+  sorting_groups:
+    - id: g_dallas
+      name: "Temperaturfühler (Dallas)"
+      sorting_weight: 36
+
+one_wire:
+  - platform: gpio
+    pin:
+      number: ${dallas_pin}
+      mode:
+        input: true
+        pullup: true

@@ -485,7 +485,7 @@ objekte:
     index: 0x2933
     sub: 2
     typ: uint8
-    werte: Code 1–8, s. [Abschnitt 5](#5-schreiben-über-den-wem-json)
+    werte: Code 1–8, s. [Abschnitt 5](#5-schreiben-am-wem-über-json-und-per-can)
     weg: [eigene_anfrage]
     takt: Anlass, höchstens alle 2 min
     klasse: m

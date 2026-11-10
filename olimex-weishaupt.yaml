@@ -1,0 +1,133 @@
+# Weishaupt WTC-GW (WEM-Systemgeraet) am CAN-Bus -> Home Assistant - Variante fuer das Olimex ESP32-EVB
+# Board: Olimex ESP32-EVB (ESP32-WROOM-32E, 4 MB Flash, CAN-Transceiver onboard, USB ueber CH340), per LAN
+# Variante und Ergaenzungen (kraiz-per-can, Warmwasser-Push, Fehlerblock, Dallas) von cg089 - OLIMEX-ESP32-EVB.md
+#
+#   CAN TX = GPIO5   CAN RX = GPIO35 (Olimex ESP32-EVB, siehe Schaltplan)   50 kbps
+#   Dallas-Temperaturfuehler an GPIO16 (UEXT Pin 5)
+#   Geschrieben wird NIE auf den Kessel, nur an den WEM (Knoten 1); "Eigene CAN-Anfragen" sind beim
+#   ersten Start aus (keine Abfragen im Takt).
+#
+# Wie weishaupt-wem-can.yaml waehlt diese Datei nur die Pakete aus und beschreibt das Board:
+#   pakete/kessel.yaml               Pflicht: Kesselwerte lesen, Diagnose (CAN-Pins ueber can_tx_pin/can_rx_pin)
+#   pakete/netz-lan.yaml             Netz-Anzeigen fuer Ethernet (statt netz-wlan)
+#   pakete/warmwasser.yaml           Warmwasserwerte
+#   pakete/wem-schalten.yaml         Heizkreis-Betriebsart schalten
+#   pakete/warmwasser-schalten.yaml  Warmwasser Ein/Aus
+#   pakete/kraiz-per-can.yaml        weitere Werte wie kraiz/hassio-weishaupt per CAN, Warmwasser-Push, Fehlerblock
+#   pakete/dallas.yaml               1-Wire-Bus fuer die DS18B20-Fuehler (Fuehler selbst: unten)
+# Nicht eingebunden: mqtt, app, verdacht, zusatz, json-lesen (app und die hochladbaren Fehlertexte brauchen
+# das Dateisystem LittleFS, fuer das die 4 MB Flash dieses Boards nicht reichen).
+#
+# Zugangsdaten: secrets-olimex.yaml.example nach secrets.yaml kopieren und ausfuellen.
+
+substitutions:
+  geraet: olimex-weishaupt
+  anzeigename: Weishaupt Heizung
+  firmware: "v42-dev vom 10.11.2026 (Olimex ESP32-EVB)"
+  # RESTORE_DEFAULT_OFF = keine Abfragen im Takt, RESTORE_DEFAULT_ON = eigene Leseanfragen im Weishaupt-Takt
+  can_anfragen_start: RESTORE_DEFAULT_OFF
+  # Sprache der Stoermeldungen und des Fehler-Klartexts: "false" = Deutsch, "true" = Englisch (fehlercodes.yaml)
+  meldungen_englisch: "false"
+  # CAN-Pins des Olimex ESP32-EVB (Original WeAct CAN485: GPIO27/GPIO26)
+  can_tx_pin: GPIO5
+  can_rx_pin: GPIO35
+  # Dallas-Fuehler an UEXT Pin 5
+  dallas_pin: GPIO16
+
+external_components:
+  - source:
+      type: local
+      path: components
+    components: [weishaupt_can]
+
+packages:
+  kessel: !include pakete/kessel.yaml
+  netz: !include pakete/netz-lan.yaml
+  warmwasser: !include pakete/warmwasser.yaml
+  schalten: !include pakete/wem-schalten.yaml
+  warmwasser_schalten: !include pakete/warmwasser-schalten.yaml
+  kraiz: !include pakete/kraiz-per-can.yaml
+  dallas: !include pakete/dallas.yaml
+
+esphome:
+  name: ${geraet}
+  friendly_name: ${anzeigename}
+
+esp32:
+  board: esp32-evb
+  framework:
+    type: esp-idf
+
+# LAN statt WLAN: LAN8720 des Olimex ESP32-EVB (Pins laut ESPHome-Doku fuer dieses Board)
+ethernet:
+  type: LAN8720
+  mdc_pin: GPIO23
+  mdio_pin: GPIO18
+  clk:
+    pin: GPIO0
+    mode: CLK_EXT_IN
+  phy_addr: 0
+  power_pin: GPIO12
+
+# SD-Karte (WeAct-Pins) und LittleFS (braucht 8 MB Flash) gibt es auf dem ESP32-EVB nicht
+weishaupt_can:
+  sd_karte: false
+  dateisystem: false
+
+logger:
+  level: DEBUG
+  logs:
+    canbus: ERROR
+
+# Home Assistant ueber die ESPHome-API (kein MQTT)
+api:
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+web_server:
+  port: 80
+  version: 3          # Pflicht: die Gruppen der Pakete (sorting_groups) brauchen Version 3
+  local: true         # JS/CSS eingebettet, Seite geht auch ohne Internet
+  auth:
+    type: digest
+    username: admin
+    password: !secret web_password
+
+time:
+  - platform: sntp
+    id: uhr
+    timezone: Europe/Berlin
+    servers: [0.pool.ntp.org, 1.pool.ntp.org]
+
+# Dallas-Temperaturfuehler (DS18B20), alle parallel am Bus des Pakets dallas (GPIO16, UEXT Pin 5).
+# DIE ADRESSEN SIND DIE DER FUEHLER VON cg089 - DURCH DIE EIGENEN ERSETZEN (oder den Abschnitt und das Paket
+# dallas entfernen). Ohne Adresse (index: 0 ...) schreibt ESPHome die Adressen beim Start ins Log; Zuordnung
+# durch Anwaermen. Namen mit "Fuehler" vorn, damit sie sich nicht mit den Werten der Heizung mischen.
+sensor:
+  - platform: dallas_temp
+    address: 0x2f0000000c9e8428
+    name: "Fühler Umgebung"
+    update_interval: 30s
+    web_server: { sorting_group_id: g_dallas, sorting_weight: 1 }
+  - platform: dallas_temp
+    address: 0xd10000000aacc328
+    name: "Fühler Warmwasser Speicher oben"
+    update_interval: 30s
+    web_server: { sorting_group_id: g_dallas, sorting_weight: 2 }
+  - platform: dallas_temp
+    address: 0xa40000000d018028
+    name: "Fühler Vorlauf Heizkreis"
+    update_interval: 30s
+    web_server: { sorting_group_id: g_dallas, sorting_weight: 3 }
+  - platform: dallas_temp
+    address: 0xf40000000a951a28
+    name: "Fühler Rücklauf Heizkreis 1"
+    update_interval: 30s
+    web_server: { sorting_group_id: g_dallas, sorting_weight: 4 }
+  - platform: dallas_temp
+    address: 0x400000000a81c428
+    name: "Fühler Rücklauf Heizkreis 2"
+    update_interval: 30s
+    web_server: { sorting_group_id: g_dallas, sorting_weight: 5 }

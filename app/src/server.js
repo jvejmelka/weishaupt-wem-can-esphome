@@ -3,7 +3,7 @@
 //   Lesen:     MQTT-Werte des Boards (<geraet>/sensor/+/state), die das Board am Kesselbus
 //              mithoert oder selbst abfragt.
 //   Schalten:  MQTT-Befehl an das Board (cmd/heizkreis, cmd/warmwasser) als JSON mit Kennung
-//              {"id":"app-...","wert":3,"quelle":"App"}. Das Board setzt ihn mit Sperrminute,
+//              {"id":"app-...","wert":3,"quelle":"App"}. Das Board setzt ihn mit Mindestabstand,
 //              Warteschlange und Kontrolle am Bus um und meldet jede Phase auf <geraet>/befehl/status.
 //   Zustand:   <geraet>/status/json (ab Firmware v27): Betriebsarten, Schaltbefehle, Bus - fester
 //              Aufbau, die App deutet keinen Freitext des Boards mehr.
@@ -81,7 +81,10 @@ function befehlMerken(txt) {
 
 // Zusatzanzeigen: Liste vom Board, Werte der fremden Topics
 const ZUSATZ_TOPIC = `${GERAET}/app/zusatz`;
-const ZUSATZ_MAX_ALTER_MS = 10 * 60 * 1000;
+// Aelter als das = "--". 2 h wie in der App auf dem Board (ZUSATZ_MAX_ALTER_MS in app_logik.h):
+// Batteriesensoren senden oft nur bei Aenderung. Was aelter als 10 min ist, zeigt die Oberflaeche
+// gedimmt mit seinem Alter (app.js, ZUSATZ_BETAGT_S).
+const ZUSATZ_MAX_ALTER_MS = Number(process.env.ZUSATZ_MAX_ALTER_MS || 2 * 60 * 60 * 1000);
 let zusatzListe = [];                 // [{name, topic, feld, einheit, art, schwelle}]
 const zusatzWerte = new Map();        // topic -> { v: string, t: ms }
 let zusatzAbos = new Set();          // abonnierte fremde Topics

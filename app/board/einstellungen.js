@@ -379,8 +379,9 @@ async function infoLaden() {
   let d;
   try { d = await api('/api/admin/info'); } catch { return; }
   $('obZustand').textContent = d.oberflaeche || '';
+  $('ftZustand').textContent = d.fehlertexte || '';
   const zeilen = [
-    ['Firmware', d.firmware], ['Oberfläche', `${d.oberflaeche || 'eingebaut'} (API ${d.api})`], ['Uhrzeit', d.uhr || '–'],
+    ['Firmware', d.firmware], ['Oberfläche', `${d.oberflaeche || 'eingebaut'} (API ${d.api})`], ['Störmeldungen', d.fehlertexte || 'eigene'], ['Uhrzeit', d.uhr || '–'],
     ['Laufzeit', dauer(d.laufzeit_s)], ['Letzter Neustart', d.neustart_grund],
     ['WLAN', d.wlan ? `${d.wlan} (${d.wlan_rssi} dBm)` : '–'], ['IP', d.ip || '–'],
     ['Speicher frei', `${Math.round(d.speicher_frei / 1024)} KB (min. ${Math.round(d.speicher_min / 1024)} KB, Block ${Math.round(d.groesster_block / 1024)} KB)`],
@@ -502,6 +503,36 @@ $('obZurueckBtn').addEventListener('click', async () => {
     if (!res.ok) throw new Error(d.error || ('Fehler ' + res.status));
     $('obPass').value = '';
     m.textContent = 'eingebaute Oberfläche aktiv – Seite neu laden'; m.className = 'meldung ok';
+    infoLaden();
+  } catch (e) { m.textContent = e.message; m.className = 'meldung fehler'; }
+});
+
+// ── Stoermeldungen: Originaltexte aus der eigenen Anleitung
+async function ftSenden(url, body, typ) {
+  const res = await fetch(url, {
+    method: 'POST', body, headers: { 'Content-Type': typ, 'x-admin-token': lies(TOKEN_KEY) || '', 'x-experte': $('ftPass').value }
+  });
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(d.error || ('Fehler ' + res.status));
+  return d;
+}
+$('ftBtn').addEventListener('click', async () => {
+  const m = $('ftMeldung'), f = $('ftDatei').files[0];
+  if (!f) { m.textContent = 'Datei wählen'; m.className = 'meldung fehler'; return; }
+  m.textContent = 'übertrage …'; m.className = 'meldung';
+  try {
+    const d = await ftSenden('/api/admin/fehlertexte', await f.arrayBuffer(), 'application/json');
+    $('ftPass').value = '';
+    m.textContent = `Originaltexte aktiv (DE ${d.de}, EN ${d.en})`; m.className = 'meldung ok';
+    infoLaden();
+  } catch (e) { m.textContent = e.message; m.className = 'meldung fehler'; }
+});
+$('ftZurueckBtn').addEventListener('click', async () => {
+  const m = $('ftMeldung');
+  try {
+    await ftSenden('/api/admin/fehlertexte-zurueck', '{}', 'application/json');
+    $('ftPass').value = '';
+    m.textContent = 'eigene Texte aktiv'; m.className = 'meldung ok';
     infoLaden();
   } catch (e) { m.textContent = e.message; m.className = 'meldung fehler'; }
 });

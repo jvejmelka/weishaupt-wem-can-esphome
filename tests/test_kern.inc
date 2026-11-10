@@ -43,14 +43,15 @@ inline void hk_takt(G &g, uint32_t jetzt) {
   if (g.hk_letzte_lesung != 0 && jetzt - g.hk_letzte_lesung < 120000) return;
   g.hk_erledigt = a; g.hk_letzte_lesung = jetzt | 1; g.hk_jetzt_lesen = true;
 }
-// warmwasser.yaml interval 5s
+// warmwasser.yaml interval 5s - mit der Fehlerbehebung aus v42: gelesen wird erst nach der
+// Anlaufpause (bis v41 genuegte "Bus lebt", siehe Test kern_ww_lesung_wartet_die_anlaufpause_ab)
 inline void ww_takt(G &g, uint32_t millis) {
   g.ww_jetzt_lesen = false;
   uint32_t a = g.anlass_ms;
   if (g.anlass_ww_ms != 0 && (a == 0 || (int32_t) (g.anlass_ww_ms - a) > 0)) a = g.anlass_ww_ms;
   if (a == 0 || a == g.ww_erledigt) return;
   if (millis - a < 8000) return;
-  if (millis - g.letzter_frame > 30000) return;
+  if (!senden_bed(g, millis)) return;
   g.ww_erledigt = a; g.ww_jetzt_lesen = true;
 }
 // kessel.yaml script status_lesen: 0 schweigt, 1 verworfen, 2 Anlaufpause, 3 angefordert
@@ -75,7 +76,7 @@ inline void regel(G &g, int ziel, uint32_t jetzt) {
 }
 // kessel.yaml text_sensor "Eigene CAN-Anfragen"
 inline std::string anfragen_text(bool an, const G &g, uint32_t millis) {
-  if (!an) return "aus - nur mithoeren (Betriebsarten bei Anlass)";
+  if (!an) return "aus - keine Abfragen im Takt (Betriebsarten bei Anlass)";
   if (g.bus_seit == 0 || millis - g.letzter_frame >= 30000) return "aus - Bus schweigt";
   uint32_t pause = g.pause_ms, seit = millis - g.bus_seit;
   if (seit <= pause) return "Anlaufpause, noch " + std::to_string((pause - seit) / 60000 + 1) + " min nur mithoeren";
@@ -189,7 +190,7 @@ TEST(kern_bus_und_anlass_wie_v28) {
       switch (r() % 7) {
         case 0: case 1: alt::frame(g, t); if (b.frame(t)) a.start_gelesen = false; break;
         case 2: alt::hk_takt(g, t); a.hk_takt(b.senden_erlaubt(t), t); break;
-        case 3: alt::ww_takt(g, t); a.ww_takt(b.tot(t), t); break;
+        case 3: alt::ww_takt(g, t); a.ww_takt(b.senden_erlaubt(t), t); break;
         case 4: {
           int alt_e = alt::status_lesen(g, t);
           int neu_e = (int) a.anfordern(b, t);
@@ -206,7 +207,7 @@ TEST(kern_bus_und_anlass_wie_v28) {
       if (g_fehler) return;   // erster Fehler genuegt, sonst tausende Folgefehler
     }
   }
-  PRUEFE(wc::anfragen_text(false, wc::Bus(), 5) == "aus - nur mithoeren (Betriebsarten bei Anlass)");
+  PRUEFE(wc::anfragen_text(false, wc::Bus(), 5) == "aus - keine Abfragen im Takt (Betriebsarten bei Anlass)");
 }
 
 TEST(kern_hk_lesung_wiederholt_nie) {
@@ -230,6 +231,40 @@ TEST(kern_hk_lesung_wiederholt_nie) {
     }
   }
   PRUEFE(lesungen == 1);                         // genau die eine Lesung nach der Anlaufpause
+}
+
+TEST(kern_ww_lesung_wartet_die_anlaufpause_ab) {
+  // Fehler bis v41: der Warmwasser-Takt pruefte nur "Bus lebt". Kam in der Anlaufpause ein Anlass
+  // ("Status lesen", geaenderte Statusbits), gingen 8 s spaeter drei Leseanfragen an den WEM -
+  // obwohl die Meldung "Anlaufpause, liest danach" lautet. Ab v42: genau eine Lesung, nach der Pause.
+  wc::Bus b; wc::Anlass a;
+  for (uint32_t t = 1000; t < 70000; t += 1000) b.frame(t);     // Board-Start, 1 min Pause vorbei
+  PRUEFE(b.senden_erlaubt(70500));
+  b.frame(205000);                                               // Bus war weg -> Anlaufpause 10 min
+  PRUEFE(b.in_pause(210000) && !b.tot(210000));
+  PRUEFE(a.anfordern(b, 210000) == wc::Anlass::Status::PAUSE);  // Wunsch in der Pause
+  int lesungen = 0;
+  uint32_t erste = 0;
+  for (uint32_t t = 215000; t < 1500000; t += 5000) {
+    b.frame(t);                                                  // Bus lebt durchgehend
+    if (t == 400000) a.statusbits(0x1000, t);                    // erster Stand: noch kein Anlass
+    if (t == 405000) a.statusbits(0x0000, t);                    // Aenderung in der Pause: Anlass
+    a.ww_takt(b.senden_erlaubt(t), t);
+    if (a.ww_jetzt) {
+      lesungen++;
+      if (!erste) erste = t;
+      PRUEFE(!b.in_pause(t));                                    // nie in der Anlaufpause
+    }
+  }
+  PRUEFE(lesungen == 1);                                         // der Wunsch geht nicht verloren
+  PRUEFE(erste > 205000 + 600000 && erste <= 205000 + 600000 + 10000);   // gleich nach der Pause
+  // schweigt der Bus, wird auch nach der Pause nicht gesendet; der Anlass bleibt stehen
+  a.regel_ww(1600000);
+  a.ww_takt(b.senden_erlaubt(1600000), 1600000);
+  PRUEFE(!a.ww_jetzt);
+  b.frame(1601000);                                              // wieder da (neue Pause)
+  a.ww_takt(b.senden_erlaubt(1605000), 1605000);
+  PRUEFE(!a.ww_jetzt);
 }
 
 TEST(kern_lesebefehl_wie_v28) {
@@ -488,7 +523,7 @@ TEST(kern_schalten_sperre_und_warteschlange) {
   sch.annehmen(2, a, 0);
   PRUEFE(wc::warteschlange_text(sch, false, "") == "1. Heizkreis -> Zeitprogramm 2 (App) | 2. Warmwasser -> Aus (MQTT)");
   PRUEFE(wc::warteschlange_text(sch, true, "") ==
-         "1. Heizkreis -> Zeitprogramm 2 (App) | 2. Warmwasser -> Aus (MQTT) - wartet auf die Sperrminute");
+         "1. Heizkreis -> Zeitprogramm 2 (App) | 2. Warmwasser -> Aus (MQTT) - wartet auf den Mindestabstand");
   bf::Befehl b; sch.naechster(b);
   PRUEFE(wc::warteschlange_text(sch, true, "10:01:02") == "1. Warmwasser -> Aus (MQTT) - naechster Befehl ab 10:01:02");
 }
@@ -620,7 +655,7 @@ TEST(kern_warteschlange_reihenfolge_des_eingangs) {
   bf::Anfrage w; w.wert = 2;
   s.annehmen(bf::ZIEL_WW, w, 0);
   s.annehmen(bf::ZIEL_HK, h, 0);
-  PRUEFE(wc::warteschlange_text(s, true, "") == "1. Warmwasser -> Aus (MQTT) | 2. Heizkreis -> Standby (MQTT) - wartet auf die Sperrminute");
+  PRUEFE(wc::warteschlange_text(s, true, "") == "1. Warmwasser -> Aus (MQTT) | 2. Heizkreis -> Standby (MQTT) - wartet auf den Mindestabstand");
   JsonDocument d;
   deserializeJson(d, bf::status_json(bf::status(), s, "x", 0, -1));
   PRUEFE(std::string(d["schalten"]["warteschlange"][0]["ziel"].as<const char *>()) == "warmwasser");

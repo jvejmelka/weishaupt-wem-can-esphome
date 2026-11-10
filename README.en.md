@@ -9,17 +9,20 @@ that listens passively on the CAN bus of a Weishaupt condensing boiler with a **
 
 - **Reading on the bus** without putting load on the WEM: boiler, flow, flue gas, domestic hot water (DHW) and
   outdoor temperature, pressure, output, burner status with start counter, operating modes, heat quantities.
-- **Switching via the WEM's JSON interface**, verified on the bus:
+- **Switching at the WEM**, verified on the bus:
   heating circuit operating mode (Standby, time program 1–3, Summer, Comfort, Normal, Setback)
-  and DHW on/off – via the web interface, Home Assistant or MQTT.
-  Commands are spaced apart (configurable from v38: 10 s via CAN, at least 60 s via JSON); anything
+  and DHW on/off – since v42 directly via CAN by default, without JSON; the WEM's JSON interface
+  remains as the fallback. Operated from the phone app, the expert interface, Home Assistant or MQTT.
+  Commands are spaced apart (configurable from v38: <!--ab-werk:abstand_can-->10<!--/ab-werk--> s via CAN, at least <!--ab-werk:abstand_json-->60<!--/ab-werk--> s via JSON); anything
   arriving in between is queued (at most one per target, the most recent request wins) and sent
   in order of arrival – visible in the field
   „Warteschlange“ ("queue"), with a button to clear it.
 - **Switching log** of the last ten commands with source and result on the bus.
-- **The WEM is never polled on its own initiative** – only when someone switches. Every additional
-  JSON request is a risk for the fragile interface.
-- **Web interface** with password, read field for arbitrary objects, write field for experts,
+- **The WEM's JSON interface is never called on the board's own initiative** – only when someone operates it
+  (switching via JSON, write field, manual fetch). Every additional JSON request is a risk for the fragile
+  interface.
+- **Phone app on the board** (`/`), settings page and **expert interface** (`/experten`) with
+  separate passwords; there a read field for arbitrary objects, a write field for experts,
   Wi-Fi change without reflashing.
 - **MQTT** for measurements, read, scan and switch commands; optionally the native Home Assistant API.
 
@@ -29,15 +32,16 @@ that listens passively on the CAN bus of a Weishaupt condensing boiler with a **
 
 ## Safety rules – please read
 
-1. **The boiler (node 2) is never written to.** By default the firmware only sends read
-   requests on the bus.
-2. **By default, writing is done exclusively via the WEM** (JSON). The write field only allows the
-   modules SYSTEM0 (MI 01), heating circuit HZK0 (MI 02) and DHW WW0 (MI 03). **Writing via CAN**
-   to the WEM is available from v35 as a switch, **off by default** – confirmed only on a
-   WTC-GW 15-B, at your own risk ([PROTOKOLL.en.md – Writing via CAN](PROTOKOLL.en.md#writing-via-can-from-v35-off-by-default)).
+1. **The boiler (node 2) is never written to.** Only read requests go there.
+2. **Writing goes to the WEM (node 1) only.** Since v42 the firmware switches heating circuit and hot
+   water directly via CAN, without JSON (switch “Schalten per CAN statt JSON”, default <!--ab-werk:can_schalten-->on<!--/ab-werk-->) – confirmed
+   only on a WTC-GW 15-B, at your own risk on other installations. Which ways exist (listening, reading,
+   writing via CAN, JSON as the fallback) and which are on by default is described in **one** place:
+   [PROTOKOLL.en.md – Ways to the heating system](PROTOKOLL.en.md#ways-to-the-heating-system).
 3. **The WEM is fragile.** Frequent JSON requests, requests for non-existent objects or
    several clients at the same time can knock out its JSON interface until the next power cycle.
-   Hence: at least one minute between two commands, no polling via JSON.
+   Hence: via JSON <!--ab-werk:abstand_json-->60<!--/ab-werk--> s between two commands by default (it cannot be set shorter),
+   no polling via JSON.
    Details: [PROTOKOLL.en.md – When the WEM hangs](PROTOKOLL.en.md#8-when-the-wem-locks-up).
 4. The 120 Ω termination on the board stays **off**; the board sits in the middle of the bus.
 
@@ -49,8 +53,9 @@ that listens passively on the CAN bus of a Weishaupt condensing boiler with a **
 | CAN L | L |
 
 Take H and L from **the same twisted pair**. − and + stay unconnected.
-Bus speed 50 kbit/s. The **JSON interface** must be enabled on the WEM
-(parameter 10.8.1, installer level).
+Bus speed 50 kbit/s. The WEM's **JSON interface** (parameter 10.8.1, installer level) is only needed
+for switching via JSON (fallback), the write field or fetching values via JSON – switching via CAN
+does not use it.
 
 ## Who talks to whom
 
@@ -62,7 +67,8 @@ Bus speed 50 kbit/s. The **JSON interface** must be enabled on the WEM
 - The WEM has **one** LAN socket: it carries the encrypted cloud connection (XMPP/TLS to `xmpp.wemportal.de`) and the
   unencrypted **JSON interface** – remote CAN access that the WEM translates and filters.
   The Weishaupt Modbus gateway and this ESP bridge use the same JSON interface.
-- The ESP bridge listens to everything on the CAN bus, reads single values via SDO and switches only via JSON.
+- The ESP bridge listens to everything on the CAN bus, reads single values via SDO and, since v42, switches via CAN at the WEM
+  (node 1) by default; the JSON interface is only the fallback. It never writes to the boiler.
 - Purple = from this repository, dashed = optional. Generated with [`werkzeuge/zeichnung_aufbau.py`](werkzeuge/zeichnung_aufbau.py).
 
 ## Structure
@@ -93,7 +99,7 @@ component (`id(wcan)->…`). The classes in [`kern.h`](components/weishaupt_can/
 | `wc::Anlass` | when the operating modes are re-read (startup, status bits, switch command, „Status lesen“ ("read status"), rules) |
 | `wc::Lesebefehl`, `wc::Scan` | manual read command and object scan (read requests only) |
 | `wc::Brenner` | edge detection, burner starts (persisted) |
-| `wc::Schalten`, `wc::Protokoll` | lockout minute, pending WEM call, write command, switching log |
+| `wc::Schalten`, `wc::Protokoll` | minimum interval between commands, pending WEM call, write command, switching log |
 | `wc::Verdacht` | runtime state of rules R1–R5 and of the custom rules (partly persisted) |
 | `wc::Zusatz` | extra displays: storage format and file checksum (persisted) |
 
@@ -121,16 +127,23 @@ Comment out unneeded lines under `packages:`.
 
 | Package | Contents | Required |
 |---|---|---|
-| `kessel.yaml` | boiler values, heating circuit state, diagnostics, read field, bus watchdog, Wi-Fi change | yes |
+| `kessel.yaml` | boiler values, heating circuit state, diagnostics, read field, bus watchdog; CAN pins via `can_tx_pin`/`can_rx_pin` | yes |
+| `netz-wlan.yaml` | Wi-Fi displays and Wi-Fi change (part of `kessel` up to v42; required by `app.yaml`). Boards with Ethernet: `netz-lan.yaml` | no |
 | `warmwasser.yaml` | DHW values (only with a storage tank connected to the WTC) | no |
 | `mqtt.yaml` | MQTT broker, `cmd/lesen`, `cmd/scan`, `cmd/stop`, `cmd/status`, raw capture | no |
 | `homeassistant-api.yaml` | native ESPHome API (encrypted) | no |
 | `wem-schalten.yaml` | heating circuit switching, queue, log | no |
 | `warmwasser-schalten.yaml` | DHW on/off (requires `wem-schalten` and `warmwasser`) | no |
-| `verdacht.yaml` | **Rules:** read the operating modes only when passive listening suggests a change; fixed rules R1–R5 individually switchable (default: R1–R3 on, R4/R5 off; disabled ones keep running in shadow mode), plus custom rules (experimental, own master switch, default off); configurable via web, file and MQTT (requires `warmwasser`). Details: [REGELN.md](REGELN.md) (German) | no |
-| `zusatz.yaml` | **Extra displays for the phone app:** list of up to 6 third-party MQTT topics (e.g. room temperatures, "heat pump running"), configurable via web and file. The board does **not** read these values itself, it only manages the list (requires `mqtt`). Details: [PROTOKOLL.en.md, section 6b](PROTOKOLL.en.md#6b-additional-displays-for-the-phone-app) | no |
-| `app.yaml` | **Phone app served by the board itself** (from v38): `http://<board>/app`, own login (`app_benutzer`/`app_passwort` in `secrets.yaml`), no server needed (needs `wem-schalten`, `warmwasser-schalten`) | no |
+| `verdacht.yaml` | **Rules:** read the operating modes only when passive listening suggests a change; fixed rules R1–R5 individually switchable (default: R1–R3 <!--ab-werk:vd_r1-->on<!--/ab-werk-->, R4/R5 <!--ab-werk:vd_r4-->off<!--/ab-werk-->; disabled ones keep running in shadow mode), plus custom rules (experimental, own master switch, default <!--ab-werk:vd_eigene_haupt-->off<!--/ab-werk-->); configurable via web, file and MQTT (requires `warmwasser`). Details: [REGELN.md](REGELN.md) (German) | no |
+| `zusatz.yaml` | **Extra displays for the phone app:** list of up to 6 third-party MQTT topics (e.g. room temperatures, "heat pump running"), configurable via web and file. The board manages the list; the values are fetched by the app – the Docker app subscribes to the topics itself, with the package `app` the board subscribes to them (requires `mqtt`). Details: [FIRMWARE.en.md, section 6b](FIRMWARE.en.md#6b-additional-displays-for-the-phone-app) | no |
+| `app.yaml` | **Phone app served by the board itself** (from v38): `http://<board>/`, own login (`app_benutzer`/`app_passwort` in `secrets.yaml`), no server needed (needs `wem-schalten`, `warmwasser-schalten`) | no |
+| `json-lesen.yaml` | **Fetch values via JSON** (from v42): one request with seven objects to the WEM, manual only (button in the expert interface and on the settings page, ↻ in the app on the board when the CAN bus is silent), never periodic; for boards without a CAN cable or during a bus outage (requires `wem-schalten`, `warmwasser`) | no |
 | `feste-ip.yaml` | static IP instead of DHCP | no |
+| `kraiz-per-can.yaml` | **More values via CAN** (by cg089): 29 objects of the kraiz/hassio-weishaupt integration – room/flow setpoints, heating circuit and DHW status, operating phase –, button "Warmwasser-Push" (DHW boost), error block of the WEM as text (requires `wem-schalten` and own CAN requests switched on) | no |
+| `dallas.yaml` | 1-Wire bus for your own DS18B20 sensors (by cg089) | no |
+
+**Second board:** [`olimex-weishaupt.yaml`](olimex-weishaupt.yaml) builds the same packages for the **Olimex ESP32-EVB**
+(Ethernet instead of Wi-Fi, Home Assistant API) – variant by cg089, see [OLIMEX-ESP32-EVB.md](OLIMEX-ESP32-EVB.md) (German).
 
 Optionally, there is also the phone app in the `app/` folder (see below).
 
@@ -149,8 +162,8 @@ esphome run weishaupt-wem-can.yaml       # erstes Mal per USB, danach per OTA
 Only if that is not possible, enable the package `feste-ip.yaml`. If OTA cannot find the board
 via mDNS: `esphome upload weishaupt-wem-can.yaml --device <IP>`.
 
-**Changing Wi-Fi** without flashing: in the web interface under *Einstellungen* ("settings") enter the SSID and password,
-then *WLAN übernehmen* ("apply Wi-Fi"). If the connection succeeds within 30 s, it is saved; otherwise
+**Changing Wi-Fi** without flashing: in the expert interface (`/experten`) under *Einstellungen* ("settings") enter the SSID and password,
+then *WLAN übernehmen* ("apply Wi-Fi") – or in the setup assistant (step network). If the connection succeeds within 30 s, it is saved; otherwise
 the previous Wi-Fi is kept. The last fallback is the emergency hotspot with captive portal.
 
 ## MQTT commands
@@ -160,7 +173,7 @@ the previous Wi-Fi is kept. The last fallback is the emergency hotspot with capt
 | `<gerät>/cmd/heizkreis` | `1`–`8`, name (`Zeitprogramm 1`) or `ZP1`; from v27 also JSON `{"id":17,"wert":"ZP2"}` | heating circuit operating mode (queued); every phase on `befehl/status` |
 | `<gerät>/cmd/warmwasser` | `Ein` / `Aus`; from v27 also JSON `{"id":18,"wert":"Aus"}` | DHW (queued); every phase on `befehl/status` |
 | `<gerät>/cmd/lesen` | `01 2933 02` (node index sub, hex), with `B` at the end by block | read one object; long objects automatically segmented |
-| `<gerät>/cmd/sd_datei` | `systable.csv` | fetch a file from the WEM's SD card (from v36; switch “SD-Dateien abrufen”, on by default; lock minute); content to `<gerät>/sd/<file>`, from 4 KB in pieces `/1`, `/2` …; `systable.csv` is evaluated (text sensor “Systemtabelle”) |
+| `<gerät>/cmd/sd_datei` | `systable.csv` | fetch a file from the WEM's SD card (from v36; switch “SD-Dateien abrufen”, default <!--ab-werk:sd_erlaubt-->on<!--/ab-werk-->; minimum interval as for switching via JSON); content to `<gerät>/sd/<file>`, from 4 KB in pieces `/1`, `/2` …; `systable.csv` is evaluated (text sensor “Systemtabelle”) |
 | `<gerät>/cmd/can_schreiben` | `01 2933 02 01` (node index sub value [length 1/2/4], hex) or `01 2xxx 00 = 11 22 33 …` | **locked by default** (switch “Freies CAN-Schreiben”); node 01 only, objects 2000–5FFF only |
 | `<gerät>/cmd/scan` | `01 2A00 2AFF 3` | read a range, responses in `<gerät>/canraw` |
 | `<gerät>/cmd/stop` | anything | abort scan |
@@ -193,8 +206,9 @@ old/new comparison in [TOPICS.md](TOPICS.md#veraltete-text-topics) (German).
 
 Passive listening is free. The board sends its own read requests at most every 40 s
 per value (Weishaupt's specification for the data logger), operating modes only when there is a reason; after a
-power cycle of the heating system it only listens for ten minutes. With the switch **„Eigene CAN-Anfragen“ ("own CAN requests")**
-the requests can be disabled entirely – intervals and conditions:
+power cycle of the heating system it only listens for ten minutes. The switch **„Eigene CAN-Anfragen“ ("own CAN requests")**
+(default <!--ab-werk:can_anfragen-->off<!--/ab-werk-->) only controls the periodic requests; the board reads the operating modes
+when there is a reason even without it – intervals and conditions:
 [PROTOKOLL.en.md – Passive listening and reading on demand](PROTOKOLL.en.md#2-passive-listening-and-on-demand-reading).
 
 ## Monitoring
@@ -215,9 +229,14 @@ Example installation with heat pump and PV (setpoints, measurements, what you se
 The documents at a glance:
 
 - [INSTALL.md](INSTALL.md) (German) – step by step from the board to the phone app
-- [PROTOKOLL.en.md](PROTOKOLL.en.md) – CAN bus, WEM JSON, mapping and failure patterns; WEM-RG2 room unit reading and
-  writing ([10a](PROTOKOLL.en.md#10a-wem-rg2-room-unit-on-the-bus-capture-november-2026)), CAN tunnel over WLAN
-  ([10b](PROTOKOLL.en.md#10b-can-tunnel-over-wlan-experiment-branch-can-tunnel), experiment in branch `can-tunnel`)
+- [PROTOKOLL.en.md](PROTOKOLL.en.md) – the bus: [all ways to the heating system](PROTOKOLL.en.md#ways-to-the-heating-system),
+  CAN bus, WEM JSON, mapping JSON → CAN, writing via CAN, failure patterns, fault messages and error codes
+  ([10c](PROTOKOLL.en.md#10c-fault-messages-on-the-bus-and-error-codes))
+- [FIRMWARE.en.md](FIRMWARE.en.md) – operating the firmware: expert interface,
+  [all settings](FIRMWARE.en.md#einstellungen-settings) with their factory values, rules, additional displays
+- [VERSUCHE.en.md](VERSUCHE.en.md) – WEM-RG2 room unit reading and writing
+  ([10a](VERSUCHE.en.md#10a-wem-rg2-room-unit-on-the-bus-capture-november-2026)), CAN tunnel over WLAN
+  ([10b](VERSUCHE.en.md#10b-can-tunnel-over-wlan-experiment-branch-can-tunnel), experiment in branch `can-tunnel`)
 - [REGELN.md](REGELN.md) (German) – rules R1–R5 and custom rules: when the board re-reads operating modes
 - [ANLAGE.md](ANLAGE.md) (German) – example installation with heat pump and PV
 - [IDEEN.md](IDEEN.md) (German) – what could still be built: database and Grafana, H2 lockout,
@@ -235,29 +254,30 @@ Installable on the home screen („+ App“).
 | Area | Contents | Source |
 |---|---|---|
 | Header | green dot = last fetch successful, red = problem; orange bar = countdown to the next fetch (30 s) | app |
-| ⚙ (header) | opens the board's web interface in a new tab – only visible if `BOARD_URL` is set in the `.env`. The app passes nothing through; the board asks for its password itself and is only reachable on the LAN | `.env`: `BOARD_URL` |
+| ⚙ (header) | opens the board (the address set in `BOARD_URL`, e.g. its settings page) in a new tab – only visible if `BOARD_URL` is set in the `.env`. The app passes nothing through; the board asks for its password itself and is only reachable on the LAN | `.env`: `BOARD_URL` |
 | Heating circuit | eight buttons (Standby, ZP 1–3, Summer, Comfort, Normal, Setback). **Solid highlight = actual**: the operating mode the board read on the bus (0x2933/2). To the right of the title **„Zustand: …“** ("state: …") = running state from the status bits (e.g. „Standby“, „Zeitprogramm, heizt“ ("time program, heating"), „· WW lädt“ ("· DHW charging")) | board: `status/json` → `heizkreis`; button → `cmd/heizkreis` (JSON with ID) |
 | ↻ (next to heating circuit) | makes the board read the heating circuit and DHW operating mode from the bus once (otherwise it only reads them when there is a reason); the status line shows „angefordert …“ ("requested …") and then „Status HH:MM:SS gelesen“ ("status read at HH:MM:SS") | button → `cmd/status`; board: `status/json` → `heizkreis.zeit`, `bus` |
 | DHW | temperature (sensor at the **bottom** of the storage tank), ON/OFF buttons – **solid highlight = actual** on the bus (0x2A20/2); on the right **„Ladung: Gas“** ("charging: gas") (orange, pulsing, boiler in DHW mode = boiler status 15) or **„Ladung: aus“** ("charging: off") | board: `warmwasser`, `warmwasser_betriebsart`, `kesselstatus_code` (fallback `warmwasser_aktiv`); button → `cmd/warmwasser` |
 | Requested (dashed) | **Requested = own switch command** via the board, as long as it has not been confirmed on the bus: **vorgemerkt** ("queued"; in the queue or just pressed), **gesendet** ("sent"; command sent to the WEM, bus verification pending). After „OK“ the dashed outline disappears and the button becomes solidly highlighted. **Red dashed** with short text: not applied / rejected (CM=05) / no response. **„von außen geändert“** ("changed externally") on the actual button: the bus shows something other than the last successful own command, without any command pending (display, portal) | board: `status/json` → `schalten`, `befehl/status` |
-| Progress (below the buttons) | after a switch command, in the affected block: **vorgemerkt (ab HH:MM) → an WEM gesendet (JSON) → Bus liest nach → bestätigt ✓** ("queued (from HH:MM) → sent to WEM (JSON) → bus re-reads → confirmed ✓") (green); on failure the chain ends in red with **✗ nicht übernommen (steht auf …) / abgelehnt (CM=05) / keine Rückmeldung / ungültig** ("✗ not applied (set to …) / rejected (CM=05) / no response / invalid"). Derived solely from the command's **phase** (no text parsing). The current step pulses orange; after completion the line stays for 3 min; with no command pending there is no line | board: `status/json` → `schalten`, `befehl/status` |
+| Progress (below the buttons) | after a switch command, in the affected block: **vorgemerkt (ab HH:MM) → an WEM gesendet (CAN) → Bus liest nach → bestätigt ✓** ("queued (from HH:MM) → sent to WEM (CAN) → bus re-reads → confirmed ✓") (green; „(JSON)“ instead of „(CAN)“ when the fallback is used); on failure the chain ends in red with **✗ nicht übernommen (steht auf …) / abgelehnt (CM=05) / keine Rückmeldung / ungültig** ("✗ not applied (set to …) / rejected (CM=05) / no response / invalid"). Derived solely from the command's **phase** (no text parsing). The current step pulses orange; after completion the line stays for 3 min; with no command pending there is no line | board: `status/json` → `schalten`, `befehl/status` |
 | Boiler | boiler temperature large, next to it flow / setpoint and return; on the right **Brenner: aus / vorlüften / an / nachlüften** ("burner: off / pre-purge / on / post-purge") (on in orange, only with flame), followed by the **purpose** from the boiler status: „· Heizung“ ("· heating") or „· Warmwasser“ ("· DHW"); „(Heizung wartet)“ ("heating waiting") when the boiler is producing DHW while the heating circuit is demanding heat at the same time. **Kaminfeger** ("chimney sweep" mode) and **Wartung** ("maintenance") are shown in red, even with the burner off | board: `kesseltemperatur`, `vorlauf_vpt`, `vorlauf_soll`, `ruecklauf`, `brennerphase`, `kesselstatus_code`, `heizkreis_status_code` (bit 0x0040), `heizanforderung` |
-| Extra (below boiler) | one compact line from the board's list, e.g. „Wohnzimmer 21,3 °C · Arbeitszimmer 22,1 °C · WP ◉ läuft“ ("living room … · study … · HP ◉ running") – type `laeuft` shows „läuft“ ("running"; orange, pulsing like the burner) or „aus“ ("off") from the threshold on. Values older than 10 min appear as „--“; empty list = no line. Tapping/hovering shows the age of the value | board: `<gerät>/app/zusatz` (package `zusatz`), values directly from the topics listed there |
+| Extra (below boiler) | one compact line from the board's list, e.g. „Wohnzimmer 21,3 °C · Arbeitszimmer 22,1 °C · WP ◉ läuft“ ("living room … · study … · HP ◉ running") – type `laeuft` shows „läuft“ ("running"; orange, pulsing like the burner) or „aus“ ("off") from the threshold on. Values older than 10 min are shown dimmed with their age („20,6 °C (35 min)“; „läuft“ does not pulse then), older than 2 h as „--“; empty list = no line. Tapping/hovering shows the age of the value | board: `<gerät>/app/zusatz` (package `zusatz`), values directly from the topics listed there |
 | Outdoor | outdoor temperature large | board: `aussentemperatur` |
-| Status line | „Aktualisiert HH:MM:SS · Status gelesen HH:MM“ ("updated … · status read …"), followed by „nächster Befehl ab …“ ("next command from …") while the lockout minute is running (at most two lines); after a button press, for 3 min the progress: vorgemerkt → gesendet → **OK** (green) or **NICHT übernommen / abgelehnt (CM=05) / keine Rückmeldung** ("NOT applied / rejected (CM=05) / no response") (red); errors such as „CAN-Board nicht erreichbar“ ("CAN board unreachable") | board: `befehl/status`, `status/json` → `schalten.frei_ab`, `heizkreis.zeit` |
+| Status line | „Aktualisiert HH:MM:SS · Status gelesen HH:MM“ ("updated … · status read …"), followed by „nächster Befehl ab …“ ("next command from …") while the minimum interval is running (at most two lines); after a button press, for 3 min the progress: vorgemerkt → gesendet → **OK** (green) or **NICHT übernommen / abgelehnt (CM=05) / keine Rückmeldung** ("NOT applied / rejected (CM=05) / no response") (red); errors such as „CAN-Board nicht erreichbar“ ("CAN board unreachable") | board: `befehl/status`, `status/json` → `schalten.frei_ab`, `heizkreis.zeit` |
 | Footer | build version as a date | app |
 
 Measurements that have not been updated for more than 10 min are shown by the app as „--“ instead of a
 stale value. Operating modes and setpoints are exempt from this – the board only reads them when there is a
-reason (after startup, on changed status bits, after switch commands).
+reason (after startup, after switch commands, on ↻ and when passive listening suggests a
+change – [rules](REGELN.md) R1–R5).
 
 ### How it works
 
 - **Reads only MQTT** from the board (`<gerät>/sensor/+/state`, retained) and **never talks to the WEM**.
 - **Extra displays:** the app subscribes to `<gerät>/app/zusatz` and then to the third-party
-  topics listed there (re-subscribing or unsubscribing when the list changes). The board itself does not read them.
+  topics listed there (re-subscribing or unsubscribing when the list changes). With the app on the board, the board subscribes to them (see below).
 - **Switching** is sent as an MQTT command with an ID to the board (`{"id":"app-…","wert":3,"quelle":"App"}`);
-  the board executes it with lockout minute, queue and bus verification and reports every phase
+  the board executes it with minimum interval, queue and bus verification and reports every phase
   on `befehl/status`. The app reads only these fixed fields and `status/json` – **no free text**.
 - Login with username and password from the `.env` – **without both, the app does not start**.
   Sessions are stored in `data/` and survive a rebuild.
@@ -266,24 +286,27 @@ reason (after startup, on changed status bits, after switch commands).
 
 ### On the board (from v38, package `app.yaml`)
 
-The same app without a server: the board serves it itself (gzip, about 16 KB of flash in total).
+The same app without a server: the board serves it itself (gzip, about 40 KB of flash in total).
 
 - Open **`http://<board>/`** (or `/app`). From v42 the ESPHome web interface lives at **`/experten`**
   (user `admin`, expert password).
 - Log in with `app_benutzer` and `app_passwort` from `secrets.yaml`. 5 failed attempts per address within
   15 min lock that address for 15 min. The session token is kept in flash and survives updates.
-- Switching commands go through the same queue, one-minute lock and bus check as via MQTT.
+- Switching commands go through the same queue, minimum interval and bus check as via MQTT.
+- If the CAN bus has been silent for more than 2 min (no cable, outage), the app shows a ↻ „Aktualisieren“ ("refresh") at the top:
+  one press fetches the values once via JSON from the WEM (package `json-lesen`; never automatic, minimum interval
+  <!--ab-werk:json_abstand-->300<!--/ab-werk--> s by default).
 - **Extra values:** the board subscribes to the listed topics itself. Its broker account needs one
   `topic read` line per topic (as shown below for the Docker app); after changing the ACL restart the
   board once (a refused subscription is otherwise only retried on the next reconnect).
 - After a restart, operating mode and status bits are missing until the board has read or seen them
-  again (mode after about 1 min, status bits on the next change).
+  again (it reads both once itself after the start-up pause of about 1 min).
 - **Settings** (from v39): ⚙ in the app opens `http://<board>/einstellungen` – in the app's design, with
   its own admin password. Switches and numbers of the board, change app and admin password, default for
   light/dark/auto. Each setting shows its recommended value (◆) and flags deviations (from v42).
 - **First-run setup** (from v39): the board stores the credentials. Without defaults in `secrets.yaml`,
   `/app` first asks for user, app password and admin password (at least 8 characters) – nothing can be
-  operated before that, not even the web interface. With defaults they are taken over on the first start;
+  operated before that, not even the expert interface. With defaults they are taken over on the first start;
   later changes to `secrets.yaml` then have no effect (change the password on the settings page).
 - **Light / dark / auto:** button at the top of the app, chosen per device; auto follows the device.
 - **Three access levels** (from v42), all three passwords different:
@@ -310,7 +333,7 @@ The same app without a server: the board serves it itself (gzip, about 16 KB of 
   page shows size and free space. Remove the card when flashing via USB (WeAct's advice).
 - From outside **only through a reverse proxy with TLS** – the board only speaks HTTP. With `app_proxy` in `secrets.yaml`
   (the proxy's IP) the board trusts its `X-Forwarded-For` and itself rejects via the proxy: `/experten`, `/update`,
-  `/events`, entity paths, resets and UI package (403; can be opened temporarily at your own risk).
+  `/events`, entity paths, resets, UI package and fault texts (403; can be opened temporarily at your own risk).
   App and settings page work from outside. The proxy should pass on only the headers needed (no cookies) –
   the ESP32 web server accepts at most 1024 bytes per header line.
 - The files come from `app/public/` (plus `app/board/` for the settings page); `werkzeuge/app_einbetten.py` embeds them
@@ -357,7 +380,7 @@ permission only: with some devices (e.g. Shelly) a neighbouring topic can be use
 - **Why the app does not query the WEM itself:** an earlier version read its values directly via the WEM's
   JSON interface every time it was opened. The interface cannot cope with that – it was locked
   several times as a result and only came back after power-cycling the heating system. Since then
-  the app reads only MQTT from the board, and switch commands go through the board with the lockout minute.
+  the app reads only MQTT from the board, and switch commands go through the board with the minimum interval.
 
 ## What is confirmed and what is not
 
@@ -413,7 +436,7 @@ Overview of all objects the firmware evaluates (details and evidence in
 
 ## Security
 
-- The board speaks **unencrypted HTTP** (from v42 digest login for `/experten` and `/update`) – run it on the LAN only,
+- The board speaks **unencrypted HTTP** (digest login since v41; `/experten` and `/update` require the expert password) – run it on the LAN only,
   from outside at most behind a reverse proxy with TLS (see mobile app, "On the board").
 - **Anyone allowed to write to `<gerät>/cmd/...` can switch the heating.** Set access rules (ACLs)
   on the broker: write access to `cmd/#` only for accounts that are supposed to switch.
@@ -434,6 +457,20 @@ isolation, RS485, USB-C; switchable 120 Ω termination (**off** here).
 - **Buy:** AliExpress (WeAct shop, link from the CNX article): https://a.aliexpress.com/_c4TXgZeJ –
   around $9–17 plus shipping, depending on the country. At the time of writing the board could not be found on Amazon.
 - Power supply in operation: any USB power adapter rated 1 A or more.
+
+**Why a separate power adapter instead of the "− +" terminals of the heating bus?** The board could also be
+fed from the bus via VIN (5–36 V). Reasons against it:
+
+- **The galvanic isolation would be lost.** VIN and USB are on the ESP side of the board, only H and L are
+  on the isolated side. Wiring VIN to "− +" connects the ground of the heating bus to the board's
+  electronics and bypasses the isolated transceiver. With a power adapter, only the two wires H and L
+  are connected to the bus.
+- **The bus supply is not specified for it.** The WTC-GW installation manual gives neither voltage nor
+  current for "− +", only a maximum of three room units or room sensors per terminal (according to its
+  manual, a room unit needs 15–30 V and at most 0.7 W). An ESP32 with Wi-Fi is in that range on average
+  and above it during transmit peaks – we have not measured this.
+- **The board stays independent.** It can be powered off, restarted or plugged into a PC without touching
+  the heating.
 
 Alternative built from individual parts (MenkeC's build): ESP32-C3 SuperMini plus SN65HVD230 transceiver –
 cheaper, but **without** galvanic isolation.
@@ -492,19 +529,27 @@ made-up example frames based on [PROTOKOLL.en.md](PROTOKOLL.en.md), together wit
 ```
 tests/run.sh                                     # Regellogik, Klassen, Datei-Parser, Registertabelle
 python3 werkzeuge/register_erzeugen.py --pruefen # erzeugte Dateien passen zu register.yaml
+python3 werkzeuge/einstellungen_erzeugen.py --pruefen # Angaben „ab Werk“ in der Doku passen zu den Paketen
 python3 tests/links.py                           # relative Links und Anker in allen .md-Dateien
 ```
 
-(Comments: rule logic, classes, file parsers, register table · generated files match `register.yaml` · relative links and anchors in all .md files.)
+(Comments: rule logic, classes, file parsers, register table · generated files match `register.yaml` · defaults stated in the documentation match the packages · relative links and anchors in all .md files.)
 
 **Register table:** all CAN objects are defined only in [`register.yaml`](register.yaml); from it,
 [`werkzeuge/register_erzeugen.py`](werkzeuge/register_erzeugen.py) generates the C++ constants
 (`components/weishaupt_can/register_gen.h`) and the tables in PROTOKOLL.md and in the README. Procedure for changes:
-[INSTALL.md, section 14](INSTALL.md#14-register-ändern) (German).
+[INSTALL.md, section 14](INSTALL.md#14-register-ändern) (German). Objects taken from other projects that have not
+yet been verified on our own installation are kept separately in [`register-uebernommen.yaml`](register-uebernommen.yaml) –
+with the source for each object and without firmware constants
+([PROTOKOLL, section 7a](PROTOKOLL.en.md#7a-objects-taken-from-other-projects-unverified)).
 
-On every push, all three run in [GitHub Actions](https://github.com/jvejmelka/weishaupt-wem-can-esphome/actions/workflows/ci.yml), and in addition the
-firmware is compiled with ESPHome 2026.9.0 and a dummy `secrets.yaml` (from `secrets.yaml.example`)
-– including the component `weishaupt_can`. Please accompany new rules or changes to existing ones with a test – the bug from
+**Defaults:** whether a switch ships on or off and which initial value a number has is defined only in the
+packages (`restore_mode`, `initial_value`). [`werkzeuge/einstellungen_erzeugen.py`](werkzeuge/einstellungen_erzeugen.py)
+writes the [table of all settings](FIRMWARE.en.md#einstellungen-settings) and every default stated in the documentation from it.
+
+On every push, all four run in [GitHub Actions](https://github.com/jvejmelka/weishaupt-wem-can-esphome/actions/workflows/ci.yml), and in addition the
+firmware is compiled with ESPHome 2026.9.1 and a dummy `secrets.yaml` (from `secrets.yaml.example`)
+– including the component `weishaupt_can`, plus the Olimex variant and the release image. Please accompany new rules or changes to existing ones with a test – the bug from
 v22–v24 (R1 only knew `0x40`, the WEM queries with `0xA4`) could not have happened that way.
 
 ### What the automated checks do (GitHub Actions, briefly explained)
@@ -513,15 +558,17 @@ GitHub automatically checks every state of this repository on its own machines �
 install anything for it. The "CI" badge at the very top shows the result of the latest run:
 **green** = everything passed, **red** = something is broken. Clicking it opens the list of all runs.
 
-On every upload (push) and every proposed change (pull request), four checks run
+On every upload (push) and every proposed change (pull request), six checks run
 ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)):
 
 | Check | What it ensures |
 |---|---|
 | Tests of the rule logic and the component | rules and switching logic react to the example telegrams as expected |
-| Register table and generated files | firmware constants and documentation tables match `register.yaml`; no read request goes to the wrong node |
+| Register table and generated files | firmware constants and documentation tables match `register.yaml`; no read request goes to the wrong node; defaults stated in the documentation match the packages |
 | Links in the .md files | all references in the documentation lead somewhere |
 | Compile firmware | the firmware builds with ESPHome (with placeholder credentials; no real secrets needed) |
+| Compile Olimex ESP32-EVB | the variant for the Olimex board (Ethernet, `kraiz-per-can`, `dallas`) builds and has the same entities as cg089's fork |
+| Release image without personal data | the ready-made image for the install page builds without Wi-Fi, passwords and MQTT and contains no placeholder credentials |
 
 **For people building their own:** a green badge means the current state builds and the rules pass their
 tests. If you **fork** the repository and change something yourself (for example for a different boiler type), you get
@@ -539,7 +586,7 @@ Open questions that can only be resolved on other installations or in a differen
 | Heating circuit codes 6–8 (Comfort, Normal, Setback) have never been seen on the bus | a capture of a switch to these operating modes |
 | Switching via the WEM portal or WEM app has never been captured | a raw capture during a portal switch (see [PROTOKOLL.en.md](PROTOKOLL.en.md#detecting-passively-what-works-and-what-does-not)) |
 | Back-calculation of the room setpoint level only calibrated for outdoor temperatures of 12.9–15.2 °C | winter data (outdoor temperature 0–8 °C, 10–15 min steady state per operating mode) |
-| WEM-RG2: reading and writing are captured ([PROTOKOLL.en.md, 10a](PROTOKOLL.en.md#10a-wem-rg2-room-unit-on-the-bus-capture-november-2026)); open are other room units (RG1, WEM-RF), several room units and room compensation | captures, see [IDEEN.md, idea 4](IDEEN.md#gesucht-jemand-mit-weishaupt-raumgerät-am-bus) (German) |
+| WEM-RG2: reading and writing are captured ([VERSUCHE.en.md, 10a](VERSUCHE.en.md#10a-wem-rg2-room-unit-on-the-bus-capture-november-2026)); open are other room units (RG1, WEM-RF), several room units and room compensation | captures, see [IDEEN.md, idea 4](IDEEN.md#gesucht-jemand-mit-weishaupt-raumgerät-am-bus) (German) |
 
 Please open a [GitHub issue](https://github.com/jvejmelka/weishaupt-wem-can-esphome/issues), with a
 summary rather than raw files (those may contain serial numbers and device identifiers).
@@ -561,4 +608,8 @@ Further register knowledge comes from the projects listed under "Sources".
 
 ## License
 
-[MIT](LICENSE) – © 2026 Juergen Vejmelka. Use at your own risk; no affiliation with Weishaupt.
+[MIT](LICENSE) – © 2026 Juergen Vejmelka; the Olimex variant and the packages `kraiz-per-can` and `dallas`: © 2026 cg089.
+Use at your own risk; no affiliation with Weishaupt.
+
+Third-party parts are listed in [LIZENZEN-DRITTER.md](LIZENZEN-DRITTER.md) (German). The prebuilt firmware files (`*.bin`)
+contain ESPHome and are therefore distributed as a whole under the GPL-3.0; the corresponding source is this repository.

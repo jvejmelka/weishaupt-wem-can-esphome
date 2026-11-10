@@ -15,15 +15,15 @@ T = {
   tls='verschlüsselt (TLS 1.2)', auf1='der WEM baut die Verbindung auf,', auf2='Lebenszeichen etwa 1×/min',
   heim='Heimnetz – unverschlüsselt', buchse1='eine LAN-Buchse,', buchse2='ein Kabel', buchse3='eine LAN-Buchse am WEM',
   gw='WEM-Modbus-Gateway', gw1='Modbus TCP für Leittechnik,', gw2='liest den WEM zyklisch',
-  app='Handy-App (app/)', a1='Anzeige, Schaltknöpfe', a2='Heizkreis / Warmwasser', mq='MQTT-Broker', m1='optional: InfluxDB, Grafana,', m2='Home Assistant',
+  app='Handy-App in Docker', a1='wie die App auf dem Board,', a2='über MQTT · Ordner app/', mq='MQTT-Broker', m1='optional: InfluxDB, Grafana,', m2='Home Assistant',
   therme='THERME (Weishaupt WTC)', wem='WEM-SG Systemgerät (Knoten 1)', wem0='= Display / Bedieneinheit der Therme',
   w=['• <tspan font-weight="bold">Heizkurve</tspan> → rechnet Vorlauf-Soll','• Heizkreis / Warmwasser, Zeitprogramme','• Fehlerspeicher (8 Byte, CAN in Teilstücken)','• Datenlogger fürs Portal','• JSON-Schnittstelle (ESP, Gateway)','• SD-Karte, Netzwerkbuchse'],
   wemf='Master des Systems', kes='KESSEL – Feuerungsautomat', kes0='WEM-FA-G (Knoten 2)',
   k=['• setzt den Vorlauf-Soll um','• Flamme, Gebläse, Gasventil','• Kesseltemperatur, Abgas, Volumenstrom','• Betriebsstunden, Brennerstarts','• eigene Grenzen (Abgas, Taktsperre,','  Pumpe), Flammenüberwachung','• fehlt der WEM: Fehler F 91'],
   c=['WEM schreibt alle ~5 s in den Kessel:','Vorlauf-Soll, WW-Soll, Anforderung','WEM fragt den Kessel ~3×/s ab;','Kessel schreibt Messwerte in den WEM'],
   bus='CAN-Bus 50 kbit/s (CANopen-SDO/PDO) – unverschlüsselt', bus2='alle Teilnehmer hören alles · eine SDO-Antwort trägt max. 4 Byte', draehte='2 Drähte',
-  esp='ESP-Brücke (WeAct CAN485)', e=['• hört alles mit','• liest einzeln per SDO','• schaltet über WEM-JSON,','  prüft das Ergebnis am Bus'], e5='Schreiben per CAN: ab Werk aus',
-  wlan='WLAN · MQTT', wlan2='(IP wie LAN)', json='HTTP / JSON über WLAN + Router – nur Schaltbefehle', lan='LAN · JSON',
+  esp='ESP-Brücke (WeAct CAN485)', e=['• hört alles mit','• liest einzeln per SDO','• schaltet per CAN am WEM,','  prüft das Ergebnis am Bus','• Handy-App eingebaut (Browser)'], e5='Rückweg: Schalten über WEM-JSON',
+  wlan='WLAN · MQTT · HTTP', wlan2='(IP wie LAN)', json='HTTP / JSON über WLAN + Router – nur auf Bedienung', lan='LAN · JSON',
   rf='Raumfühler / Raumgerät', rf1='WEM-RF, WEM-RG · im Wohnraum', rf2='am selben CAN-Bus',
   js=['JSON = ferngesteuerter CAN-Zugang über LAN (CanApiJson)','Die Anfrage nennt ein CAN-Objekt, z. B. Modul 07 · 2533/02 = Knoten 2.','Der WEM übersetzt, liest oder schreibt am Bus und antwortet als JSON.','Er ist Übersetzer und Türsteher: nur freigegebene Objekte,','am Kessel ist nichts schreibbar. Eigene Objekte beantwortet er direkt.'],
   l1='verschlüsselt', l2='Heimnetz, unverschlüsselt', l3='CAN-Bus', l4='durch den Router', l5='optional', l6='aus diesem Repository',
@@ -37,15 +37,15 @@ T = {
   tls='encrypted (TLS 1.2)', auf1='the WEM opens the connection,', auf2='keep-alive about once a minute',
   heim='Home network – unencrypted', buchse1='one LAN socket,', buchse2='one cable', buchse3='one LAN socket on the WEM',
   gw='WEM Modbus gateway', gw1='Modbus TCP for automation,', gw2='polls the WEM cyclically',
-  app='Phone app (app/)', a1='display, switch buttons', a2='heating circuit / hot water', mq='MQTT broker', m1='optional: InfluxDB, Grafana,', m2='Home Assistant',
+  app='Phone app in Docker', a1='like the app on the board,', a2='via MQTT · folder app/', mq='MQTT broker', m1='optional: InfluxDB, Grafana,', m2='Home Assistant',
   therme='BOILER UNIT (Weishaupt WTC)', wem='WEM-SG system unit (node 1)', wem0='= display / control panel of the unit',
   w=['• <tspan font-weight="bold">heating curve</tspan> → flow setpoint','• heating circuit / hot water, schedules','• fault memory (8 bytes, CAN segmented)','• data logger for the portal','• JSON interface (ESP, gateway)','• SD card, network socket'],
   wemf='system master', kes='BOILER – burner control', kes0='WEM-FA-G (node 2)',
   k=['• applies the flow setpoint','• flame, fan, gas valve','• boiler temp., flue gas, flow rate','• operating hours, burner starts','• own limits (flue gas, anti-cycling,','  pump), flame supervision','• WEM missing: fault F 91'],
   c=['WEM writes to the boiler every ~5 s:','flow setpoint, DHW setpoint, demand','WEM polls the boiler ~3×/s;','boiler writes readings into the WEM'],
   bus='CAN bus 50 kbit/s (CANopen SDO/PDO) – unencrypted', bus2='every node hears everything · one SDO reply carries max. 4 bytes', draehte='2 wires',
-  esp='ESP bridge (WeAct CAN485)', e=['• listens to everything','• reads single values (SDO)','• switches via WEM JSON,','  verifies the result on the bus'], e5='writing via CAN: off by default',
-  wlan='Wi-Fi · MQTT', wlan2='(IP, same as LAN)', json='HTTP / JSON via Wi-Fi + router – switch commands only', lan='LAN · JSON',
+  esp='ESP bridge (WeAct CAN485)', e=['• listens to everything','• reads single values (SDO)','• switches via CAN at the WEM,','  verifies the result on the bus','• phone app built in (browser)'], e5='fallback: switching via WEM JSON',
+  wlan='Wi-Fi · MQTT · HTTP', wlan2='(IP, same as LAN)', json='HTTP / JSON via Wi-Fi + router – on demand only', lan='LAN · JSON',
   rf='Room sensor / room unit', rf1='WEM-RF, WEM-RG · in the living area', rf2='on the same CAN bus',
   js=['JSON = remote CAN access over LAN (CanApiJson)','A request names a CAN object, e.g. module 07 · 2533/02 = node 2.','The WEM translates, reads or writes on the bus and answers as JSON.','It is translator and gatekeeper: only permitted objects,','nothing on the boiler is writable. Its own objects it answers directly.'],
   l1='encrypted', l2='home network, unencrypted', l3='CAN bus', l4='through the router', l5='optional', l6='from this repository',
@@ -145,10 +145,11 @@ def svg(t):
 <text x="573" y="886" font-size="12" fill="#555">{t['rf1']}</text>
 <text x="573" y="904" font-size="12" fill="#555">{t['rf2']}</text>
 
-<rect x="880" y="685" width="270" height="135" rx="6" fill="#efe3f7" stroke="#7d3c98" stroke-width="2"/>
+<rect x="880" y="685" width="270" height="155" rx="6" fill="#efe3f7" stroke="#7d3c98" stroke-width="2"/>
 <text x="895" y="709" font-weight="bold">{t['esp']}</text>
 {lines(895, 729, 20, t['e'][:3])}<text x="895" y="787">{t['e'][3]}</text>
-<text x="895" y="807" font-size="12" fill="#555">{t['e5']}</text>
+<text x="895" y="807">{t['e'][4]}</text>
+<text x="895" y="827" font-size="12" fill="#555">{t['e5']}</text>
 <line x1="1025" y1="685" x2="1025" y2="378" stroke="#1e8449" stroke-width="2.5" marker-start="url(#pg)" marker-end="url(#pg)"/>
 <text x="1035" y="520" fill="#1e8449" font-size="12">{t['wlan']}</text>
 <text x="1035" y="536" fill="#1e8449" font-size="11">{t['wlan2']}</text>

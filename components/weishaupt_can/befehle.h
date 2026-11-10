@@ -145,7 +145,7 @@ struct Befehl {
   std::string text;           // Klartext zum Grund
   std::string wem;            // Antwort des WEM ab pruefe_bus: bestaetigt | unklar | nicht_erreichbar
   int ist = -1;               // am Bus zurueckgelesener Wert
-  int warten_s = -1;          // bei vorgemerkt: Sekunden bis zur Sperrminute (0 = sofort)
+  int warten_s = -1;          // bei vorgemerkt: Sekunden bis zum Ende des Mindestabstands (0 = sofort)
   std::string ersetzt_durch;  // bei ersetzt: Kennung des neueren Befehls
   uint32_t zeit = 0;          // Unix-Zeit dieser Phase (0 = Uhr noch nicht gestellt)
 };
@@ -383,7 +383,7 @@ inline const char *kessel_text(int st) {
 }
 
 // jetzt = Unix-Zeit (0 = unbekannt), letzter_frame_s = Sekunden seit dem letzten CAN-Frame
-// (-1 = noch nie). schalten.frei_ab nur, solange die Sperrminute noch laeuft (sonst null).
+// (-1 = noch nie). schalten.frei_ab nur, solange der Mindestabstand noch laeuft (sonst null).
 inline std::string status_json(const Status &s, const Schaltung &sch, const std::string &firmware,
                                uint32_t jetzt, long letzter_frame_s) {
   JsonDocument d;

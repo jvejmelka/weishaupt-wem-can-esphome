@@ -51,6 +51,10 @@
 
   <p class="klein">Dieses Image enthält keine Zugangsdaten und kein MQTT. Wer MQTT, Home Assistant oder eigene Pakete will,
     baut selbst mit ESPHome (INSTALL.md). Ohne Gewähr – an der eigenen Heizung auf eigenes Risiko.</p>
+  <p class="klein">Lizenz: Der Quelltext des Projekts steht unter der <a href="LICENSE.txt">MIT-Lizenz</a>. Die Firmware-Dateien
+    enthalten ESPHome und werden deshalb als Ganzes unter der GPL-3.0 weitergegeben; Quelltext ist das
+    <a href="https://github.com/jvejmelka/weishaupt-wem-can-esphome">Repository</a>, die Anteile Dritter stehen in
+    <a href="https://github.com/jvejmelka/weishaupt-wem-can-esphome/blob/main/LIZENZEN-DRITTER.md">LIZENZEN-DRITTER.md</a>.</p>
   <script>
     fetch('manifest.json').then(r => r.json()).then(m => { document.getElementById('version').textContent = m.version; }).catch(() => {});
   </script>
