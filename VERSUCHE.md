@@ -137,7 +137,10 @@ gilt für „Universal“ 1,5–40,0, für „Heizkörper 60“ 8,0–20,0 und f
 nachgesehen. An seiner WTC-GW 15-B (Heizkreistyp „Universal“, Steilheit 8,5) hat er beide Objekte über die
 JSON-Schnittstelle gelesen und [mit der Anzeige am Gerät verglichen](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/issues/8#issuecomment-6708250969):
 `02 00 254B 02` (Steilheit) und `02 00 25AD 02` (Parallelverschiebung, dreimal hin und zurück verstellt). Die Objekte
-sind damit an zwei Anlagen belegt, die Grenzen gelten je Einstellung.
+sind damit an zwei Anlagen belegt, die Grenzen gelten je Einstellung. Am 11.11.2026 hat er auch die Grenzen selbst
+über JSON gelesen ([Kommentar](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/issues/8#issuecomment-6781859717)):
+`02 00 254B 03` = 25 (2,5) und `02 00 254B 04` = 400 (40,0) bei „Universal“. Sub 3 und 4 sind damit an zwei Anlagen als
+Min und Max belegt. Das Minimum 2,5 weicht von den 1,5 der Unterlage ab; warum, ist offen.
 
 **Warmwasser-Programm (MI 3, `0x2580`):** gleicher Aufbau wie die Heiz-Zeitprogramme, das obere Wort war hier `0x3288`.
 Die Kennwerte vor jedem Tagesblock (Sub 3, 19, 35, …) waren `01` für die Gruppe Montag–Freitag und `02` für Samstag/Sonntag;
@@ -168,6 +171,9 @@ Inbetriebnahme → Zuordnungen) und wurde danach wieder abgemeldet. Am Bus:
   Raumgeräte). Bei uns per CAN gelesen. **Über JSON bestätigt von PiLLoX** an einer WTC-GB 25-B mit eingebautem
   WEM-SG und RG2: Antwort `020200258B02000200B0` = 17,6 °C, genau die Anzeige am RG2
   ([Kommentar vom 10.11.2026](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/issues/4#issuecomment-6781466298)).
+- **Raumfeuchte im WEM: noch kein Objekt gefunden.** Am Bus steht sie nur im PDO `0x184` des RG2 (Byte 2–3). Das
+  Systemgerät kennt sie aber: Bei PiLLoX zeigt die Anzeige der WTC-GB 25-B die Raumfeuchte des RG2
+  ([Kommentar vom 11.11.2026](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/issues/4#issuecomment-6781823795)).
 - Auf die Heizung wirkte die Zuordnung nicht: Vorlaufsoll und Heizanforderung liefen unverändert weiter. Die
   Regelvariante blieb witterungsgeführt; eine Abfrage dazu kam am Display nicht.
 
