@@ -188,7 +188,8 @@ In `weishaupt-wem-can.yaml` unter `packages:` nicht benötigte Zeilen mit `#` au
 | Zusatzanzeigen in der App (Raumtemperaturen, „Wärmepumpe läuft“) | `zusatz` (braucht `mqtt`) |
 | Werte bei stillem Bus von Hand per JSON holen | `json_lesen` (braucht `schalten`, `warmwasser`) |
 
-In der Vorlage ist alles eingeschaltet außer `api`, `feste_ip` und `kraiz`.
+In der Vorlage ist alles eingeschaltet außer `api`, `feste_ip`, `kraiz` und `can_tunnel` (Versuch, nur im Zweig
+`can-tunnel`: [VERSUCHE.md, 10b](VERSUCHE.md#10b-can-tunnel-über-wlan-versuch-zweig-can-tunnel)).
 
 `warmwasser` nur, wenn ein Warmwasserspeicher am Gerät hängt.
 `warmwasser_schalten` braucht `schalten` und `warmwasser`.

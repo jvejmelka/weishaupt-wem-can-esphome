@@ -2,6 +2,8 @@
 // CAN-Tunnel ueber WLAN (UDP) zwischen zwei Boards: echtes Raumgeraet am Tisch, WEM an der Therme.
 // Beide Richtungen leiten alles weiter (Entscheidung 05.11.2026). Sicherung ist die Herkunft: nur Frames, die das Board
 // auf seinem eigenen Bus empfangen hat, nur von der eingetragenen Gegenstelle. Dazu Zaehler und Mitschnitt.
+// Einschalten und Einstellen: pakete/can-tunnel.yaml; Beschreibung, Grenzen und Sicherheit: VERSUCHE.md, Abschnitt 10b.
+// Die UDP-Pakete sind unverschluesselt und nur ueber die Absenderadresse gesichert - nur im eigenen Heimnetz verwenden.
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -15,10 +17,39 @@
 
 namespace can_tunnel {
 
+// Beide Boards muessen dieselben Ports haben; wer sie aendert, baut beide Boards neu.
 constexpr uint16_t PORT = 47011;      // Frames zwischen den Boards
 constexpr uint16_t PORT_LOG = 47012;  // Mitschnitt an einen Rechner im Heimnetz
 
 inline bool gueltig(uint32_t id) { return id <= 0x7FF; }
+
+// Adresse der Gegenstelle: IPv4 in Punktschreibweise, vier Teile 0-255 ohne fuehrende Null (inet_addr laese sie
+// oktal). 0.0.0.0 und 255.255.255.255 gelten nicht - ohne gueltige Gegenstelle sendet der Tunnel nichts.
+// constexpr: das Paket prueft die Einstellung schon beim Bauen (static_assert), der Kanal noch einmal zur Laufzeit.
+constexpr bool adresse_ok(const char *s) {
+  if (s == nullptr) return false;
+  int teile = 0, wert = 0, ziffern = 0, summe = 0;
+  bool nur_255 = true;
+  for (;; s++) {
+    const char c = *s;
+    if (c >= '0' && c <= '9') {
+      if (ziffern > 0 && wert == 0) return false;  // fuehrende Null
+      wert = wert * 10 + (c - '0');
+      if (++ziffern > 3 || wert > 255) return false;
+    } else if (c == '.' || c == 0) {
+      if (ziffern == 0 || ++teile > 4) return false;
+      summe += wert;
+      if (wert != 255) nur_255 = false;
+      wert = 0; ziffern = 0;
+      if (c == 0) break;
+    } else {
+      return false;
+    }
+  }
+  return teile == 4 && summe != 0 && !nur_255;
+}
+// Fuer den Mitschnitt: leer = kein Mitschnitt
+constexpr bool adresse_ok_oder_leer(const char *s) { return s != nullptr && (s[0] == 0 || adresse_ok(s)); }
 
 // Paket: 'W' 'B' folge id_lo id_hi(+0x80 = RTR) len d0..d7
 inline size_t packen(uint8_t *p, uint8_t folge, uint32_t id, bool rtr, const uint8_t *d, size_t n) {
@@ -60,6 +91,7 @@ class Kanal {
  public:
   bool oeffnen(const char *gegenstelle) {
     if (fd_ >= 0) return true;
+    if (!adresse_ok(gegenstelle)) return false;  // keine gueltige Gegenstelle: Kanal bleibt zu, nichts wird gesendet
     int f = ::lwip_socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (f < 0) return false;
     sockaddr_in a{}; a.sin_family = AF_INET; a.sin_port = htons(PORT); a.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -109,7 +141,7 @@ inline Kanal *kanal(const char *gegenstelle) {
 class Mitschnitt {
  public:
   void oeffnen(const char *ziel, const char *name) {
-    if (fd_ >= 0 || !ziel[0]) return;
+    if (fd_ >= 0 || !adresse_ok(ziel)) return;  // leer oder ungueltig: kein Mitschnitt
     int f = ::lwip_socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (f < 0) return;
     int fl = ::lwip_fcntl(f, F_GETFL, 0); ::lwip_fcntl(f, F_SETFL, fl | O_NONBLOCK);

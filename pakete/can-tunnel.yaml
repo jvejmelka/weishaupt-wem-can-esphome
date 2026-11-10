@@ -1,9 +1,64 @@
-# CAN-Tunnel ueber WLAN (Board an der Therme <-> Board mit Raumgeraet).
-# Seit 08.11.2026: nach jedem Neustart schaltet sich der Tunnel
-# einmal selbst ein, sobald das WLAN steht. Von Hand ausschalten bleibt bis zum naechsten Neustart aus.
-# Nur fuer Versuche: siehe components/weishaupt_can/can_tunnel.h
-# ${tunnel_ziel} = IP der Gegenstelle, ${tunnel_log} = IP fuer den Mitschnitt ("" = keiner), ${tunnel_name} = Kuerzel im Mitschnitt,
-# ${tunnel_nur_bei_bus} = true: nur senden, wenn kurz zuvor etwas vom Bus kam (Board an der Therme)
+# Paket CAN-TUNNEL (Versuch): zwei Boards verlaengern den CAN-Bus ueber das WLAN -
+# Board A haengt an der Therme, Board B bildet mit einem Raumgeraet einen kleinen eigenen Bus.
+# Beschreibung, Aufbau, Grenzen und Sicherheit: VERSUCHE.md, Abschnitt 10b. Code: components/weishaupt_can/can_tunnel.h
+#
+# ACHTUNG: Der Tunnel filtert nicht. Was das Geraet am anderen Ende sendet, kommt am Heizungsbus an - auch
+# Schreibauftraege. Die UDP-Pakete sind unverschluesselt und nur ueber die Absenderadresse gesichert.
+# Nur fuer Versuche, nur im eigenen Heimnetz, nur unter Aufsicht.
+#
+# Einschalten: in der Hauptdatei unter packages:   can_tunnel: !include pakete/can-tunnel.yaml
+# Braucht WLAN (Paket netz-wlan), den CAN-Bus aus Paket kessel (id my_can_bus) und in der Hauptdatei die
+# Update-Eintraege mit  id: ota_esphome  und  id: ota_web  (so in weishaupt-wem-can.yaml).
+# Beide Boards brauchen dieselbe Firmware und eine feste Adresse (Router-Reservierung oder Paket feste-ip).
+#
+# Einstellungen = Substitutionen. Hier stehen nur die Vorgaben; ueberschrieben wird in der Hauptdatei unter
+# substitutions:. Adressen gehoeren in secrets.yaml (Vorlage secrets.yaml.example), nicht in die Hauptdatei:
+#
+#   tunnel_ziel         IP des ANDEREN Boards (Pflicht). Fehlt sie oder ist sie keine IPv4-Adresse, bricht der Bau ab.
+#   tunnel_log          IP eines Rechners fuer den Mitschnitt per UDP, "" = kein Mitschnitt
+#                       (Empfang: werkzeuge/tunnel_mitschnitt.py)
+#   tunnel_name         Kuerzel dieses Boards im Mitschnitt und im Log, z. B. "A" und "B"
+#   tunnel_nur_bei_bus  "true"  = nur auf den Bus senden, wenn in den letzten 3 s etwas vom Bus kam
+#                                 (Board an der Therme: bei ausgeschalteter Therme stiege sonst der Fehlerzaehler bis Bus-off)
+#                       "false" = immer senden (Board am Raumgeraet, damit Anfragen ein stummes Geraet erreichen)
+#   tunnel_selbst_ein   "false" = der Tunnel ist nach jedem Neustart AUS und wird von Hand eingeschaltet (Vorgabe)
+#                       "true"  = er schaltet sich nach jedem Neustart einmal selbst ein, sobald das WLAN steht;
+#                                 von Hand ausgeschaltet bleibt er bis zum naechsten Neustart aus
+#
+# Die UDP-Ports (47011 Frames, 47012 Mitschnitt) stehen in can_tunnel.h.
+substitutions:
+  tunnel_ziel: ""
+  tunnel_log: ""
+  tunnel_name: "A"
+  tunnel_nur_bei_bus: "true"
+  tunnel_selbst_ein: "false"
+
+# Netz: der Tunnel traegt bis zu einigen hundert Frames pro Sekunde (Menue-Paket eines Raumgeraets).
+esp32:
+  framework:
+    sdkconfig_options:
+      CONFIG_LWIP_UDP_RECVMBOX_SIZE: "64"   # Eingangspuffer fuer UDP-Pakete (ESP-IDF-Vorgabe: 6)
+wifi:
+  power_save_mode: none                     # WLAN-Stromsparen aus: sonst warten Pakete auf das naechste Aufwachen
+
+# Firmware-Update: CAN-Baustein waehrenddessen anhalten (Versuch, Wirkung unbelegt - siehe can_tunnel.h).
+# Das Hochladen im Browser (/update) klappte bei uns immer, "esphome upload" am Board an der Therme mehrfach nicht.
+ota:
+  - id: !extend ota_esphome
+    on_begin:
+      then:
+        - lambda: 'can_tunnel::ota_beginn();'
+    on_error:
+      then:
+        - lambda: 'can_tunnel::ota_fehler();'
+  - id: !extend ota_web
+    on_begin:
+      then:
+        - lambda: 'can_tunnel::ota_beginn();'
+    on_error:
+      then:
+        - lambda: 'can_tunnel::ota_fehler();'
+
 globals:
   - id: tunnel_auto_erledigt
     type: bool
@@ -18,6 +73,11 @@ switch:
     restore_mode: ALWAYS_OFF
     on_turn_on:
       - lambda: |-
+          // Einstellungen schon beim Bauen pruefen (Adressen stehen in secrets.yaml)
+          static_assert(can_tunnel::adresse_ok("${tunnel_ziel}"),
+                        "CAN-Tunnel: tunnel_ziel fehlt oder ist keine IPv4-Adresse (IP des anderen Boards, VERSUCHE.md 10b)");
+          static_assert(can_tunnel::adresse_ok_oder_leer("${tunnel_log}"),
+                        "CAN-Tunnel: tunnel_log ist keine IPv4-Adresse (leer lassen = kein Mitschnitt)");
           can_tunnel::schnell().start();
           can_tunnel::kanal("${tunnel_ziel}")->neu();
           ESP_LOGW("tunnel", "EIN (${tunnel_name})");
@@ -43,13 +103,13 @@ canbus:
               can_tunnel::mitschnitt("${tunnel_log}", "${tunnel_name}")->frame('R', can_id, remote_transmission_request, x, millis());
 
 interval:
-  - interval: 5s  # Tunnel nach Neustart einmal selbst einschalten
+  - interval: 5s  # mit tunnel_selbst_ein "true": Tunnel nach Neustart einmal selbst einschalten
     then:
       - if:
           condition:
             and:
               - wifi.connected:
-              - lambda: 'return !id(tunnel_auto_erledigt);'
+              - lambda: 'return (${tunnel_selbst_ein}) && !id(tunnel_auto_erledigt);'
           then:
             - lambda: 'id(tunnel_auto_erledigt) = true;'
             - switch.turn_on: tunnel_an
@@ -63,7 +123,7 @@ interval:
           while (k->holen(cid, rtr, d)) {
             if (!can_tunnel::gueltig(cid)) continue;
             // Therme aus/Bus still: nicht senden, sonst Fehlerzaehler bis Bus-off (05.11.2026)
-            if (${tunnel_nur_bei_bus} && !can_tunnel::bus_aktiv(millis())) { can_tunnel::zaehler().gesperrt++; continue; }
+            if ((${tunnel_nur_bei_bus}) && !can_tunnel::bus_aktiv(millis())) { can_tunnel::zaehler().gesperrt++; continue; }
             bool ok = id(my_can_bus)->send_data(cid, false, rtr, d) == canbus::ERROR_OK;
             if (ok) can_tunnel::zaehler().zum_bus++; else can_tunnel::zaehler().can_fehler++;
             m->frame(ok ? 'T' : 'X', cid, rtr, d, millis());

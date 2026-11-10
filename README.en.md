@@ -141,6 +141,7 @@ Comment out unneeded lines under `packages:`.
 | `feste-ip.yaml` | static IP instead of DHCP | no |
 | `kraiz-per-can.yaml` | **More values via CAN** (by cg089): 29 objects of the kraiz/hassio-weishaupt integration – room/flow setpoints, heating circuit and DHW status, operating phase –, button "Warmwasser-Push" (DHW boost), error block of the WEM as text (requires `wem-schalten` and own CAN requests switched on) | no |
 | `dallas.yaml` | 1-Wire bus for your own DS18B20 sensors (by cg089) | no |
+| `can-tunnel.yaml` | **CAN tunnel (experiment, only in branch `can-tunnel`):** two boards extend the CAN bus over WLAN, e.g. for a room unit on the desk. Forwards **unfiltered** to the heating bus; commented out in the template, addresses in `secrets.yaml` – read [VERSUCHE.en.md, 10b](VERSUCHE.en.md#10b-can-tunnel-over-wlan-experiment-branch-can-tunnel) first (requires `netz-wlan`) | no |
 
 **Second board:** [`olimex-weishaupt.yaml`](olimex-weishaupt.yaml) builds the same packages for the **Olimex ESP32-EVB**
 (Ethernet instead of Wi-Fi, Home Assistant API) – variant by cg089, see [OLIMEX-ESP32-EVB.md](OLIMEX-ESP32-EVB.md) (German).

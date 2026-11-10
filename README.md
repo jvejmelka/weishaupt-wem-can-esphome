@@ -132,6 +132,7 @@ Nicht benötigte Zeilen unter `packages:` auskommentieren.
 | `feste-ip.yaml` | feste IP statt DHCP | nein |
 | `kraiz-per-can.yaml` | **Weitere Werte per CAN** (von cg089): 29 Objekte der Integration kraiz/hassio-weishaupt – Raum-/Vorlaufsollwerte, Status Heizkreis und Warmwasser, Betriebsphase –, Knopf „Warmwasser-Push“, Fehlerblock des WEM mit Klartext (braucht `wem-schalten` und eingeschaltete eigene CAN-Anfragen) | nein |
 | `dallas.yaml` | 1-Wire-Bus für eigene DS18B20-Fühler (von cg089) | nein |
+| `can-tunnel.yaml` | **CAN-Tunnel (Versuch, nur im Zweig `can-tunnel`):** zwei Boards verlängern den CAN-Bus über das WLAN, z. B. für ein Raumgerät am Schreibtisch. Reicht **ungefiltert** auf den Heizungsbus weiter; in der Vorlage auskommentiert, Adressen in `secrets.yaml` – erst [VERSUCHE.md, 10b](VERSUCHE.md#10b-can-tunnel-über-wlan-versuch-zweig-can-tunnel) lesen (braucht `netz-wlan`) | nein |
 
 **Zweites Board:** [`olimex-weishaupt.yaml`](olimex-weishaupt.yaml) baut dieselben Pakete für das **Olimex ESP32-EVB**
 (Ethernet statt WLAN, Home-Assistant-API) – Variante von cg089, siehe [OLIMEX-ESP32-EVB.md](OLIMEX-ESP32-EVB.md).

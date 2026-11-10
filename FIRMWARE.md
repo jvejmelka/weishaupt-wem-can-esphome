@@ -108,6 +108,7 @@ zehn Plätze aus [PROTOKOLL.md, Abschnitt 8](PROTOKOLL.md#8-wann-sich-der-wem-au
 | Freies CAN-Schreiben (Experten) | **aus** | – | `wem-schalten` | Experten | Admin-Anmeldung und Experten-Passwort |
 | CAN-Rohmitschnitt nach MQTT | **aus** | – | `mqtt` | Experten | Admin-Anmeldung und Experten-Passwort |
 | Waechter: Neustart nach Minuten ohne Bus (0 = aus) | 5 | 0–120 | `kessel` | Experten | Admin-Anmeldung und Experten-Passwort |
+| CAN-Tunnel (Experten) | **aus** | – | `can-tunnel` (wahlweise) | – | Experten-Oberfläche |
 | R1 Mindestabstand (min) | 1 | 1–1440 | `verdacht` | – | Experten-Oberfläche |
 | R2 Mindestabstand (min) | 10 | 1–1440 | `verdacht` | – | Experten-Oberfläche |
 | R3 Mindestabstand (min) | 1 | 1–1440 | `verdacht` | – | Experten-Oberfläche |

@@ -155,6 +155,16 @@ was man damit macht:
   Weishaupt-Raumgerät, hieße, auf dem Bus einen fremden Teilnehmer vorzutäuschen. Das tut diese
   Firmware bewusst nicht – s. Idee 4.
 
+**Über JSON geht das nicht.** Ein Raumgerät oder Raumfühler ist für den WEM ein eigener Teilnehmer am CAN-Bus: Es wird
+vom WEM aufgenommen, sendet ein Lebenszeichen und liefert den Raumwert von sich aus
+([VERSUCHE.md, 10a](VERSUCHE.md#10a-raumgerät-wem-rg2-am-bus-mitschnitt-november-2026)). Die JSON-Schnittstelle des WEM
+beantwortet nur einzelne Anfragen nach seinen eigenen Werten – darüber kann sich kein Gerät anmelden und nichts laufend
+senden, und regelmäßige Anfragen verträgt der WEM nicht. Einen JSON-Weg, dem WEM einen Raumwert zu liefern, kennen wir
+nicht. Ein Board ohne CAN-Kabel (nur JSON) reicht also zum Abrufen von Werten und zum Schalten von Hand; wer ein
+Raumgerät oder einen Raumfühler am WEM haben will – echt, über den Tunnel (Idee 4) oder nachgebildet (Idee 9, Stufe 2) –,
+braucht ein Board **am CAN-Bus**: das WeAct CAN485 oder, für Ethernet, die
+[Olimex-Variante von cg089](OLIMEX-ESP32-EVB.md).
+
 ## 4. Weishaupt-Raumgerät per Funk (CAN über WLAN)
 
 Weishaupts eigene Raumgeräte hängen per Kabel am selben CAN-Bus (Klemme H L − +, − und + versorgen
@@ -179,7 +189,7 @@ verwirren. Deshalb nur als Experiment, mit Rückweg (Kabel oder Gerät abziehen)
 
 ### Gesucht: jemand mit Weishaupt-Raumgerät am Bus
 
-> **Stand 08.11.2026:** Ein gebrauchtes WEM-RG2 2.1 läuft bei uns, auch über einen CAN-Tunnel (WLAN) vom Schreibtisch aus. Aufnahme, Lesen und Schreiben sind mitgeschnitten und entschlüsselt: [VERSUCHE.md, 10a](VERSUCHE.md#10a-raumgerät-wem-rg2-am-bus-mitschnitt-november-2026) und [10b](VERSUCHE.md#10b-can-tunnel-über-wlan-versuch-zweig-can-tunnel). Weitere Mitschnitte (RG1, WEM-RF, andere Stände, mehrere Raumgeräte, Raumfühler zugeordnet) bleiben willkommen.
+> **Stand 08.11.2026:** Ein gebrauchtes WEM-RG2 2.1 läuft bei uns, auch über einen CAN-Tunnel (WLAN) vom Schreibtisch aus. Aufnahme, Lesen und Schreiben sind mitgeschnitten und entschlüsselt: [VERSUCHE.md, 10a](VERSUCHE.md#10a-raumgerät-wem-rg2-am-bus-mitschnitt-november-2026) und [10b](VERSUCHE.md#10b-can-tunnel-über-wlan-versuch-zweig-can-tunnel). Der Tunnel ist als Paket `can-tunnel` im Zweig `can-tunnel` einstellbar und beschrieben (zwei Boards, Adressen in `secrets.yaml`). Weitere Mitschnitte (RG1, WEM-RF, andere Stände, mehrere Raumgeräte, Raumfühler zugeordnet) bleiben willkommen.
 
 Wir hatten bisher **kein** Raumgerät und können deshalb nicht sehen, was es auf dem Bus sendet. Genau das
 wäre aber die Grundlage für diese Idee – und nebenbei für eine Raumaufschaltung aus eigenen Sensoren
@@ -293,6 +303,7 @@ Display nachts aus, an bei Berührung.
 
 **Stufe 2 – RG-kompatibel (Ziel, noch nicht belegt):** Das CAN-Board spielt gegenüber dem WEM ein
 Raumgerät und liefert den Raumwert des Panels bzw. Fühlers – echte Raumaufschaltung ohne Weishaupt-Gerät.
+Das geht nur am CAN-Bus, nicht über JSON (s. Idee 3).
 Voraussetzungen und Haken:
 
 - ~~erst ein Mitschnitt eines echten Raumgeräts~~ – liegt seit November 2026 vor

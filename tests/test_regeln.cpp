@@ -1,7 +1,8 @@
 // Tests des Bauteils weishaupt_can (components/weishaupt_can/): Regellogik (regellogik.h, regelwerk.h;
 // die Einzeltests R1-R5 pruefen die eingefrorene v29-Fassung rl29, die Aequivalenz v29/neu steht in
 // test_aequivalenz.inc), Datei-Parser
-// (verdacht.h, zusatz.h), Schaltbefehle/Status-JSON (befehle.h) und die Zustandsklassen (kern.h) -
+// (verdacht.h, zusatz.h), Schaltbefehle/Status-JSON (befehle.h), die Zustandsklassen (kern.h) und das
+// Paketformat des CAN-Tunnels (can_tunnel.h, test_tunnel.inc) -
 // laeuft auf dem PC, ohne ESPHome, ohne Board, ohne Bus.
 // Alle Frames sind AUSGEDACHT nach den Mustern in PROTOKOLL.md, keine Mitschnitte.
 //
@@ -19,6 +20,8 @@
 #include "../components/weishaupt_can/json_lesen.h"
 #include "../components/weishaupt_can/app_dateien.h"
 #include "../components/weishaupt_can/fehlercodes.h"
+#define CAN_TUNNEL_NUR_FILTER   // nur Paketformat und Pruefungen, ohne ESP-IDF
+#include "../components/weishaupt_can/can_tunnel.h"
 #include "referenz_v29/regellogik_v29.h"
 #include <cstdarg>
 #include <random>
@@ -833,6 +836,7 @@ TEST(register_json_schreiben_wie_v27) {
 #include "test_aequivalenz.inc"
 #include "test_regelwerk.inc"
 #include "test_app.inc"
+#include "test_tunnel.inc"
 
 // ---------------------------------------------------------------- Stoermeldungen (EMCY 0x081/0x082)
 TEST(fehlercodes_emcy) {

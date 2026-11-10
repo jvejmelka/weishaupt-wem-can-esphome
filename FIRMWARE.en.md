@@ -109,6 +109,7 @@ ten slots from [PROTOKOLL.en.md, section 8](PROTOKOLL.en.md#8-when-the-wem-locks
 | Freies CAN-Schreiben (Experten) | **off** | – | `wem-schalten` | Experten | admin login and expert password |
 | CAN-Rohmitschnitt nach MQTT | **off** | – | `mqtt` | Experten | admin login and expert password |
 | Waechter: Neustart nach Minuten ohne Bus (0 = aus) | 5 | 0–120 | `kessel` | Experten | admin login and expert password |
+| CAN-Tunnel (Experten) | **off** | – | `can-tunnel` (optional) | – | expert interface |
 | R1 Mindestabstand (min) | 1 | 1–1440 | `verdacht` | – | expert interface |
 | R2 Mindestabstand (min) | 10 | 1–1440 | `verdacht` | – | expert interface |
 | R3 Mindestabstand (min) | 1 | 1–1440 | `verdacht` | – | expert interface |

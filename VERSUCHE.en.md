@@ -146,32 +146,93 @@ Two boards of this project join two CAN buses over WLAN: board A sits at the boi
 desk with the room unit and forms a small bus of its own with it. This lets you operate and capture an RG2 without running
 a cable to the boiler room. The RG2 needs its own supply there (DC 15–30 V, we used a step-up converter set to 24 V).
 
+> **Warning – read before switching it on.** The tunnel **does not filter**: everything the device at the other end
+> sends reaches the heating bus, including write orders. The UDP packets are unencrypted and protected only by the
+> sender address. So: for experiments only, only inside your own home network, only while you are watching – and cut the
+> power of board B when nobody is there. The tunnel is not part of `main` or of the ready-made firmware files.
+
+**Why CAN and not JSON.** To the WEM, a room unit or room sensor is a participant of its own on the CAN bus: the WEM
+admits it, it sends a heartbeat and delivers the room value on its own initiative (section 10a). The WEM's JSON
+interface only answers single requests for its own values – no device can register through it or send anything
+continuously, and the WEM does not tolerate regular requests. We know of no JSON way to give the WEM a room value.
+Anyone who wants a room unit or room sensor at the WEM – a real one, one behind the tunnel, or later an emulated one –
+therefore needs a board **on the CAN bus** (WeAct CAN485; for Ethernet the
+[Olimex variant by cg089](OLIMEX-ESP32-EVB.md)). A board without a CAN cable is not enough for that.
+
+**What you need.**
+- Two boards with the firmware from the branch `can-tunnel`, both in the same WLAN. The tunnel has only been tried with
+  two WeAct CAN485 boards; the package requires WLAN (package `netz-wlan`).
+- A **fixed address** for both boards (reservation in the router or package `feste-ip`): each board only accepts
+  packets from the configured address of the other.
+- At the room unit: its own supply (see above) and a bus termination on the small bus – switch "120 Ω CAN" on board B
+  **on** (end of a short bus of its own), on board A **off** as always ([INSTALL.md](INSTALL.md), German).
+- Optionally a computer in the home network that takes the capture.
+
+**Setting it up** – for both boards, each with the address of the other:
+
+1. Put the addresses into `secrets.yaml` (template: `secrets.yaml.example`). They live only there, not in the main file:
+   ```yaml
+   tunnel_ziel: "192.0.2.54"   # IP of the OTHER board (example address)
+   tunnel_log: "192.0.2.30"    # only for the capture: IP of the computer
+   ```
+2. In `weishaupt-wem-can.yaml` uncomment the prepared lines and adjust them:
+   ```yaml
+   substitutions:
+     tunnel_ziel: !secret tunnel_ziel
+     tunnel_log: !secret tunnel_log       # omit the line = no capture
+     tunnel_name: "A"                     # "B" on the other board
+     tunnel_nur_bei_bus: "true"           # "false" on the board at the room unit
+
+   packages:
+     can_tunnel: !include pakete/can-tunnel.yaml
+   ```
+3. Build and flash as described in [INSTALL.md](INSTALL.md) (German).
+4. On **both** boards turn on the switch "CAN-Tunnel (Experten)" in the web interface. Turning it off on either board
+   cuts the connection.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `tunnel_ziel` | – (required) | IPv4 address of the other board. If it is missing or not an address, the build stops with a message. |
+| `tunnel_log` | `""` | address of a computer for the capture; empty = no capture |
+| `tunnel_name` | `"A"` | tag of this board in the capture and in the log |
+| `tunnel_nur_bei_bus` | `"true"` | `"true"`: only send to the bus if something came from the bus in the last 3 s (board at the boiler). `"false"`: always send (board at the room unit). |
+| `tunnel_selbst_ein` | `"false"` | `"false"`: the tunnel is off after every restart. `"true"`: it turns itself on once after every restart as soon as WLAN is up. |
+
+The settings are fixed in the firmware; at runtime only the switch can be operated. The defaults and their description
+are in the header of [`pakete/can-tunnel.yaml`](pakete/can-tunnel.yaml), the UDP ports in
+[`can_tunnel.h`](components/weishaupt_can/can_tunnel.h) (if you change them, rebuild both boards).
+
 **How it works.** Each board sends every frame it receives on its own bus via UDP (port 47011) to the configured peer
 and puts what arrives from there on its own bus. Only packets from the peer's address are accepted. A packet is
-`'W' 'B' seq id_lo id_hi(+0x80 = RTR) len d0…d7`; the board counts lost packets from the sequence number. Every 10 s
-there is a status line (from/to bus, lost, errors, bus-off); optionally a text capture goes to a computer via UDP
-(port 47012). The round trip order → delivery was 25–35 ms.
+`'W' 'B' seq id_lo id_hi(+0x80 = RTR) len d0…d7`; the board counts lost packets from the sequence number. The round
+trip order → delivery was 25–35 ms.
 
-**Protection.** The tunnel does not filter: everything the RG2 sends reaches the WEM, including write orders. It is
-meant for experiments only. Board A only sends if something came from the bus in the last 3 s – with the boiler switched
+**Protection.** Board A only sends if something came from the bus in the last 3 s – with the boiler switched
 off the error counter otherwise rose to bus-off. Board B does not use this lock, so that the WEM's requests reach the
-silent RG2. Both try a recovery every 10 s if the CAN controller is in bus-off.
+silent RG2. Both try a recovery every 10 s if the CAN controller is in bus-off. Without a valid peer address the channel
+stays closed.
 
-**Switch** "CAN-Tunnel (Experten)": it turns itself on once after every restart as soon as WLAN is up. Switched off by
-hand it stays off until the next restart.
+**Switch** "CAN-Tunnel (Experten)": it is off after a restart. With `tunnel_selbst_ein: "true"` it turns itself on once
+after every restart as soon as WLAN is up; switched off by hand it then stays off until the next restart. That is
+convenient for long captures, but it also means the board writes to the bus again on its own after every power cut.
 
-**Including it** (addresses are placeholders):
+**Capture.** If `tunnel_log` is set, each board sends its frames as text lines via UDP (port 47012) to that computer,
+plus a status line every 10 s (from/to bus, lost, errors, locked, bus-off). Receive it with
+[`werkzeuge/tunnel_mitschnitt.py`](werkzeuge/tunnel_mitschnitt.py) (Python 3 only):
 
-```yaml
-substitutions:
-  tunnel_ziel: "<peer-ip>"
-  tunnel_log: ""              # or <ip-of-a-computer> for the capture
-  tunnel_name: "B1"           # tag in the capture
-  tunnel_nur_bei_bus: "true"  # board at the boiler: true, board at the room unit: false
-
-packages:
-  can_tunnel: !include pakete/can-tunnel.yaml
 ```
+python3 werkzeuge/tunnel_mitschnitt.py --datei tunnel.txt
+
+14:03:08.009 A 1234 R 184:FA00C201      A received the frame on its bus and forwarded it
+14:03:08.021 B 1250 T 184:FA00C201      B got it and sent it on its bus (X = sending refused)
+```
+
+The number after the tag is milliseconds since the board started. Captures can contain serial numbers and device
+identifiers – do not publish them raw.
+
+**What else the package changes:** a larger receive buffer for UDP (64 instead of the ESP-IDF default 6), WLAN power
+saving off, longer CAN queues (receive 64, send 32) and stopping the CAN controller during a firmware update. Without
+the package the firmware behaves as in `main`.
 
 **What worked:** commissioning the RG2, reading and writing all values from section 10a, restarting the RG2 and
 restarting board B, each without intervention.
