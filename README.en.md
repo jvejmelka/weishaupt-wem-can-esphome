@@ -458,6 +458,20 @@ isolation, RS485, USB-C; switchable 120 Ω termination (**off** here).
   around $9–17 plus shipping, depending on the country. At the time of writing the board could not be found on Amazon.
 - Power supply in operation: any USB power adapter rated 1 A or more.
 
+**Why a separate power adapter instead of the "− +" terminals of the heating bus?** The board could also be
+fed from the bus via VIN (5–36 V). Reasons against it:
+
+- **The galvanic isolation would be lost.** VIN and USB are on the ESP side of the board, only H and L are
+  on the isolated side. Wiring VIN to "− +" connects the ground of the heating bus to the board's
+  electronics and bypasses the isolated transceiver. With a power adapter, only the two wires H and L
+  are connected to the bus.
+- **The bus supply is not specified for it.** The WTC-GW installation manual gives neither voltage nor
+  current for "− +", only a maximum of three room units or room sensors per terminal (according to its
+  manual, a room unit needs 15–30 V and at most 0.7 W). An ESP32 with Wi-Fi is in that range on average
+  and above it during transmit peaks – we have not measured this.
+- **The board stays independent.** It can be powered off, restarted or plugged into a PC without touching
+  the heating.
+
 Alternative built from individual parts (MenkeC's build): ESP32-C3 SuperMini plus SN65HVD230 transceiver –
 cheaper, but **without** galvanic isolation.
 

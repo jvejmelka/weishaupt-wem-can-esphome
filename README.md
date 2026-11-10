@@ -441,6 +441,20 @@ Trennung, RS485, USB-C; umschaltbarer 120-Ω-Abschluss (hier **aus**).
   rund 9–17 $ plus Versand, je nach Land. Bei Amazon war das Board beim Schreiben nicht zu finden.
 - Stromversorgung im Betrieb: beliebiges USB-Netzteil ab 1 A.
 
+**Warum ein eigenes Netzteil und nicht die Klemmen „− +“ des Heizungsbusses?** Das Board ließe sich über
+VIN (5–36 V) auch aus dem Bus speisen. Dagegen spricht:
+
+- **Die galvanische Trennung ginge verloren.** VIN und USB liegen auf der ESP-Seite des Boards, nur H und L
+  auf der getrennten Seite. Wer VIN an „− +“ legt, verbindet die Masse des Heizungsbusses mit der
+  Elektronik des Boards und überbrückt damit den getrennten Transceiver. Mit Netzteil hängen am Bus nur
+  die beiden Adern H und L.
+- **Die Busversorgung ist dafür nicht ausgewiesen.** Die Montageanleitung des WTC-GW nennt für „− +“ weder
+  Spannung noch Strom, nur höchstens drei Raumgeräte oder Raumfühler je Klemme (ein Raumgerät braucht
+  laut seiner Anleitung 15–30 V und höchstens 0,7 W). Ein ESP32 mit WLAN liegt im Mittel in dieser
+  Größenordnung, bei Sendespitzen darüber – gemessen haben wir das nicht.
+- **Das Board bleibt unabhängig.** Es lässt sich stromlos machen, neu starten oder an einen PC stecken,
+  ohne die Heizung anzufassen.
+
 Alternative mit Einzelteilen (Aufbau von MenkeC): ESP32-C3 SuperMini plus Transceiver SN65HVD230 –
 billiger, aber **ohne** galvanische Trennung.
 

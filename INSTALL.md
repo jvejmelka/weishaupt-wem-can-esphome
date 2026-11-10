@@ -54,7 +54,9 @@ aufhängen. „Schalten über“ auf **CAN** lassen.
 
 Schalter auf dem WeAct-Board (rechts, links = OFF, rechts = ON): oben **120 Ω CAN** (ab Werk ON – am Heizungsbus
 mitten in der Leitung auf **OFF**, nur am Ende eines eigenen kurzen Busses ON), Mitte PUPD und unten 120 Ω RS485
-(werden nicht gebraucht). Versorgung wahlweise USB-C oder Klemme **VIN/GND 5–36 V**.
+(werden nicht gebraucht). Versorgung wahlweise USB-C oder Klemme **VIN/GND 5–36 V** – aber **nicht aus den
+Klemmen „− +“ des Heizungsbusses**: das überbrückt die galvanische Trennung, Begründung unter
+[Hardware](README.md#hardware).
 
 ## 1. Was du brauchst
 
