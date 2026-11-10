@@ -488,6 +488,9 @@ cheaper, but **without** galvanic isolation.
 - [BorgNumberOne/Weishaupt_CanApiJson](https://github.com/BorgNumberOne/Weishaupt_CanApiJson) –
   register table of the WEM JSON interface (`/ajax/CanApiJson.json`) with MI/MX/OX/OS,
   factors and update classes (data point list of the Weishaupt WEM-Modbus gateway).
+- [JS-DE-Tech/hacs-weishaupt-lan](https://github.com/JS-DE-Tech/hacs-weishaupt-lan) – Home Assistant integration
+  via the JSON interface (MIT). The addresses of the WEM's network objects come from there
+  ([PROTOKOLL, section 7a](PROTOKOLL.en.md#7a-objects-taken-from-other-projects-unverified)).
 - [kraiz/hassio-weishaupt](https://github.com/kraiz/hassio-weishaupt) – Home Assistant integration
   via the JSON interface. The issues explain why the WEM has to be handled so carefully:
   - [#15](https://github.com/kraiz/hassio-weishaupt/issues/15) – ten requests for non-existent

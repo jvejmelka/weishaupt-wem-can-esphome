@@ -18,6 +18,12 @@
 #   modbus            Register am WEM-Modbus-Gateway, wenn die Quelle es nennt
 #   quelle            Liste von Kuerzeln aus "quellen"
 #   hinweis, hinweis_en   optional
+#
+# nur_json: Objekte, die nur als Adresse der JSON-Schnittstelle bekannt sind (kein CAN-Objekt belegt).
+#   Je Gruppe titel, titel_en, hinweis, hinweis_en, objekte; je Objekt json ("MI MX OX OS"),
+#   optional sub_bis (OS laeuft von der genannten bis zu dieser Nummer), name, name_en, art, art_en
+#   (Laenge und Art des Werts), quelle. KEINE Werte einer Anlage eintragen - bei den Netzwerk-Objekten
+#   waeren das private Angaben (Adressen, MAC, Geraetename).
 
 quellen:
   geronet1:
@@ -44,6 +50,12 @@ quellen:
     url: "https://github.com/BorgNumberOne/Weishaupt_CanApiJson/pull/10"
     was: "Heizkreis-Parameter der JSON-Schnittstelle"
     was_en: "heating circuit parameters of the JSON interface"
+  jsde:
+    kurz: JS-DE-Tech
+    name: "JS-DE-Tech/hacs-weishaupt-lan"
+    url: "https://github.com/JS-DE-Tech/hacs-weishaupt-lan"
+    was: "Home-Assistant-Integration über die JSON-Schnittstelle (MIT-Lizenz); von dort die Netzwerk-Objekte des WEM"
+    was_en: "Home Assistant integration using the JSON interface (MIT licence); source of the network objects of the WEM"
 
 gruppen:
   - titel: "Kessel (Knoten 2)"
@@ -132,6 +144,34 @@ gruppen:
       - {index: 0x2A38, sub: 2, name: "Warmwasser-Soll Absenk", name_en: "Hot water setpoint, setback", faktor: 0.1, einheit: "°C", json: "03 00 2538 02", modbus: 133, quelle: [kraiz, borg]}
       - {index: 0x2A51, sub: 2, name: "Warmwasserpumpe", name_en: "Hot water pump", werte: "0 aus, 1 ein", werte_en: "0 off, 1 on", json: "03 00 2551 02", modbus: 137, quelle: [kraiz, borg]}
       - {index: 0x2A57, sub: 2, name: "Rücklauftemperatur der Zirkulation", name_en: "Circulation return temperature", faktor: 0.1, einheit: "°C", json: "03 00 2557 02", modbus: 136, quelle: [kraiz, borg]}
+
+# Nur als JSON-Adresse bekannt (kein CAN-Objekt belegt)
+nur_json:
+  - titel: "Netzwerk des WEM (JSON-Modul MI 06, nur JSON-Adresse)"
+    titel_en: "Network of the WEM (JSON module MI 06, JSON address only)"
+    hinweis: >-
+      Hier steht nur, **wo** der WEM seine Netzwerkeinstellungen ablegt. An der gemessenen Anlage ist nichts
+      davon gelesen, und ein CAN-Objekt dazu ist nicht belegt: Für MI 06 ist kein Versatz gemessen
+      ([Abschnitt 5](#abbildung-json-objekt--can-objekt)). Texte liest die Quelle mit dem Kommando `11`
+      (Antwort `12`), nicht mit `01`. Die Werte beschreiben das eigene Heimnetz (Adressen, MAC-Adresse,
+      Gerätename): Sie gehören nicht in Issues, Mitschnitte oder Bildschirmfotos. Diese Firmware liest und
+      veröffentlicht sie nicht.
+    hinweis_en: >-
+      This only says **where** the WEM keeps its network settings. None of it has been read on the measured
+      installation, and no CAN object is known for it: no offset has been measured for MI 06
+      ([section 5](#mapping-json-object--can-object)). The source reads texts with command `11`
+      (reply `12`), not with `01`. The values describe your own home network (addresses, MAC address,
+      device name): keep them out of issues, bus logs and screenshots. This firmware neither reads nor
+      publishes them.
+    objekte:
+      - {json: "06 00 2507 00", name: "Art der Adressvergabe", name_en: "Address assignment mode", art: "1 Byte: 1 fest eingestellt, 3 automatisch (DHCP)", art_en: "1 byte: 1 set by hand, 3 automatic (DHCP)", quelle: [jsde]}
+      - {json: "06 00 2508 00", name: "IP-Adresse", name_en: "IP address", art: "4 Byte, IPv4", art_en: "4 bytes, IPv4", quelle: [jsde]}
+      - {json: "06 00 2509 00", name: "Netzmaske", name_en: "Subnet mask", art: "4 Byte, IPv4", art_en: "4 bytes, IPv4", quelle: [jsde]}
+      - {json: "06 00 250A 00", name: "Standardgateway", name_en: "Default gateway", art: "4 Byte, IPv4", art_en: "4 bytes, IPv4", quelle: [jsde]}
+      - {json: "06 00 250B 00", name: "DNS-Server", name_en: "DNS server", art: "4 Byte, IPv4", art_en: "4 bytes, IPv4", quelle: [jsde]}
+      - {json: "06 00 250C 01", sub_bis: 6, name: "MAC-Adresse, je Subobjekt eine der sechs Stellen", name_en: "MAC address, one of its six parts per sub-object", art: "je 2 Byte", art_en: "2 bytes each", quelle: [jsde]}
+      - {json: "06 00 250E 00", name: "Gerätename im Netz", name_en: "Device name on the network", art: "Text, bis 16 Zeichen", art_en: "text, up to 16 characters", quelle: [jsde]}
+      - {json: "06 00 2511 00", name: "Name im Zertifikat (CN)", name_en: "Name in the certificate (CN)", art: "Text, bis 50 Zeichen", art_en: "text, up to 50 characters", quelle: [jsde]}
 
 # Objektnummern, die in der Quelle ohne Bezeichnung stehen (Liste [Index, Sub])
 ohne_bezeichnung:

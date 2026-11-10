@@ -73,7 +73,9 @@ Objekt steht in [`register.yaml`](register.yaml) (`quelle:`), die Projekte unter
 Dasselbe gilt für die ungeprüft übernommenen Objekte in [`register-uebernommen.yaml`](register-uebernommen.yaml)
 ([PROTOKOLL, Abschnitt 7a](PROTOKOLL.md#7a-übernommene-objekte-aus-anderen-projekten-ungeprüft)): Objektnummer,
 Skalierung, Einheit und Bedeutung mit eigenen Bezeichnungen und der Quelle je Objekt – aus den drei genannten
-Projekten, aus [kraiz/hassio-weishaupt](https://github.com/kraiz/hassio-weishaupt) (MIT) und aus dem
+Projekten, aus [kraiz/hassio-weishaupt](https://github.com/kraiz/hassio-weishaupt) (MIT), aus
+[JS-DE-Tech/hacs-weishaupt-lan](https://github.com/JS-DE-Tech/hacs-weishaupt-lan) (MIT; nur die Adressen der
+Netzwerk-Objekte des WEM, keine Werte) und aus dem
 [Pull Request #10](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/pull/10) von ChristophKomenda.
 Tabellen, Texte und Code aus diesen Quellen sind nicht übernommen.
 
