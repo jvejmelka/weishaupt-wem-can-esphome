@@ -831,6 +831,86 @@ TEST(register_json_schreiben_wie_v27) {
   PRUEFE(reg::HK_BETRIEBSART_JSON.mi == 0x02 && reg::WW_BETRIEBSART_JSON.mi == 0x03);
 }
 
+// "Kein Wert" (0x8000) und die Laenge aus dem Kommandobyte - Issue #2 (cg089): nach dem Einschalten der Anlage
+// standen 327,68 bar und 3276,8 Grad in den Anzeigen. Frames aus dem eigenen Mitschnitt (WTC-GW 15-B, 11/2026).
+TEST(register_kein_wert) {
+  using F = std::vector<uint8_t>;
+  int32_t v = -1;
+  // Anlagendruck 0x2714/2: 2 Byte (4B), 2,54 bar
+  PRUEFE(reg::sdo_roh(F{0x4B, 0x14, 0x27, 0x02, 0xFE, 0x00, 0x00, 0x00}, v) && v == 254);
+  PRUEFE(reg::wert(reg::DRUCK, v) == 254 * 0.01f);
+  // derselbe Frame mit 0x8000: kein Wert, v bleibt (frueher 32768 -> 327,68 bar)
+  PRUEFE(!reg::sdo_roh(F{0x4B, 0x14, 0x27, 0x02, 0x00, 0x80, 0x00, 0x00}, v) && v == 254);
+  // so meldet der Kessel Objekte ohne Wert (Mitschnitt: 0x2527/0, 0x273B/2)
+  PRUEFE(!reg::sdo_roh(F{0x4B, 0x27, 0x25, 0x00, 0x00, 0x80, 0x00, 0x00}, v));
+  PRUEFE(!reg::sdo_roh(F{0x4B, 0x3B, 0x27, 0x02, 0x00, 0x80, 0x00, 0x00}, v));
+  PRUEFE(!reg::sdo_roh(F{0x4B, 0x32, 0x25, 0x00, 0xFF, 0x7F, 0x00, 0x00}, v) && v == 254);   // 0x7FFF (Paket kraiz-per-can)
+  // 2 Byte mit Vorzeichen: -0,5 Grad statt 6553,1
+  PRUEFE(reg::sdo_roh(F{0x4B, 0x32, 0x25, 0x00, 0xFB, 0xFF, 0x00, 0x00}, v) && v == -5);
+  PRUEFE(reg::wert(reg::KESSEL_TEMP, v) == -5 * 0.1f);
+  PRUEFE(reg::sdo_roh(F{0x4B, 0x32, 0x25, 0x00, 0x01, 0x80, 0x00, 0x00}, v) && v == -32767);
+  PRUEFE(reg::sdo_roh(F{0x4B, 0x32, 0x25, 0x00, 0xFE, 0x7F, 0x00, 0x00}, v) && v == 32766);
+  // Reste in den ungenutzten Bytes zaehlen nicht mit
+  PRUEFE(reg::sdo_roh(F{0x4B, 0x14, 0x27, 0x02, 0xFE, 0x00, 0xAA, 0xBB}, v) && v == 254);
+  PRUEFE(reg::sdo_roh(F{0x4F, 0x41, 0x25, 0x00, 0x03, 0xAA, 0xBB, 0xCC}, v) && v == 3);
+  // 1 Byte ohne Vorzeichen (Codes), 4 Byte wie bisher - dort ist 0x8000 ein gewoehnlicher Wert
+  PRUEFE(reg::sdo_roh(F{0x4F, 0x30, 0x25, 0x00, 0x80, 0x00, 0x00, 0x00}, v) && v == 128);
+  PRUEFE(reg::sdo_roh(F{0x43, 0x26, 0x27, 0x02, 0x04, 0x00, 0x00, 0x00}, v) && v == 4);
+  PRUEFE(reg::sdo_roh(F{0x43, 0x26, 0x27, 0x02, 0x00, 0x80, 0x00, 0x00}, v) && v == 32768);
+  PRUEFE(reg::sdo_roh(F{0x43, 0x26, 0x27, 0x02, 0xFF, 0xFF, 0xFF, 0xFF}, v) && v == -1);
+  PRUEFE(reg::sdo_roh(F{0x47, 0x26, 0x27, 0x02, 0x01, 0x02, 0x03, 0xEE}, v) && v == 0x030201);
+  PRUEFE(reg::sdo_roh(F{0x42, 0x26, 0x27, 0x02, 0x04, 0x00, 0x00, 0x00}, v) && v == 4);   // ohne Laengenangabe: 4 Byte
+  // kein Wert im Frame: Abbruch, langes Objekt (Laenge statt Wert), Quittung, Anfrage, zu kurz
+  v = 77;
+  PRUEFE(!reg::sdo_roh(F{0x80, 0x14, 0x27, 0x02, 0x00, 0x00, 0x02, 0x06}, v));
+  PRUEFE(!reg::sdo_roh(F{0x41, 0x31, 0x25, 0x00, 0x06, 0x00, 0x00, 0x00}, v));
+  PRUEFE(!reg::sdo_roh(F{0x60, 0x97, 0x26, 0x01, 0x00, 0x00, 0x00, 0x00}, v));
+  PRUEFE(!reg::sdo_roh(F{0x40, 0x14, 0x27, 0x02, 0x00, 0x00, 0x00, 0x00}, v));
+  PRUEFE(!reg::sdo_roh(F{0x4B, 0x14, 0x27, 0x02, 0xFE, 0x00}, v) && !reg::sdo_roh(F{}, v) && v == 77);
+  // mitgehoerte Schreibtelegramme des Kessels (0x6C2): 2B 2 Byte, 2F 1 Byte, 23 4 Byte
+  PRUEFE(reg::sdo_roh(F{0x2B, 0x97, 0x26, 0x01, 0x61, 0x01, 0x00, 0x00}, v) && v == 353);
+  PRUEFE(reg::wert(reg::VORLAUF_VPT, v) == 353 * 0.1f);
+  PRUEFE(!reg::sdo_roh(F{0x2B, 0x99, 0x26, 0x01, 0x00, 0x80, 0x00, 0x00}, v) && v == 353);
+  PRUEFE(reg::sdo_roh(F{0x2F, 0x94, 0x26, 0x01, 0x0A, 0x00, 0x00, 0x00}, v) && v == 10);
+  PRUEFE(reg::sdo_roh(F{0x23, 0x95, 0x26, 0x01, 0x00, 0x28, 0x00, 0x00}, v) && v == 0x2800);
+
+  // PDOs: 0x241 mit Werten ...
+  F a = {0x78, 0x01, 0x62, 0x01, 0x61, 0x01, 0x67, 0x01};
+  float w = -1;
+  PRUEFE(reg::pdo_lesen(reg::VORLAUFSOLL_HZ, a, w) && w == 376 * 0.1f);
+  PRUEFE(reg::pdo_lesen(reg::KESSEL_TEMP_PDO, a, w) && w == 354 * 0.1f);
+  PRUEFE(reg::pdo_lesen(reg::WARMWASSER, a, w) && w == 359 * 0.1f && w == reg::pdo_wert(reg::WARMWASSER, a));
+  // ... und so, wie er im Mitschnitt einmal kam: Warmwasser 0x8000 (waere -3276,8 Grad)
+  F b = {0x90, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80};
+  PRUEFE(reg::pdo_lesen(reg::VORLAUFSOLL_HZ, b, w) && w == 400 * 0.1f);
+  PRUEFE(!reg::pdo_lesen(reg::WARMWASSER, b, w) && w == 400 * 0.1f);
+  // 0x201 aus demselben Augenblick: Aussentemperatur 0x8000
+  F c = {0x03, 0x00, 0x80, 0x03};
+  PRUEFE(!reg::pdo_lesen(reg::AUSSENTEMP, c, w) && w == 400 * 0.1f);
+  PRUEFE(reg::pdo_lesen(reg::AUSSENTEMP, F{0x03, 0xF4, 0xFF, 0x03}, w) && w == -12 * 0.1f);   // -1,2 Grad bleibt
+  PRUEFE(!reg::pdo_lesen(reg::AUSSENTEMP, F{0x03, 0xFF, 0x7F, 0x03}, w));
+  // zu kurze Frames lesen nicht ueber das Ende
+  PRUEFE(!reg::pdo_lesen(reg::AUSSENTEMP, F{0x03, 0x2C}, w) && !reg::pdo_lesen(reg::VORLAUFSOLL_HZ, F{0x78}, w));
+  PRUEFE(!reg::pdo_lesen(reg::KESSEL_TEMP_PDO, F{0x78, 0x01, 0x62}, w) && !reg::pdo_lesen(reg::WARMWASSER, F{}, w));
+  PRUEFE(reg::kein_wert16(0x8000) && reg::kein_wert16(0x7FFF) && !reg::kein_wert16(0) && !reg::kein_wert16(0x8001));
+
+  // Die Regeln behalten bei "kein Wert" den letzten gueltigen Stand
+  rw::Werk werk;
+  rw::Kontext k;
+  std::vector<vd::Regel> keine;
+  rw::frame(werk, keine, 0x201, F{0x03, 0x2C, 0x00, 0x03}, k);
+  rw::frame(werk, keine, 0x241, a, k);
+  PRUEFE(werk.at == 44 * 0.1f && werk.vl == 376 * 0.1f);
+  rw::frame(werk, keine, 0x201, c, k);
+  rw::frame(werk, keine, 0x241, F{0x00, 0x80, 0x62, 0x01, 0x61, 0x01, 0x67, 0x01}, k);
+  PRUEFE(werk.at == 44 * 0.1f && werk.vl == 376 * 0.1f);
+  rw::frame(werk, keine, 0x201, F{0x03}, k);
+  rw::frame(werk, keine, 0x241, F{0x78}, k);
+  PRUEFE(werk.at == 44 * 0.1f && werk.vl == 376 * 0.1f);
+  rw::frame(werk, keine, 0x201, F{0x03, 0xF4, 0xFF, 0x03}, k);
+  PRUEFE(werk.at == -12 * 0.1f);
+}
+
 #include "test_kern.inc"
 #include "referenz_v29/dispatch_v29.inc"
 #include "test_aequivalenz.inc"

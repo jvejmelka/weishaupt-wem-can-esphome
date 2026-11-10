@@ -194,8 +194,9 @@ inline std::vector<Aktion> frame(Werk &w, std::vector<vd::Regel> &eigene, uint32
                                  const Kontext &k) {
   std::vector<Aktion> out;
   // Beobachtungen fuer den Baustein r4_vorlauf
-  if (can_id == reg::AUSSENTEMP.can_id && x.size() >= 3) w.at = reg::pdo_wert(reg::AUSSENTEMP, x);
-  if (can_id == reg::VORLAUFSOLL_HZ.can_id && x.size() >= 2) w.vl = reg::pdo_wert(reg::VORLAUFSOLL_HZ, x);
+  // "kein Wert" (0x8000) behaelt den letzten gueltigen Stand - die Regeln rechnen nie mit -3276,8 Grad
+  if (can_id == reg::AUSSENTEMP.can_id) reg::pdo_lesen(reg::AUSSENTEMP, x, w.at);
+  if (can_id == reg::VORLAUFSOLL_HZ.can_id) reg::pdo_lesen(reg::VORLAUFSOLL_HZ, x, w.vl);
   std::set<std::string> liest;
   for (auto &r : w.feste) {
     int i = r.nr - 1;

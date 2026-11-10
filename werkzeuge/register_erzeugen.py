@@ -152,8 +152,8 @@ def pakete_pruefen(objekte):
     """reg::-Namen in den Paketen muessen existieren, Leseanfragen zum richtigen Knoten gehen."""
     nach_id = {o["id"]: o for o in objekte}
     namen = set(nach_id) | {i + "_JSON" for i, o in nach_id.items() if o.get("json")}
-    hilfen = {"Sdo", "Pdo", "Json", "lese", "ist", "wert", "pdo_i16", "pdo_wert", "anfrage_id",
-              "antwort_id", "json_vg_schreiben"}
+    hilfen = {"Sdo", "Pdo", "Json", "lese", "ist", "wert", "pdo_i16", "pdo_wert", "pdo_lesen", "sdo_roh",
+              "kein_wert16", "anfrage_id", "antwort_id", "json_vg_schreiben"}
     fehler = []
     dateien = []
     for ordner in ("pakete", os.path.join("components", "weishaupt_can")):
@@ -217,6 +217,33 @@ def header(objekte):
         "  return int16_t(x[p.byte + 1] << 8 | x[p.byte]);",
         "}",
         "inline float pdo_wert(const Pdo &p, const std::vector<uint8_t> &x) { return pdo_i16(p, x) * p.faktor; }",
+        "",
+        "// \"Kein Wert\" bei 2-Byte-Messwerten: 0x8000 (an der WTC-GW gemessen, z.B. nach dem Einschalten der",
+        "// Anlage oder ohne Fuehler), 0x7FFF (so im Paket kraiz-per-can von cg089, hier nie gesehen).",
+        "constexpr bool kein_wert16(uint16_t roh) { return roh == 0x8000 || roh == 0x7FFF; }",
+        "// PDO-Wert mit Pruefung: false = Frame zu kurz oder \"kein Wert\" (w bleibt unveraendert)",
+        "inline bool pdo_lesen(const Pdo &p, const std::vector<uint8_t> &x, float &w) {",
+        "  if (x.size() < (size_t) p.byte + 2) return false;",
+        "  int16_t r = pdo_i16(p, x);",
+        "  if (kein_wert16((uint16_t) r)) return false;",
+        "  w = r * p.faktor;",
+        "  return true;",
+        "}",
+        "// Rohwert aus einem SDO-Frame, dessen Wert in den Bytes 4-7 steht: Leseantwort (4F/4B/47/43) oder",
+        "// mitgehoertes Schreibtelegramm (2F/2B/27/23). Die Laenge steht im Kommandobyte; 2 Byte gelten mit",
+        "// Vorzeichen, 1, 3 und 4 Byte wie bisher. false = kein Wert im Frame (Abbruch, langes Objekt, zu kurz)",
+        "// oder \"kein Wert\" (roh bleibt unveraendert).",
+        "inline bool sdo_roh(const std::vector<uint8_t> &x, int32_t &roh) {",
+        "  if (x.size() < 8) return false;",
+        "  uint8_t art = x[0] & 0xE0;",
+        "  if ((art != 0x40 && art != 0x20) || !(x[0] & 0x02)) return false;",
+        "  int n = (x[0] & 0x01) ? 4 - ((x[0] >> 2) & 0x03) : 4;",
+        "  uint32_t u = 0;",
+        "  for (int i = n - 1; i >= 0; i--) u = (u << 8) | x[4 + i];",
+        "  if (n == 2 && kein_wert16((uint16_t) u)) return false;",
+        "  roh = n == 2 ? (int32_t) (int16_t) u : (int32_t) u;",
+        "  return true;",
+        "}",
         "// VG-Feld eines JSON-Schreibbefehls (CM 03), z.B. 0302002533020001 + Wert",
         "inline void json_vg_schreiben(char *b, size_t n, const Json &j, unsigned wert) {",
         "  snprintf(b, n, \"03%02X%02X%04X%02X%04X%02X\", j.mi, j.mx, j.ox, j.os, j.vs, wert);",
