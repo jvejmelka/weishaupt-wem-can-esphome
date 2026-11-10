@@ -240,7 +240,8 @@ The documents at a glance:
 - [REGELN.md](REGELN.md) (German) – rules R1–R5 and custom rules: when the board re-reads operating modes
 - [ANLAGE.md](ANLAGE.md) (German) – example installation with heat pump and PV
 - [IDEEN.md](IDEEN.md) (German) – what could still be built: database and Grafana, H2 lockout,
-  room sensors, wireless room unit, radiator valves, installation check
+  room sensors, wireless room unit, radiator valves, installation check, wall panel, portable room unit
+  made of just the phone app and wireless sensors
 - [CHANGELOG.md](CHANGELOG.md) (German) – changes per firmware version
 - [LICENSE](LICENSE) – license
 

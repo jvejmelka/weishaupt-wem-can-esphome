@@ -153,32 +153,95 @@ steht mit dem Raumgerät am Schreibtisch und bildet mit ihm einen kleinen eigene
 mitschneiden, ohne ein Kabel in den Heizraum zu ziehen. Das RG2 braucht dort eine eigene Versorgung (DC 15–30 V, bei uns
 ein Aufwärtswandler auf 24 V).
 
+> **Achtung – erst lesen, dann einschalten.** Der Tunnel **filtert nicht**: Alles, was das Gerät am anderen Ende
+> sendet, kommt am Heizungsbus an, auch Schreibaufträge. Die UDP-Pakete sind unverschlüsselt und nur über die
+> Absenderadresse gesichert. Deshalb: nur für Versuche, nur im eigenen Heimnetz, nur unter Aufsicht – und Board B
+> stromlos machen, wenn niemand dabei ist. In `main` und in den fertigen Firmware-Dateien ist der Tunnel nicht enthalten.
+
+**Warum CAN und nicht JSON.** Ein Raumgerät oder Raumfühler ist für den WEM ein eigener Teilnehmer am CAN-Bus: Es wird
+vom WEM aufgenommen, sendet ein Lebenszeichen und liefert den Raumwert von sich aus (Abschnitt 10a). Die
+JSON-Schnittstelle des WEM beantwortet nur einzelne Anfragen nach seinen eigenen Werten – darüber kann sich kein Gerät
+anmelden und nichts laufend senden, und regelmäßige Anfragen verträgt der WEM nicht. Einen JSON-Weg, dem WEM einen
+Raumwert zu liefern, kennen wir nicht. Wer ein Raumgerät oder einen Raumfühler am WEM haben will – echt, über den
+Tunnel oder später nachgebildet –, braucht deshalb ein Board **am CAN-Bus** (WeAct CAN485; für Ethernet die
+[Olimex-Variante von cg089](OLIMEX-ESP32-EVB.md)). Ein Board ohne CAN-Kabel reicht dafür nicht.
+
+**Was man braucht.**
+- Zwei Boards mit der Firmware aus dem Zweig `can-tunnel`, beide im selben WLAN. Erprobt ist der Tunnel nur mit zwei
+  WeAct CAN485; das Paket setzt WLAN voraus (Paket `netz-wlan`).
+- Für beide Boards eine **feste Adresse** (Reservierung im Router oder Paket `feste-ip`): Jedes Board nimmt nur Pakete
+  von der eingetragenen Adresse des anderen an.
+- Am Raumgerät: eigene Versorgung (s. oben) und ein Busabschluss am kleinen Bus – Schalter „120 Ω CAN“ an Board B
+  **ein** (Ende eines eigenen kurzen Busses), an Board A wie immer **aus** ([INSTALL.md](INSTALL.md)).
+- Auf Wunsch ein Rechner im Heimnetz, der den Mitschnitt annimmt.
+
+**Einrichten** – für beide Boards, jeweils mit der Adresse des anderen:
+
+1. In `secrets.yaml` die Adressen eintragen (Vorlage: `secrets.yaml.example`). Sie stehen nur dort, nicht in der
+   Hauptdatei:
+   ```yaml
+   tunnel_ziel: "192.0.2.54"   # IP des ANDEREN Boards (Beispieladresse)
+   tunnel_log: "192.0.2.30"    # nur für den Mitschnitt: IP des Rechners
+   ```
+2. In `weishaupt-wem-can.yaml` die vorbereiteten Zeilen einkommentieren und anpassen:
+   ```yaml
+   substitutions:
+     tunnel_ziel: !secret tunnel_ziel
+     tunnel_log: !secret tunnel_log       # Zeile weglassen = kein Mitschnitt
+     tunnel_name: "A"                     # am anderen Board "B"
+     tunnel_nur_bei_bus: "true"           # am Board beim Raumgerät "false"
+
+   packages:
+     can_tunnel: !include pakete/can-tunnel.yaml
+   ```
+3. Bauen und flashen wie in [INSTALL.md](INSTALL.md).
+4. An **beiden** Boards in der Weboberfläche den Schalter „CAN-Tunnel (Experten)“ einschalten. Ausschalten an einem
+   der beiden trennt die Verbindung.
+
+| Einstellung | Vorgabe | Bedeutung |
+|---|---|---|
+| `tunnel_ziel` | – (Pflicht) | IPv4-Adresse des anderen Boards. Fehlt sie oder ist sie keine Adresse, bricht der Bau mit einer Meldung ab. |
+| `tunnel_log` | `""` | Adresse eines Rechners für den Mitschnitt; leer = kein Mitschnitt |
+| `tunnel_name` | `"A"` | Kürzel dieses Boards im Mitschnitt und im Log |
+| `tunnel_nur_bei_bus` | `"true"` | `"true"`: nur auf den Bus senden, wenn in den letzten 3 s etwas vom Bus kam (Board an der Therme). `"false"`: immer senden (Board am Raumgerät). |
+| `tunnel_selbst_ein` | `"false"` | `"false"`: Der Tunnel ist nach jedem Neustart aus. `"true"`: Er schaltet sich nach jedem Neustart einmal selbst ein, sobald das WLAN steht. |
+
+Die Einstellungen stehen fest in der Firmware; zur Laufzeit lässt sich nur der Schalter bedienen. Die Vorgaben und ihre
+Beschreibung stehen im Kopf von [`pakete/can-tunnel.yaml`](https://github.com/jvejmelka/weishaupt-wem-can-esphome/blob/can-tunnel/pakete/can-tunnel.yaml), die UDP-Ports in
+[`can_tunnel.h`](https://github.com/jvejmelka/weishaupt-wem-can-esphome/blob/can-tunnel/components/weishaupt_can/can_tunnel.h) (wer sie ändert, baut beide Boards neu).
+
 **Ablauf.** Jedes Board schickt jeden Frame, den es auf seinem eigenen Bus empfängt, per UDP (Port 47011) an die
 eingetragene Gegenstelle und sendet, was von dort kommt, auf seinen Bus. Angenommen werden nur Pakete von der Adresse der
 Gegenstelle. Ein Paket ist `'W' 'B' Folge id_lo id_hi(+0x80 = RTR) Länge d0…d7`; aus der Folgenummer zählt das Board
-verlorene Pakete. Alle 10 s entsteht eine Statuszeile (vom/zum Bus, verloren, Fehler, Bus-off), auf Wunsch geht ein
-Textmitschnitt per UDP (Port 47012) an einen Rechner. Der Rundlauf Bestellung → Lieferung lag bei 25–35 ms.
+verlorene Pakete. Der Rundlauf Bestellung → Lieferung lag bei 25–35 ms.
 
-**Schutz.** Der Tunnel filtert nicht: Alles, was das RG2 sendet, kommt am WEM an, auch Schreibaufträge. Er ist
-nur für Versuche gedacht. Board A sendet nur, wenn in den letzten 3 s etwas vom Bus kam – bei ausgeschalteter Therme
+**Schutz.** Board A sendet nur, wenn in den letzten 3 s etwas vom Bus kam – bei ausgeschalteter Therme
 stieg sonst der Fehlerzähler bis zum Bus-off. Board B nutzt diese Sperre nicht, damit Anfragen des WEM das stumme RG2
-erreichen. Beide versuchen alle 10 s einen Wiederanlauf, falls der CAN-Baustein im Bus-off steht.
+erreichen. Beide versuchen alle 10 s einen Wiederanlauf, falls der CAN-Baustein im Bus-off steht. Ohne gültige Adresse
+der Gegenstelle bleibt der Kanal zu.
 
-**Schalter** „CAN-Tunnel (Experten)“: Er schaltet sich nach jedem Neustart einmal selbst ein, sobald das WLAN steht. Von
-Hand ausgeschaltet bleibt er bis zum nächsten Neustart aus.
+**Schalter** „CAN-Tunnel (Experten)“: Nach einem Neustart ist er aus. Mit `tunnel_selbst_ein: "true"` schaltet er sich
+nach jedem Neustart einmal selbst ein, sobald das WLAN steht; von Hand ausgeschaltet bleibt er dann bis zum nächsten
+Neustart aus. Das ist bequem für lange Mitschnitte, heißt aber auch: Das Board schreibt nach jedem Stromausfall wieder
+von selbst auf den Bus.
 
-**Einbinden** (Adressen sind Platzhalter):
+**Mitschnitt.** Ist `tunnel_log` gesetzt, schickt jedes Board seine Frames als Textzeilen per UDP (Port 47012) an diesen
+Rechner, dazu alle 10 s eine Statuszeile (vom/zum Bus, verloren, Fehler, gesperrt, Bus-off). Annehmen mit
+[`werkzeuge/tunnel_mitschnitt.py`](https://github.com/jvejmelka/weishaupt-wem-can-esphome/blob/can-tunnel/werkzeuge/tunnel_mitschnitt.py) (nur Python 3):
 
-```yaml
-substitutions:
-  tunnel_ziel: "<ip-der-gegenstelle>"
-  tunnel_log: ""              # oder <ip-eines-rechners> für den Mitschnitt
-  tunnel_name: "B1"           # Kürzel im Mitschnitt
-  tunnel_nur_bei_bus: "true"  # Board an der Therme: true, Board am Raumgerät: false
-
-packages:
-  can_tunnel: !include pakete/can-tunnel.yaml
 ```
+python3 werkzeuge/tunnel_mitschnitt.py --datei tunnel.txt
+
+14:03:08.009 A 1234 R 184:FA00C201      A hat den Frame auf seinem Bus empfangen und weitergeschickt
+14:03:08.021 B 1250 T 184:FA00C201      B hat ihn erhalten und auf seinen Bus gesendet (X = Senden abgelehnt)
+```
+
+Die Zahl hinter dem Kürzel sind Millisekunden seit dem Start des Boards. Mitschnitte können Seriennummern und
+Gerätekennungen enthalten – nicht roh veröffentlichen.
+
+**Was das Paket sonst ändert:** größerer Eingangspuffer für UDP (64 statt der ESP-IDF-Vorgabe 6), WLAN-Stromsparen aus,
+längere CAN-Warteschlangen (Empfang 64, Senden 32) und ein Anhalten des CAN-Bausteins während eines Firmware-Updates.
+Ohne das Paket verhält sich die Firmware wie in `main`.
 
 **Was geklappt hat:** Aufnahme des RG2, Lesen und Schreiben aller Werte aus Abschnitt 10a, Neustart des RG2 und Neustart
 von Board B jeweils ohne Eingriff.
