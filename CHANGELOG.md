@@ -1,5 +1,7 @@
 # Changelog – ESP-CAN-Brücke Weishaupt (WeAct CAN485, ESPHome)
 
+> 🇬🇧 English version: [CHANGELOG.en.md](CHANGELOG.en.md)
+
 
 ## v42 (in Arbeit)
 - **Freies CAN-Schreiben: weitere Knoten freischaltbar.** Neues Textfeld „Freies CAN-Schreiben: erlaubte Knoten (hex, ab Werk 01)“ in der Experten-Oberfläche. Ab Werk bleibt es beim WEM (`01`); wer am Tisch mit einem Raumgerät arbeitet, trägt z. B. `01 04` ein. Der Kessel (`02`) und `00` lassen sich nie freischalten, bei einer ungültigen Liste wird nichts gesendet, der Objektbereich 2000–5FFF gilt für jeden Knoten, und der Schalter „Freies CAN-Schreiben“ bleibt die zweite Hürde ([PROTOKOLL](PROTOKOLL.md#schreiben-per-can-ab-v35-seit-v42-vorgabe)).

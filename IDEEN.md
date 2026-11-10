@@ -1,5 +1,7 @@
 # Ideen – was man mit dem Board noch bauen könnte
 
+> 🇬🇧 English version: [IDEEN.en.md](IDEEN.en.md)
+
 Nichts davon ist umgesetzt. Hier steht, was mit dieser Firmware und etwas Zusatzhardware denkbar
 ist, wie aufwendig es wäre und wo die Haken liegen. Rückmeldungen und Versuche anderer sind
 willkommen – bitte als [GitHub-Issue](https://github.com/jvejmelka/weishaupt-wem-can-esphome/issues).

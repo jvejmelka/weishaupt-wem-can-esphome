@@ -52,7 +52,7 @@ Via MQTT: `<gerät>/cmd/status` with any payload. At most one request every 10 s
 | **Heizkreis Betriebsart setzen** (set heating circuit operating mode) | selection Standby … Absenk; shows the value on the bus after each verification read |
 | **Warmwasser setzen** (set DHW) | selection Ein / Aus (on / off) |
 | **Warteschlange** (queue) | pending commands with source, e.g. `1. Heizkreis -> Zeitprogramm 1 (MQTT) - naechster Befehl ab 14:03:12` (next command from 14:03:12), otherwise `leer` (empty) |
-| **Ergebnis letzter Schaltbefehl** (result of last switching command) | progress and result as plain text, see [PROTOKOLL.en.md, section 5](PROTOKOLL.en.md#sequence-in-the-firmware) (deprecated – structured: `befehl/status`, [TOPICS.md](TOPICS.md) (German)) |
+| **Ergebnis letzter Schaltbefehl** (result of last switching command) | progress and result as plain text, see [PROTOKOLL.en.md, section 5](PROTOKOLL.en.md#sequence-in-the-firmware) (deprecated – structured: `befehl/status`, [TOPICS.en.md](TOPICS.en.md)) |
 | **Warteschlange leeren** (clear queue) | discards all pending commands (is logged) |
 | **Schaltprotokoll** (switching log) | the last ten commands with time, source and result; via MQTT retained under `<gerät>/schaltprotokoll`. Empty after a reboot |
 
@@ -117,13 +117,13 @@ ten slots from [PROTOKOLL.en.md, section 8](PROTOKOLL.en.md#8-when-the-wem-locks
 | Regeln: hoechstens pro Stunde (alle zusammen) | 6 | 1–60 | `verdacht` | – | expert interface |
 <!-- EINSTELLUNGEN:END -->
 
-“Changing it needs” applies with the package `app`: the settings page requires the admin login, and in the groups “Lesen” (reading) and “Experten” (experts) the expert password as well. Settings without a group are not on the settings page but in the expert interface (`/experten`); the values of the rules can also be set by file and MQTT ([REGELN.md](REGELN.md), German). “(optional)” means: the package is not included in `weishaupt-wem-can.yaml`.
+“Changing it needs” applies with the package `app`: the settings page requires the admin login, and in the groups “Lesen” (reading) and “Experten” (experts) the expert password as well. Settings without a group are not on the settings page but in the expert interface (`/experten`); the values of the rules can also be set by file and MQTT ([REGELN.en.md](REGELN.en.md), German). “(optional)” means: the package is not included in `weishaupt-wem-can.yaml`.
 
 ## 6a. Rules: reading operating modes on suspicion
 
 Package `verdacht.yaml` reads the operating modes **only** when passive listening suggests a
 change – exclusively read requests (`0x40`) to node 1, never JSON, no fixed schedule, with a
-minimum interval per rule and a cap per hour. **In detail: [REGELN.md](REGELN.md) (German).**
+minimum interval per rule and a cap per hour. **In detail: [REGELN.en.md](REGELN.en.md).**
 
 | Rule | Trigger on the bus | reads | Default |
 |---|---|---|---|

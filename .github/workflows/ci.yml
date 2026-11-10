@@ -48,6 +48,8 @@ jobs:
       - uses: actions/checkout@v7
       - name: Relative Links und Anker pruefen
         run: python3 tests/links.py
+      - name: Jede Doku deutsch und englisch, gleich aufgebaut
+        run: python3 tests/sprachen.py
 
   firmware:
     name: Firmware kompilieren (ESPHome 2026.9.1)

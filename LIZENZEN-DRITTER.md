@@ -1,5 +1,7 @@
 # Lizenzen Dritter
 
+> 🇬🇧 English version: [LIZENZEN-DRITTER.en.md](LIZENZEN-DRITTER.en.md)
+
 Der Quelltext dieses Repositorys steht unter der [MIT-Lizenz](LICENSE). Diese Datei nennt, was von anderen stammt
 oder beim Bauen dazukommt.
 

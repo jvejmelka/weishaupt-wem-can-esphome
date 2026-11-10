@@ -232,6 +232,9 @@ Die Dokumente im Überblick:
 - [CHANGELOG.md](CHANGELOG.md) – Änderungen je Firmware-Stand
 - [LICENSE](LICENSE) – Lizenz
 
+Jedes dieser Dokumente gibt es auch englisch (`….en.md`, Verweis jeweils am Kopf). Maßgeblich ist die deutsche
+Fassung; die englische ist ihre Übersetzung und wird im selben Schritt mitgeändert.
+
 ## Handy-App (optional: auf dem Board oder Ordner `app/`)
 
 Eine schlanke Web-App (PWA) fürs Handy: eine schmale Spalte (höchstens 520 CSS-px), die die volle Höhe nutzt **ohne Scrollen** – auch auf quadratischen Displays. Die Grundschrift wird dafür nach dem Laden gemessen und angepasst (größte Schrift, bei der alles passt; neu bei Größenänderung oder wenn eine Fortschrittszeile erscheint). Mit `?diag` hinter der Adresse zeigt die Fußzeile Viewport, Pixelverhältnis, gewählte Schrift und Scrollhöhe.
@@ -522,6 +525,7 @@ tests/run.sh                                     # Regellogik, Klassen, Datei-Pa
 python3 werkzeuge/register_erzeugen.py --pruefen # erzeugte Dateien passen zu register.yaml
 python3 werkzeuge/einstellungen_erzeugen.py --pruefen # Angaben „ab Werk“ in der Doku passen zu den Paketen
 python3 tests/links.py                           # relative Links und Anker in allen .md-Dateien
+python3 tests/sprachen.py                        # jede Doku deutsch und englisch, gleich aufgebaut
 ```
 
 **Registertabelle:** alle CAN-Objekte stehen nur in [`register.yaml`](register.yaml); daraus
@@ -535,7 +539,7 @@ Objekt, ohne Firmware-Konstanten ([PROTOKOLL, Abschnitt 7a](PROTOKOLL.md#7a-übe
 nur in den Paketen (`restore_mode`, `initial_value`). [`werkzeuge/einstellungen_erzeugen.py`](werkzeuge/einstellungen_erzeugen.py)
 schreibt daraus die [Tabelle aller Einstellungen](FIRMWARE.md#einstellungen) und jede Angabe „ab Werk“ in der Doku.
 
-Bei jedem Push laufen alle vier in [GitHub Actions](https://github.com/jvejmelka/weishaupt-wem-can-esphome/actions/workflows/ci.yml), dazu wird die
+Bei jedem Push laufen alle fünf in [GitHub Actions](https://github.com/jvejmelka/weishaupt-wem-can-esphome/actions/workflows/ci.yml), dazu wird die
 Firmware mit ESPHome 2026.9.1 und einer Dummy-`secrets.yaml` (aus `secrets.yaml.example`)
 kompiliert – samt Bauteil `weishaupt_can`, dazu die Olimex-Variante und das Release-Image. Neue Regeln oder Änderungen an bestehenden bitte mit Test – der Fehler aus
 v22–v24 (R1 kannte nur `0x40`, der WEM fragt mit `0xA4`) hätte so nicht passieren können.
@@ -553,7 +557,7 @@ Bei jedem Hochladen (Push) und bei jeder vorgeschlagenen Änderung (Pull Request
 |---|---|
 | Tests der Regellogik und des Bauteils | Regeln und Schaltlogik reagieren auf die Beispiel-Telegramme wie erwartet |
 | Registertabelle und erzeugte Dateien | Firmware-Konstanten und Doku-Tabellen passen zu `register.yaml`, keine Leseanfrage geht an den falschen Knoten; Angaben „ab Werk“ in der Doku passen zu den Paketen |
-| Links in den .md-Dateien | alle Verweise in der Dokumentation führen irgendwohin |
+| Links in den .md-Dateien | alle Verweise in der Dokumentation führen irgendwohin; jede Doku liegt deutsch und englisch vor und beide sind gleich aufgebaut |
 | Firmware kompilieren | die Firmware baut mit ESPHome (mit Platzhalter-Zugangsdaten, echte Geheimnisse braucht es nicht) |
 | Olimex ESP32-EVB kompilieren | die Variante für das Olimex-Board (Ethernet, `kraiz-per-can`, `dallas`) baut und hat dieselben Entitäten wie der Fork von cg089 |
 | Release-Image ohne persönliche Daten | das fertige Image für die Installationsseite baut ohne WLAN, Passwörter und MQTT und enthält keine Platzhalter-Zugangsdaten |

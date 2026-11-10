@@ -105,7 +105,7 @@ component (`id(wcan)->…`). The classes in [`kern.h`](components/weishaupt_can/
 
 Plus the pure logic files: [`regelwerk.h`](components/weishaupt_can/regelwerk.h)
 (evaluator for all rules; since v30, R1–R5 are defined there as **data rules** in the same format as the custom
-rules, see [REGELN.md](REGELN.md#5-eigene-regeln-experimentell) (German)),
+rules, see [REGELN.en.md](REGELN.en.md#5-custom-rules-experimental)),
 [`regellogik.h`](components/weishaupt_can/regellogik.h) (shared building blocks: quiet period,
 masks, back-calculation for R4, pre-read check), [`befehle.h`](components/weishaupt_can/befehle.h) (queue,
 command phases, status JSON), [`verdacht.h`](components/weishaupt_can/verdacht.h) and
@@ -134,7 +134,7 @@ Comment out unneeded lines under `packages:`.
 | `homeassistant-api.yaml` | native ESPHome API (encrypted) | no |
 | `wem-schalten.yaml` | heating circuit switching, queue, log | no |
 | `warmwasser-schalten.yaml` | DHW on/off (requires `wem-schalten` and `warmwasser`) | no |
-| `verdacht.yaml` | **Rules:** read the operating modes only when passive listening suggests a change; fixed rules R1–R5 individually switchable (default: R1–R3 <!--ab-werk:vd_r1-->on<!--/ab-werk-->, R4/R5 <!--ab-werk:vd_r4-->off<!--/ab-werk-->; disabled ones keep running in shadow mode), plus custom rules (experimental, own master switch, default <!--ab-werk:vd_eigene_haupt-->off<!--/ab-werk-->); configurable via web, file and MQTT (requires `warmwasser`). Details: [REGELN.md](REGELN.md) (German) | no |
+| `verdacht.yaml` | **Rules:** read the operating modes only when passive listening suggests a change; fixed rules R1–R5 individually switchable (default: R1–R3 <!--ab-werk:vd_r1-->on<!--/ab-werk-->, R4/R5 <!--ab-werk:vd_r4-->off<!--/ab-werk-->; disabled ones keep running in shadow mode), plus custom rules (experimental, own master switch, default <!--ab-werk:vd_eigene_haupt-->off<!--/ab-werk-->); configurable via web, file and MQTT (requires `warmwasser`). Details: [REGELN.en.md](REGELN.en.md) | no |
 | `zusatz.yaml` | **Extra displays for the phone app:** list of up to 6 third-party MQTT topics (e.g. room temperatures, "heat pump running"), configurable via web and file. The board manages the list; the values are fetched by the app – the Docker app subscribes to the topics itself, with the package `app` the board subscribes to them (requires `mqtt`). Details: [FIRMWARE.en.md, section 6b](FIRMWARE.en.md#6b-additional-displays-for-the-phone-app) | no |
 | `app.yaml` | **Phone app served by the board itself** (from v38): `http://<board>/`, own login (`app_benutzer`/`app_passwort` in `secrets.yaml`), no server needed (needs `wem-schalten`, `warmwasser-schalten`) | no |
 | `json-lesen.yaml` | **Fetch values via JSON** (from v42): one request with seven objects to the WEM, manual only (button in the expert interface and on the settings page, ↻ in the app on the board when the CAN bus is silent), never periodic; for boards without a CAN cable or during a bus outage (requires `wem-schalten`, `warmwasser`) | no |
@@ -143,13 +143,13 @@ Comment out unneeded lines under `packages:`.
 | `dallas.yaml` | 1-Wire bus for your own DS18B20 sensors (by cg089) | no |
 
 **Second board:** [`olimex-weishaupt.yaml`](olimex-weishaupt.yaml) builds the same packages for the **Olimex ESP32-EVB**
-(Ethernet instead of Wi-Fi, Home Assistant API) – variant by cg089, see [OLIMEX-ESP32-EVB.md](OLIMEX-ESP32-EVB.md) (German).
+(Ethernet instead of Wi-Fi, Home Assistant API) – variant by cg089, see [OLIMEX-ESP32-EVB.en.md](OLIMEX-ESP32-EVB.en.md).
 
 Optionally, there is also the phone app in the `app/` folder (see below).
 
 ## Setup
 
-**Detailed step-by-step guide: [INSTALL.md](INSTALL.md) (German)** – short version:
+**Detailed step-by-step guide: [INSTALL.en.md](INSTALL.en.md)** – short version:
 
 ```
 cp secrets.yaml.example secrets.yaml     # Werte eintragen
@@ -178,16 +178,16 @@ the previous Wi-Fi is kept. The last fallback is the emergency hotspot with capt
 | `<gerät>/cmd/scan` | `01 2A00 2AFF 3` | read a range, responses in `<gerät>/canraw` |
 | `<gerät>/cmd/stop` | anything | abort scan |
 | `<gerät>/cmd/status` | anything | read heating circuit and DHW operating mode from the bus once (at most every 10 s, read requests only); timestamp in „Status gelesen“ ("status read") |
-| `<gerät>/cmd/regeln` | JSON file, preferably retained (`mosquitto_pub -r -f regeln.json`) | configure rules: R1–R5 each on/off and interval, upper limit, `eigene_regeln_an`, custom rules (template `regeln.json.example`, explanation in [REGELN.md](REGELN.md#6-einstellen) (German); the old field `verdacht` is rejected) |
-| `<gerät>/cmd/regel` | `NAME an` / `NAME aus` / `NAME loeschen` | switch one rule on/off or delete it (NAME = `R1`–`R5`, `eigene` = master switch for the custom rules, or a custom rule), see [REGELN.md](REGELN.md#7-per-mqtt-schalten) (German) |
+| `<gerät>/cmd/regeln` | JSON file, preferably retained (`mosquitto_pub -r -f regeln.json`) | configure rules: R1–R5 each on/off and interval, upper limit, `eigene_regeln_an`, custom rules (template `regeln.json.example`, explanation in [REGELN.en.md](REGELN.en.md#6-configuration); the old field `verdacht` is rejected) |
+| `<gerät>/cmd/regel` | `NAME an` / `NAME aus` / `NAME loeschen` | switch one rule on/off or delete it (NAME = `R1`–`R5`, `eigene` = master switch for the custom rules, or a custom rule), see [REGELN.en.md](REGELN.en.md#7-switching-via-mqtt) |
 | `<gerät>/cmd/zusatz` | JSON file, preferably retained (`mosquitto_pub -r -f zusatz.json`) | configure the phone app's extra displays: `{"version":N,"eintraege":[{name, topic, feld, einheit, art, schwelle}]}` (template `zusatz.json.example`); invalid input is rejected with a message |
 | `<gerät>/app/zusatz` | (retained, from the board) | current list of extra displays (the app subscribes to the topics listed there) |
-| `<gerät>/status/json` | (retained, from the board, from v27) | **structured state** with fixed fields: operating modes (requested, actual, source, time), switch commands (pending, queue, last), bus, firmware – only on change, at most every 2 s. Structure: [TOPICS.md](TOPICS.md) (German) |
-| `<gerät>/befehl/status` | (retained, from the board, from v27) | every phase of a switch command as JSON: angenommen → vorgemerkt → gesendet → pruefe_bus → bestaetigt / gescheitert (reason); ersetzt, abgelehnt (accepted → queued → sent → checking bus → confirmed / failed; replaced, rejected). [TOPICS.md](TOPICS.md#gerätbefehlstatus) (German) |
+| `<gerät>/status/json` | (retained, from the board, from v27) | **structured state** with fixed fields: operating modes (requested, actual, source, time), switch commands (pending, queue, last), bus, firmware – only on change, at most every 2 s. Structure: [TOPICS.en.md](TOPICS.en.md) |
+| `<gerät>/befehl/status` | (retained, from the board, from v27) | every phase of a switch command as JSON: angenommen → vorgemerkt → gesendet → pruefe_bus → bestaetigt / gescheitert (reason); ersetzt, abgelehnt (accepted → queued → sent → checking bus → confirmed / failed; replaced, rejected). [TOPICS.en.md](TOPICS.en.md#gerätbefehlstatus) |
 | `<gerät>/schaltprotokoll` | (retained, from the board) | **deprecated**, replaced by `befehl/status` – last ten commands, one per line |
 | `<gerät>/regeln/stand` | (retained, from the board) | active rule configuration as JSON (same format as `cmd/regeln`, plus `firmware`), including custom rules |
 | `<gerät>/verdacht/protokoll` | (retained, from the board) | last ten triggers: rule, read, changed yes/no |
-| `<gerät>/verdacht/ereignis` | (not retained, from the board) | every rule event as JSON: `{"regel","phase":"ausgeloest"\|"waere"\|"ergebnis"\|"keine_antwort","ziel","wert","geaendert"}` – for Telegraf/Grafana, see [REGELN.md](REGELN.md#8-protokoll-log-und-ereignisse) (German) |
+| `<gerät>/verdacht/ereignis` | (not retained, from the board) | every rule event as JSON: `{"regel","phase":"ausgeloest"\|"waere"\|"ergebnis"\|"keine_antwort","ziel","wert","geaendert"}` – for Telegraf/Grafana, see [REGELN.en.md](REGELN.en.md#8-trigger-log-log-and-events) |
 
 `<gerät>` = the device name (MQTT topic prefix).
 
@@ -200,7 +200,7 @@ Heating circuit codes: 1 Standby, 2–4 time program 1–3, 5 Summer, 6 Comfort,
 **Please build new integrations on `status/json` and `befehl/status`.** The text sensors
 „Ergebnis letzter Schaltbefehl“ ("result of last switch command"), „Warteschlange“ ("queue"), „Status gelesen“ ("status read"), „Heizkreis Status“ ("heating circuit status") and the
 topic `schaltprotokoll` remain available during the transition period, but are considered deprecated –
-old/new comparison in [TOPICS.md](TOPICS.md#veraltete-text-topics) (German).
+old/new comparison in [TOPICS.en.md](TOPICS.en.md#deprecated-text-topics).
 
 ## Request timing
 
@@ -224,11 +224,11 @@ JSON objects map to CAN objects (e.g. heating circuit operating mode JSON `02 00
 CAN node 1 `0x2933/2`) and how new objects are discovered: **[PROTOKOLL.en.md](PROTOKOLL.en.md)**.
 
 Example installation with heat pump and PV (setpoints, measurements, what you see on the bus):
-**[ANLAGE.md](ANLAGE.md) (German)**.
+**[ANLAGE.en.md](ANLAGE.en.md)**.
 
 The documents at a glance:
 
-- [INSTALL.md](INSTALL.md) (German) – step by step from the board to the phone app
+- [INSTALL.en.md](INSTALL.en.md) – step by step from the board to the phone app
 - [PROTOKOLL.en.md](PROTOKOLL.en.md) – the bus: [all ways to the heating system](PROTOKOLL.en.md#ways-to-the-heating-system),
   CAN bus, WEM JSON, mapping JSON → CAN, writing via CAN, failure patterns, fault messages and error codes
   ([10c](PROTOKOLL.en.md#10c-fault-messages-on-the-bus-and-error-codes))
@@ -237,13 +237,16 @@ The documents at a glance:
 - [VERSUCHE.en.md](VERSUCHE.en.md) – WEM-RG2 room unit reading and writing
   ([10a](VERSUCHE.en.md#10a-wem-rg2-room-unit-on-the-bus-capture-november-2026)), CAN tunnel over WLAN
   ([10b](VERSUCHE.en.md#10b-can-tunnel-over-wlan-experiment-branch-can-tunnel), experiment in branch `can-tunnel`)
-- [REGELN.md](REGELN.md) (German) – rules R1–R5 and custom rules: when the board re-reads operating modes
-- [ANLAGE.md](ANLAGE.md) (German) – example installation with heat pump and PV
-- [IDEEN.md](IDEEN.md) (German) – what could still be built: database and Grafana, H2 lockout,
+- [REGELN.en.md](REGELN.en.md) – rules R1–R5 and custom rules: when the board re-reads operating modes
+- [ANLAGE.en.md](ANLAGE.en.md) – example installation with heat pump and PV
+- [IDEEN.en.md](IDEEN.en.md) – what could still be built: database and Grafana, H2 lockout,
   room sensors, wireless room unit, radiator valves, installation check, wall panel, portable room unit
   made of just the phone app and wireless sensors
-- [CHANGELOG.md](CHANGELOG.md) (German) – changes per firmware version
+- [CHANGELOG.en.md](CHANGELOG.en.md) – changes per firmware version
 - [LICENSE](LICENSE) – license
+
+Every one of these documents exists in German and in English (`….md` / `….en.md`, pointer at the top of each). The
+German version is authoritative; the English one is its translation and is updated in the same step.
 
 ## Phone app (optional: on the board or folder `app/`)
 
@@ -270,7 +273,7 @@ Installable on the home screen („+ App“).
 Measurements that have not been updated for more than 10 min are shown by the app as „--“ instead of a
 stale value. Operating modes and setpoints are exempt from this – the board only reads them when there is a
 reason (after startup, after switch commands, on ↻ and when passive listening suggests a
-change – [rules](REGELN.md) R1–R5).
+change – [rules](REGELN.en.md) R1–R5).
 
 ### How it works
 
@@ -539,6 +542,7 @@ tests/run.sh                                     # Regellogik, Klassen, Datei-Pa
 python3 werkzeuge/register_erzeugen.py --pruefen # erzeugte Dateien passen zu register.yaml
 python3 werkzeuge/einstellungen_erzeugen.py --pruefen # Angaben „ab Werk“ in der Doku passen zu den Paketen
 python3 tests/links.py                           # relative Links und Anker in allen .md-Dateien
+python3 tests/sprachen.py                        # jede Doku deutsch und englisch, gleich aufgebaut
 ```
 
 (Comments: rule logic, classes, file parsers, register table · generated files match `register.yaml` · defaults stated in the documentation match the packages · relative links and anchors in all .md files.)
@@ -546,7 +550,7 @@ python3 tests/links.py                           # relative Links und Anker in a
 **Register table:** all CAN objects are defined only in [`register.yaml`](register.yaml); from it,
 [`werkzeuge/register_erzeugen.py`](werkzeuge/register_erzeugen.py) generates the C++ constants
 (`components/weishaupt_can/register_gen.h`) and the tables in PROTOKOLL.md and in the README. Procedure for changes:
-[INSTALL.md, section 14](INSTALL.md#14-register-ändern) (German). Objects taken from other projects that have not
+[INSTALL.en.md, section 14](INSTALL.en.md#14-changing-registers). Objects taken from other projects that have not
 yet been verified on our own installation are kept separately in [`register-uebernommen.yaml`](register-uebernommen.yaml) –
 with the source for each object and without firmware constants
 ([PROTOKOLL, section 7a](PROTOKOLL.en.md#7a-objects-taken-from-other-projects-unverified)).
@@ -555,7 +559,7 @@ with the source for each object and without firmware constants
 packages (`restore_mode`, `initial_value`). [`werkzeuge/einstellungen_erzeugen.py`](werkzeuge/einstellungen_erzeugen.py)
 writes the [table of all settings](FIRMWARE.en.md#einstellungen-settings) and every default stated in the documentation from it.
 
-On every push, all four run in [GitHub Actions](https://github.com/jvejmelka/weishaupt-wem-can-esphome/actions/workflows/ci.yml), and in addition the
+On every push, all five run in [GitHub Actions](https://github.com/jvejmelka/weishaupt-wem-can-esphome/actions/workflows/ci.yml), and in addition the
 firmware is compiled with ESPHome 2026.9.1 and a dummy `secrets.yaml` (from `secrets.yaml.example`)
 – including the component `weishaupt_can`, plus the Olimex variant and the release image. Please accompany new rules or changes to existing ones with a test – the bug from
 v22–v24 (R1 only knew `0x40`, the WEM queries with `0xA4`) could not have happened that way.
@@ -573,7 +577,7 @@ On every upload (push) and every proposed change (pull request), six checks run
 |---|---|
 | Tests of the rule logic and the component | rules and switching logic react to the example telegrams as expected |
 | Register table and generated files | firmware constants and documentation tables match `register.yaml`; no read request goes to the wrong node; defaults stated in the documentation match the packages |
-| Links in the .md files | all references in the documentation lead somewhere |
+| Links in the .md files | all references in the documentation lead somewhere; every document exists in German and English and both have the same structure |
 | Compile firmware | the firmware builds with ESPHome (with placeholder credentials; no real secrets needed) |
 | Compile Olimex ESP32-EVB | the variant for the Olimex board (Ethernet, `kraiz-per-can`, `dallas`) builds and has the same entities as cg089's fork |
 | Release image without personal data | the ready-made image for the install page builds without Wi-Fi, passwords and MQTT and contains no placeholder credentials |
@@ -594,7 +598,7 @@ Open questions that can only be resolved on other installations or in a differen
 | Heating circuit codes 6–8 (Comfort, Normal, Setback) have never been seen on the bus | a capture of a switch to these operating modes |
 | Switching via the WEM portal or WEM app has never been captured | a raw capture during a portal switch (see [PROTOKOLL.en.md](PROTOKOLL.en.md#detecting-passively-what-works-and-what-does-not)) |
 | Back-calculation of the room setpoint level only calibrated for outdoor temperatures of 12.9–15.2 °C | winter data (outdoor temperature 0–8 °C, 10–15 min steady state per operating mode) |
-| WEM-RG2: reading and writing are captured ([VERSUCHE.en.md, 10a](VERSUCHE.en.md#10a-wem-rg2-room-unit-on-the-bus-capture-november-2026)); open are other room units (RG1, WEM-RF), several room units and room compensation | captures, see [IDEEN.md, idea 4](IDEEN.md#gesucht-jemand-mit-weishaupt-raumgerät-am-bus) (German) |
+| WEM-RG2: reading and writing are captured ([VERSUCHE.en.md, 10a](VERSUCHE.en.md#10a-wem-rg2-room-unit-on-the-bus-capture-november-2026)); open are other room units (RG1, WEM-RF), several room units and room compensation | captures, see [IDEEN.en.md, idea 4](IDEEN.en.md#wanted-someone-with-a-weishaupt-room-unit-on-the-bus) |
 
 Please open a [GitHub issue](https://github.com/jvejmelka/weishaupt-wem-can-esphome/issues), with a
 summary rather than raw files (those may contain serial numbers and device identifiers).
@@ -619,5 +623,5 @@ Further register knowledge comes from the projects listed under "Sources".
 [MIT](LICENSE) – © 2026 Juergen Vejmelka; the Olimex variant and the packages `kraiz-per-can` and `dallas`: © 2026 cg089.
 Use at your own risk; no affiliation with Weishaupt.
 
-Third-party parts are listed in [LIZENZEN-DRITTER.md](LIZENZEN-DRITTER.md) (German). The prebuilt firmware files (`*.bin`)
+Third-party parts are listed in [LIZENZEN-DRITTER.en.md](LIZENZEN-DRITTER.en.md). The prebuilt firmware files (`*.bin`)
 contain ESPHome and are therefore distributed as a whole under the GPL-3.0; the corresponding source is this repository.

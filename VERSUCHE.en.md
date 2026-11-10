@@ -328,7 +328,7 @@ interface only answers single requests for its own values – no device can regi
 continuously, and the WEM does not tolerate regular requests. We know of no JSON way to give the WEM a room value.
 Anyone who wants a room unit or room sensor at the WEM – a real one, one behind the tunnel, or later an emulated one –
 therefore needs a board **on the CAN bus** (WeAct CAN485; for Ethernet the
-[Olimex variant by cg089](OLIMEX-ESP32-EVB.md)). A board without a CAN cable is not enough for that.
+[Olimex variant by cg089](OLIMEX-ESP32-EVB.en.md)). A board without a CAN cable is not enough for that.
 
 **What you need.**
 - Two boards with the firmware from the branch `can-tunnel`, both in the same WLAN. The tunnel has only been tried with
@@ -336,7 +336,7 @@ therefore needs a board **on the CAN bus** (WeAct CAN485; for Ethernet the
 - A **fixed address** for both boards (reservation in the router or package `feste-ip`): each board only accepts
   packets from the configured address of the other.
 - At the room unit: its own supply (see above) and a bus termination on the small bus – switch "120 Ω CAN" on board B
-  **on** (end of a short bus of its own), on board A **off** as always ([INSTALL.md](INSTALL.md), German).
+  **on** (end of a short bus of its own), on board A **off** as always ([INSTALL.en.md](INSTALL.en.md), German).
 - Optionally a computer in the home network that takes the capture.
 
 **Setting it up** – for both boards, each with the address of the other:
@@ -357,7 +357,7 @@ therefore needs a board **on the CAN bus** (WeAct CAN485; for Ethernet the
    packages:
      can_tunnel: !include pakete/can-tunnel.yaml
    ```
-3. Build and flash as described in [INSTALL.md](INSTALL.md) (German).
+3. Build and flash as described in [INSTALL.en.md](INSTALL.en.md).
 4. On **both** boards turn on the switch "CAN-Tunnel (Experten)" in the web interface. Turning it off on either board
    cuts the connection.
 

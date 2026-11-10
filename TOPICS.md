@@ -1,5 +1,7 @@
 # MQTT-Topics – strukturiert (ab v27) und alt
 
+> 🇬🇧 English version: [TOPICS.en.md](TOPICS.en.md)
+
 Ab Firmware **v27** gibt es zwei Topics mit **festem JSON-Aufbau**. App, Grafana und Home Assistant
 müssen damit keinen Freitext des Boards mehr deuten. Die bisherigen Text-Topics bleiben parallel
 bestehen (Übergangszeit), gelten aber als **veraltet** – siehe [unten](#veraltete-text-topics).

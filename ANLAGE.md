@@ -1,5 +1,7 @@
 # Beispielanlage – so läuft es bei uns
 
+> 🇬🇧 English version: [ANLAGE.en.md](ANLAGE.en.md)
+
 Die Firmware ist an genau einer Anlage entwickelt und gemessen worden. Damit du deine vergleichen
 kannst, steht hier, wie sie aufgebaut ist – und was man deshalb am Bus sieht.
 
