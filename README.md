@@ -491,6 +491,10 @@ billiger, aber **ohne** galvanische Trennung.
   - [Varitras/weishaupt_modbus](https://github.com/Varitras/weishaupt_modbus) – Home Assistant über das WEM-Modbus-Gateway
   - [Home-Assistant-Forum: Weishaupt WTC, CAPI VG, CanApiJson](https://community.home-assistant.io/t/weishaupt-wtc-weishaupt-capi-vg-canapijson/997400) – Aufbau des VG-Felds (CM MI MX OX OS VS VA)
   - [geronet1/wem-python Issue #1](https://github.com/geronet1/wem-python/issues/1)
+  - [Homebridge-Plugin „Weishaupt Local“ von PiLLoX](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/issues/4#issuecomment-6782046640) – Kessel- und Raumtemperatur (RG2, `258B/02`),
+    Warmwasser-Ladung und Betriebsarten in Apple Home über die JSON-Schnittstelle; Quelltext als ZIP im Kommentar
+    (Anleitung französisch, ohne Lizenzangabe). Fragt in der Vorgabe alle 30 s ab – die Hinweise aus den
+    kraiz-Issues oben gelten auch dort.
 - ESPHome-Dokumentation: [CAN-Bus / esp32_can](https://esphome.io/components/canbus/esp32/),
   [Pakete](https://esphome.io/components/packages/),
   [WLAN inkl. `wifi.configure`](https://esphome.io/components/wifi/),
