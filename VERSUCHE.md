@@ -35,6 +35,89 @@ die Ursache ist nicht bewiesen.
 Nach der Aufnahme überträgt der WEM ein **Menü-Paket von rund 1,6 MB** per SDO-Block auf `0x20F4/0`
 (`604: C6 F4 20 00 00 10 00 00`, Blöcke zu 4096 Byte) mit Texten in vielen Sprachen und Parametertabellen. Das
 dauerte rund 25 Minuten bei bis zu 16.000 Telegrammen pro Minute. Der Inhalt gehört Weishaupt und steht deshalb nicht hier.
+Wie die Übertragung abläuft, steht im nächsten Abschnitt.
+
+### Dateiübertragung zwischen WEM und RG2
+
+Das Menü-Paket kommt nicht in einem Stück. Der WEM bedient am RG2 einen kleinen Dateidienst aus sieben Objekten
+(alle Sub 0) und schiebt darüber **elf Dateien** nacheinander, jede in Stücken zu 4096 Byte. Mitgeschnitten am
+05.11.2026 von 23:14:33 bis 23:39:49, RG2 direkt am Bus der Anlage; nichts davon haben wir selbst gesendet.
+
+| Objekt am RG2 | Inhalt |
+|---|---|
+| `0x2559` | Kommando, 4 Byte: `00 00 <Schritt> <Dienst>` |
+| `0x2558` | Stand dazu: `FF FF <Zustand> <Dienst>`, in Ruhe `00 00 00 00` |
+| `0x255A` | Dateiname, 13 Byte (Name im Format 8.3) |
+| `0x255B` | Dateigröße in Byte |
+| `0x255E` | beim Lesen und Schreiben die Position in der Datei (0, `0x1000`, `0x2000` …), im Verzeichnis die Nummer des Eintrags |
+| `0x255D` | 1 Byte, in diesem Mitschnitt immer 0 – Bedeutung offen |
+| `0x20F4` | die Daten, als SDO-Blockübertragung, immer 4096 Byte |
+
+Der WEM liest jeden geschriebenen Wert sofort zurück und fragt `0x2558` nach jedem Kommando ab, bis der erwartete
+Stand kommt.
+
+**1. Der WEM holt drei Dateien vom RG2** (47, 82 und 9810 Byte, zusammen fünf Stücke):
+
+```
+2559 = 00 00 00 FE                       2558 → 00 00 00 00
+2559 = 00 00 00 01                       2558 → FF FF 00 01
+255A = <Dateiname>
+2559 = 00 00 01 04                       2558 → FF FF 00 04      255B lesen → Größe
+je Stück:
+  255D = 00, 255E = <Position>
+  2559 = 00 00 02 04                     2558 → FF FF 04 04
+  20F4 lesen (SDO-Block-Upload, 584: C6 F4 20 00 00 10 00 00)
+```
+
+**2. Der WEM liest das Verzeichnis des RG2** – zwischen den Dateien immer wieder, 26-mal:
+
+```
+2559 = 00 00 01 02                       2558 → FF FF 01 02
+je Eintrag:
+  255E = <Nummer>
+  2559 = 00 00 02 02                     2558 → FF FF 04 02      255A lesen → Dateiname
+                                         2558 → FF FF F2 02      kein weiterer Eintrag
+```
+
+Danach läuft dieselbe Schleife mit `00 00 03 02` – offenbar eine zweite Liste; worin sie sich unterscheidet, wissen wir nicht.
+
+**3. Der WEM schreibt elf Dateien ins RG2** (82 Byte bis 414 kB, zusammen 1,57 MB, 386 Stücke):
+
+```
+2559 = 00 00 00 FE, dann 00 00 00 01     2558 → FF FF 00 01
+255A = <Dateiname>, 255B = <Größe>
+255D = 00, 255E = 0
+2559 = 00 00 01 03                       2558 → FF FF 01 03
+20F4 schreiben (SDO-Block-Download, 604: C6 F4 20 00 00 10 00 00; das RG2 nimmt 127 Segmente je Block)
+                                         2558 → FF FF 04 03      … das RG2 speichert
+                                         2558 → FF FF 05 03      Stück fertig
+je weiteres Stück:
+  2559 = 00 00 06 03
+  255D = 00, 255E = <Position>           2558 → FF FF 01 03
+  20F4 schreiben                         2558 → FF FF 04 03 … FF FF 05 03
+nach dem letzten Stück                   2558 → 00 00 00 00
+```
+
+Ein Stück dauert rund 3 Sekunden (2 bis 4): gut 1,5 s die Blockübertragung, der Rest ist Warten auf `FF FF 05 03`. Während das
+RG2 speichert, fragt der WEM `0x2558` etwa zwölfmal pro Sekunde ab – daher die vielen Telegramme.
+
+| Kommando an `0x2559` | Anzahl | Deutung (aus der Reihenfolge erschlossen, nicht belegt) |
+|---|---|---|
+| `00 00 00 FE` | 40 | Dienst zurücksetzen; steht vor jedem Vorgang |
+| `00 00 00 01` | 41 | Dienst öffnen |
+| `00 00 01 04` / `00 00 02 04` | 3 / 5 | Datei zum Lesen öffnen / Stück bereitstellen |
+| `00 00 01 02` | 26 | Verzeichnis öffnen |
+| `00 00 02 02` / `00 00 03 02` | 459 / 190 | Eintrag holen (erste / zweite Liste) |
+| `00 00 01 03` / `00 00 06 03` | 11 / 375 | Datei zum Schreiben öffnen / nächstes Stück |
+
+Das letzte Byte wählt also den Dienst (`01` öffnen, `02` Verzeichnis, `03` schreiben, `04` lesen, `FE` zurücksetzen).
+In dieselbe Reihe gehört `01 AA 55 0C`, mit dem der WEM das RG2 neu startet
+([Neustart des RG2 per CAN](#neustart-des-rg2-per-can-0x2559)).
+
+**Offen:** Bedeutung von `0x255D` und des selten gesehenen Stands `FF FF 02 03` zwischen zwei Stücken; der Unterschied
+der beiden Verzeichnislisten; ob der WEM den Inhalt danach prüft. Zwei der elf Dateien waren gleich groß – ob dieselbe
+Datei zweimal ging, haben wir nicht geprüft. **Nicht nachstellen:** Der Dienst schreibt Dateien ins Gerät; was ein
+falsches Kommando oder eine falsche Datei anrichtet, wissen wir nicht.
 
 ### Lesen über 0x5E00
 
@@ -221,7 +304,7 @@ Ab dem Bootup gleicht der Neustart also dem Kaltstart; das Gerät ist am Bus nac
 gut eine Minute länger. Bei den beiden vom WEM ausgelösten Neustarts kam das PDO schon 9 s nach dem Bootup wieder.
 
 **Offen und zu beachten:**
-- Die Bedeutung der Bytes ist nicht bekannt. `0x2559` ist am RG2 ein Kommando-Objekt, über das der WEM auch Dateien
+- Die Bedeutung der Bytes ist nicht bekannt. `0x2559` ist am RG2 ein Kommando-Objekt, über das der WEM auch [Dateien](#dateiübertragung-zwischen-wem-und-rg2)
   mit dem Gerät austauscht (dann mit anderen Werten); `0x2558` liefert den Stand dazu. Vermutung: `0C` = Neustart,
   `AA 55` = Schutzmuster gegen ein versehentliches Auslösen.
 - Nicht geprüft: ob der erste Schreibbefehl nötig ist, und andere Raumgeräte oder Softwarestände.
