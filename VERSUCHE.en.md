@@ -32,6 +32,89 @@ If the RG2 simply keeps running during a WEM restart, ours did not answer this q
 After commissioning the WEM transfers a **menu bundle of about 1.6 MB** by SDO block to `0x20F4/0`
 (`604: C6 F4 20 00 00 10 00 00`, blocks of 4096 bytes) with multi-language text and parameter tables. It took about 25 minutes at up to
 16,000 frames per minute. The content belongs to Weishaupt and is not reproduced here.
+How the transfer works is described in the next section.
+
+### File transfer between WEM and RG2
+
+The menu bundle does not arrive in one piece. The WEM drives a small file service on the RG2, made of seven objects
+(all sub 0), and pushes **eleven files** through it one after the other, each in pieces of 4096 bytes. Captured on
+5 Nov 2026 from 23:14:33 to 23:39:49, RG2 directly on the bus of the installation; we sent none of this ourselves.
+
+| Object on the RG2 | Content |
+|---|---|
+| `0x2559` | command, 4 bytes: `00 00 <step> <service>` |
+| `0x2558` | state of it: `FF FF <state> <service>`, idle `00 00 00 00` |
+| `0x255A` | file name, 13 bytes (8.3 name) |
+| `0x255B` | file size in bytes |
+| `0x255E` | when reading and writing the position in the file (0, `0x1000`, `0x2000` …), in the directory the number of the entry |
+| `0x255D` | 1 byte, always 0 in this capture – meaning open |
+| `0x20F4` | the data, as an SDO block transfer, always 4096 bytes |
+
+The WEM reads every value back right after writing it and polls `0x2558` after each command until the expected
+state arrives.
+
+**1. The WEM fetches three files from the RG2** (47, 82 and 9810 bytes, five pieces in total):
+
+```
+2559 = 00 00 00 FE                       2558 → 00 00 00 00
+2559 = 00 00 00 01                       2558 → FF FF 00 01
+255A = <file name>
+2559 = 00 00 01 04                       2558 → FF FF 00 04      read 255B → size
+per piece:
+  255D = 00, 255E = <position>
+  2559 = 00 00 02 04                     2558 → FF FF 04 04
+  read 20F4 (SDO block upload, 584: C6 F4 20 00 00 10 00 00)
+```
+
+**2. The WEM reads the directory of the RG2** – again and again between the files, 26 times:
+
+```
+2559 = 00 00 01 02                       2558 → FF FF 01 02
+per entry:
+  255E = <number>
+  2559 = 00 00 02 02                     2558 → FF FF 04 02      read 255A → file name
+                                         2558 → FF FF F2 02      no further entry
+```
+
+After that the same loop runs with `00 00 03 02` – apparently a second list; we do not know how it differs.
+
+**3. The WEM writes eleven files to the RG2** (82 bytes to 414 kB, 1.57 MB in total, 386 pieces):
+
+```
+2559 = 00 00 00 FE, then 00 00 00 01     2558 → FF FF 00 01
+255A = <file name>, 255B = <size>
+255D = 00, 255E = 0
+2559 = 00 00 01 03                       2558 → FF FF 01 03
+write 20F4 (SDO block download, 604: C6 F4 20 00 00 10 00 00; the RG2 accepts 127 segments per block)
+                                         2558 → FF FF 04 03      … the RG2 is storing
+                                         2558 → FF FF 05 03      piece done
+per further piece:
+  2559 = 00 00 06 03
+  255D = 00, 255E = <position>           2558 → FF FF 01 03
+  write 20F4                             2558 → FF FF 04 03 … FF FF 05 03
+after the last piece                     2558 → 00 00 00 00
+```
+
+One piece takes about 3 seconds (2 to 4): a good 1.5 s for the block transfer, the rest is waiting for `FF FF 05 03`. While the
+RG2 is storing, the WEM polls `0x2558` about twelve times per second – hence the many frames.
+
+| Command to `0x2559` | Count | Reading (inferred from the order, not proven) |
+|---|---|---|
+| `00 00 00 FE` | 40 | reset the service; comes before every operation |
+| `00 00 00 01` | 41 | open the service |
+| `00 00 01 04` / `00 00 02 04` | 3 / 5 | open a file for reading / provide a piece |
+| `00 00 01 02` | 26 | open the directory |
+| `00 00 02 02` / `00 00 03 02` | 459 / 190 | fetch an entry (first / second list) |
+| `00 00 01 03` / `00 00 06 03` | 11 / 375 | open a file for writing / next piece |
+
+So the last byte selects the service (`01` open, `02` directory, `03` write, `04` read, `FE` reset).
+`01 AA 55 0C`, with which the WEM restarts the RG2, belongs to the same series
+([Restarting the RG2 via CAN](#restarting-the-rg2-via-can-0x2559)).
+
+**Open:** the meaning of `0x255D` and of the rarely seen state `FF FF 02 03` between two pieces; the difference between
+the two directory lists; whether the WEM checks the content afterwards. Two of the eleven files had the same size – we
+have not checked whether the same file went twice. **Do not replay this:** the service writes files into the device; we
+do not know what a wrong command or a wrong file would do.
 
 ### Reading through 0x5E00
 
@@ -215,7 +298,7 @@ From the boot-up on, the restart matches the cold start; the unit is back on the
 good minute longer. On the two restarts triggered by the WEM the PDO was back as early as 9 s after the boot-up.
 
 **Open points and cautions:**
-- The meaning of the bytes is not known. On the RG2, `0x2559` is a command object the WEM also uses to exchange files
+- The meaning of the bytes is not known. On the RG2, `0x2559` is a command object the WEM also uses to exchange [files](#file-transfer-between-wem-and-rg2)
   with the unit (with other values then); `0x2558` returns the state. Guess: `0C` = restart, `AA 55` = guard pattern
   against triggering it by accident.
 - Not checked: whether the first write command is needed, and other room units or software versions.
