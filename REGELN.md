@@ -47,11 +47,11 @@ und auf Knopfdruck („Status lesen“ bzw. `<gerät>/cmd/status`).
 
 | Regel | Auslöser am Bus | liest | Vorgabe | Abstand | typische Häufigkeit |
 |---|---|---|---|---|---|
-| **R1** Warmwasser umgeschaltet | WEM fragt den Kessel `2101/0A`, `2102/0D`, `2102/01` ab | Warmwasser | **an** | 1 min | einmal je Warmwasser-Umschaltung, selten beim Blättern im Display-Menü |
-| **R2** Warmwasserbetrieb trotz Aus | Kessel beginnt eine Warmwasserladung, bekannt ist „Aus“ | Warmwasser | **an** | 10 min | nur, wenn Warmwasser unbemerkt eingeschaltet wurde |
-| **R3** Heizung ein ↔ Standby | Standby-Bit `0x1000` der WEM-Statusbits ändert sich | Heizkreis | **an** | 1 min | einmal je Umschaltung Standby ↔ (Zeitprogramm, Sommer, Komfort …) |
-| **R4** Heizanforderung passt nicht | Heizanforderung bei bekanntem Standby/Sommer, oder Vorlaufsoll passt nicht zur Raumsoll-Stufe | Heizkreis | aus | 30 min | selten; nur bei milder Außentemperatur geeicht |
-| **R5** übrige Statusbits | andere WEM-Statusbits ändern sich (ohne Standby, WW-Ladung, Heizbetrieb) | Heizkreis | aus | 5 min | bei jedem Wechsel des Heizbedarfs, also oft |
+| **R1** Warmwasser umgeschaltet | WEM fragt den Kessel `2101/0A`, `2102/0D`, `2102/01` ab | Warmwasser | **<!--ab-werk:vd_r1-->an<!--/ab-werk-->** | <!--ab-werk:vd_ab_r1-->1<!--/ab-werk--> min | einmal je Warmwasser-Umschaltung, selten beim Blättern im Display-Menü |
+| **R2** Warmwasserbetrieb trotz Aus | Kessel beginnt eine Warmwasserladung, bekannt ist „Aus“ | Warmwasser | **<!--ab-werk:vd_r2-->an<!--/ab-werk-->** | <!--ab-werk:vd_ab_r2-->10<!--/ab-werk--> min | nur, wenn Warmwasser unbemerkt eingeschaltet wurde |
+| **R3** Heizung ein ↔ Standby | Standby-Bit `0x1000` der WEM-Statusbits ändert sich | Heizkreis | **<!--ab-werk:vd_r3-->an<!--/ab-werk-->** | <!--ab-werk:vd_ab_r3-->1<!--/ab-werk--> min | einmal je Umschaltung Standby ↔ (Zeitprogramm, Sommer, Komfort …) |
+| **R4** Heizanforderung passt nicht | Heizanforderung bei bekanntem Standby/Sommer, oder Vorlaufsoll passt nicht zur Raumsoll-Stufe | Heizkreis | <!--ab-werk:vd_r4-->aus<!--/ab-werk--> | <!--ab-werk:vd_ab_r4-->30<!--/ab-werk--> min | selten; nur bei milder Außentemperatur geeicht |
+| **R5** übrige Statusbits | andere WEM-Statusbits ändern sich (ohne Standby, WW-Ladung, Heizbetrieb) | Heizkreis | <!--ab-werk:vd_r5-->aus<!--/ab-werk--> | <!--ab-werk:vd_ab_r5-->5<!--/ab-werk--> min | bei jedem Wechsel des Heizbedarfs, also oft |
 
 Ausgeschaltete Regeln laufen im [Schattenmodus](#4-schattenmodus-ausgeschaltete-regeln-beobachten)
 weiter: sie melden, dass sie angeschlagen **hätten**, lesen aber nicht.
@@ -87,7 +87,7 @@ Warmwasser-Umschaltung, am Display wie per JSON, und bei **keiner** Umschaltung 
 
 **Sicherungen.** Ruht 2 min nach eigenem Schaltbefehl und **5 min nach einem Neustart des WEM**
 (Bootup-Meldung `0x701` = `00`) – dabei fragt der WEM die volle Folge einmal ab, ohne dass jemand
-umgeschaltet hat. Mindestabstand 1 min (die Folge kommt genau einmal je Umschaltung; zwei
+umgeschaltet hat. Mindestabstand <!--ab-werk:vd_ab_r1-->1<!--/ab-werk--> min (die Folge kommt genau einmal je Umschaltung; zwei
 Umschaltungen binnen weniger Minuten kommen vor).
 
 **Was R1 nicht erkennt.** Die **Richtung**: die Antworten des Kessels sind bei Ein und Aus gleich.
@@ -110,7 +110,7 @@ jeder Frame. `0x252B` schreibt der WEM nur über `0x602`, nie über `0x6C2`.
 **Warum das ein Zeichen ist.** Der Kessel lädt Warmwasser, obwohl es aus sein sollte – vermutlich
 wurde es eingeschaltet. In den Mitschnitten begann eine Ladung jeweils kurz nach dem Einschalten.
 
-**Sicherungen.** 2 min nach eigenem Schaltbefehl, Mindestabstand 10 min.
+**Sicherungen.** 2 min nach eigenem Schaltbefehl, Mindestabstand <!--ab-werk:vd_ab_r2-->10<!--/ab-werk--> min.
 
 **Was R2 nicht erkennt.** Ein Einschalten ohne anschließende Ladung (Speicher ist warm genug) und
 jedes Ausschalten. Dafür ist R1 da.
@@ -125,7 +125,7 @@ dauerhaft gespeichert, damit auch eine Änderung während eines Board-Neustarts 
 **Warum das ein Zeichen ist.** Das Bit ist gesetzt, solange der Heizkreis auf **Standby** steht,
 und in jeder anderen Betriebsart gelöscht. Jede Änderung ist eine echte Umschaltung.
 
-**Sicherungen.** 2 min nach eigenem Schaltbefehl, Mindestabstand 1 min.
+**Sicherungen.** 2 min nach eigenem Schaltbefehl, Mindestabstand <!--ab-werk:vd_ab_r3-->1<!--/ab-werk--> min.
 
 **Was R3 nicht erkennt.** Wechsel zwischen **Zeitprogramm 1/2/3, Sommer, Komfort, Normal und
 Absenk** – das Bit bleibt dabei gelöscht. Diese Wechsel sind am Bus **gar nicht** zu sehen, auch
@@ -154,7 +154,7 @@ Standby ↔ andere Betriebsart.
 verrät sie aber teilweise. In den Mitschnitten zeigte der Vorlaufsoll einen Wechsel Komfort →
 Normal einige Sekunden vor der Bestätigung durch die Lesung.
 
-**Sicherungen.** 2 min nach eigenem Schaltbefehl, Mindestabstand 30 min.
+**Sicherungen.** 2 min nach eigenem Schaltbefehl, Mindestabstand <!--ab-werk:vd_ab_r4-->30<!--/ab-werk--> min.
 
 **Was R4 nicht erkennt.** Zeitprogramme werden nicht geprüft (sie unterscheiden sich nur durch
 ihre Schaltzeiten). Absenk fordert erst bei tieferer Außentemperatur an; Sommer sieht bei mildem
@@ -174,7 +174,7 @@ Frame auch das Standby-Bit und R3 liest ohnehin, liest R5 nicht zusätzlich.
 Schornsteinfeger-Betrieb. Die meisten Änderungen gehören aber zum **Heizbedarf** (Bits `0x0004`,
 `0x0400`), der mehrmals pro Stunde kommen und gehen kann.
 
-**Sicherungen.** 2 min nach eigenem Schaltbefehl, Mindestabstand 5 min.
+**Sicherungen.** 2 min nach eigenem Schaltbefehl, Mindestabstand <!--ab-werk:vd_ab_r5-->5<!--/ab-werk--> min.
 
 **Wie sicher.** Gering als Hinweis auf eine Umschaltung: R5 schlägt oft an und bestätigt meist nur
 den bekannten Stand. Deshalb Vorgabe **aus**. Das entspricht dem Verhalten von R3 bis v24.

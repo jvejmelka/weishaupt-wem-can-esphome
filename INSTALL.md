@@ -382,6 +382,7 @@ Wer an den Paketen etwas ändert, prüft vor dem Flashen:
 ```
 tests/run.sh                                   # Regellogik, Klassen des Bauteils, Schaltbefehle/Status-JSON, Datei-Parser, Registertabelle (g++, curl)
 python3 werkzeuge/register_erzeugen.py --pruefen  # erzeugte Dateien passen zu register.yaml (PyYAML)
+python3 werkzeuge/einstellungen_erzeugen.py --pruefen  # Angaben „ab Werk“ in der Doku passen zu den Paketen
 python3 tests/links.py                         # Links in den .md-Dateien
 esphome compile weishaupt-wem-can.yaml         # Firmware baut
 ```
@@ -409,6 +410,15 @@ PROTOKOLL.md und README.md erzeugt – beides nie von Hand ändern.
 4. Alles zusammen einchecken (`register.yaml`, `components/weishaupt_can/register_gen.h`, PROTOKOLL.md, README.md).
    Die CI lässt den Generator laufen und bricht ab, wenn danach etwas anders ist
    (`git diff --exit-code`); lokal geht dasselbe mit `python3 werkzeuge/register_erzeugen.py --pruefen`.
+
+**Einstellungen und ihre Werte ab Werk** stehen ebenfalls nur im Code: `restore_mode` (Schalter) und
+`initial_value` (Zahlen) in `pakete/*.yaml`, die Startwerte `…_start` in der Hauptdatei. Wer dort etwas
+ändert, lässt `python3 werkzeuge/einstellungen_erzeugen.py` laufen. Es schreibt die Tabelle in
+[PROTOKOLL.md](PROTOKOLL.md#einstellungen) neu und jede Angabe, die in der Doku zwischen
+`<!--ab-werk:ID-->` und `<!--/ab-werk-->` steht (ID = `id` des Schalters oder der Zahl). Neue Textstellen,
+die eine Vorgabe nennen, bekommen diese Marke – dann kann die Doku dem Code nicht mehr widersprechen.
+Der Generator bricht ab, wenn die Einstellungsseite (`EINSTELLUNGEN` in `app_server.cpp`) einen Namen
+oder einen Vorgabewert führt, den es im Paket so nicht gibt.
 
 Faustregel für den Stand: **belegt** nur mit unabhängiger Gegenprobe (Kesseldisplay,
 Wetterdienst, physikalisches Kriterium) – eine App, die dieselben Register liest, zählt nicht.

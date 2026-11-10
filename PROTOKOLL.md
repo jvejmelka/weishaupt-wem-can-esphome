@@ -12,9 +12,9 @@ Quellen stammt oder nur plausibel ist, steht das dabei.
 > | Weg | Was | Ab Werk |
 > |---|---|---|
 > | **CAN mithören** | PDOs und die Antworten auf Fragen, die der WEM dem Kessel stellt. Das Board sendet dabei nichts. | immer an |
-> | **CAN lesen** (SDO, Kommandobyte `0x40`) | eigene Leseanfragen an den WEM (Knoten 1) und den Kessel (Knoten 2): im Takt, bei Anlass (Betriebsarten, nur WEM), zur Kontrolle nach dem Schalten, von Hand | Takt aus (Schalter „Eigene CAN-Anfragen“), alles andere an |
-> | **CAN schreiben an den WEM** (SDO, Knoten 1) | Heizkreis (`0x2933`/2) und Warmwasser (`0x2A20`/2) schalten – direkt am Bus, ohne JSON | **an** seit v42 (v35–v41 einschaltbar) |
-> | **Freies CAN-Schreiben** (Experten) | einzelne Objekte von Hand, nur am WEM (Knoten 1), nur `0x2000`–`0x5FFF` | aus |
+> | **CAN lesen** (SDO, Kommandobyte `0x40`) | eigene Leseanfragen an den WEM (Knoten 1) und den Kessel (Knoten 2): im Takt, bei Anlass (Betriebsarten, nur WEM), zur Kontrolle nach dem Schalten, von Hand | Takt <!--ab-werk:can_anfragen-->aus<!--/ab-werk--> (Schalter „Eigene CAN-Anfragen“), alles andere an |
+> | **CAN schreiben an den WEM** (SDO, Knoten 1) | Heizkreis (`0x2933`/2) und Warmwasser (`0x2A20`/2) schalten – direkt am Bus, ohne JSON | **<!--ab-werk:can_schalten-->an<!--/ab-werk-->** seit v42 (v35–v41 einschaltbar) |
+> | **Freies CAN-Schreiben** (Experten) | einzelne Objekte von Hand, nur am WEM (Knoten 1), nur `0x2000`–`0x5FFF` | <!--ab-werk:can_frei-->aus<!--/ab-werk--> |
 > | **JSON schreiben** (HTTP an den WEM) | Rückweg fürs Schalten, wenn „Schalten per CAN statt JSON“ aus ist. Bis v34 war das der einzige Weg. | ungenutzt |
 > | **JSON lesen** (HTTP an den WEM) | nur von Hand: „Werte per JSON abrufen“ (eine Anfrage, ab v42), Dateien der SD-Karte. Nie im Takt – der WEM verträgt kein Polling. | nur auf Knopfdruck |
 > | **CAN-Tunnel** (Versuch, Zweig `can-tunnel`) | reicht ungefiltert weiter, was das Gerät am anderen Ende sendet – auch die Schreibaufträge eines Raumgeräts ([Abschnitt 10b](#10b-can-tunnel-über-wlan-versuch-zweig-can-tunnel)) | nicht enthalten |
@@ -205,7 +205,7 @@ Das Board kommt auf zwei Wegen an Werte:
 |---|---|---|
 | Was | PDOs, dazu die SDO-Antworten auf Fragen, die **der WEM selbst** an den Kessel stellt | eigene SDO-Lese-Anfragen `40 …` |
 | Last | keine – das Board sendet nichts | eine Anfrage plus eine Antwort je Wert |
-| Abschaltbar | nein, läuft immer | ja, Schalter **„Eigene CAN-Anfragen“** (Vorgabe: aus) |
+| Abschaltbar | nein, läuft immer | ja, Schalter **„Eigene CAN-Anfragen“** (Vorgabe: <!--ab-werk:can_anfragen-->aus<!--/ab-werk-->) |
 
 Der WEM fragt den Kessel ohnehin ständig ab – an der gemessenen Anlage rund drei SDO-Anfragen pro
 Sekunde. Deshalb kommt ein großer Teil der Kesselwerte beim Board an, ohne dass es selbst fragt.
@@ -267,7 +267,7 @@ Ausnahme ab v42: **Abruf von Hand** (Paket `json-lesen`, Knopf „Aktualisieren�
 Dabei am 28.10.2026 beobachtet:
 - Der WEM beantwortet **höchstens 7 Objekte je Anfrage**; das achte bekommt immer CM 05 – egal welches Objekt dort steht.
 - Sechs Abrufe in 7 Minuten (je mindestens 60 s Abstand) – danach kamen nur noch leere Antworten; nach 10 Minuten
-  Pause wieder alle Werte. Der Mindestabstand ist deshalb ab Werk 5 Minuten (mindestens 2), automatisch wird nie abgefragt.
+  Pause wieder alle Werte. Der Mindestabstand ist deshalb ab Werk <!--ab-werk:json_abstand-->300<!--/ab-werk--> Sekunden (mindestens 120), automatisch wird nie abgefragt.
 
 ### Was bleibt, wenn der WEM ausfällt
 
@@ -549,9 +549,9 @@ bleibt unberührt. JSON ist der Rückweg (Schalter aus). Drei Schalter in der We
 
 | Schalter | ab Werk | Wirkung |
 |---|---|---|
-| Schalten per CAN statt JSON (Heizkreis, Warmwasser) | **an** (seit v42; v35–v41 aus) | App-Knöpfe, `cmd/heizkreis`, `cmd/warmwasser` schreiben per SDO-Download an den WEM: `0x2933`/2 bzw. `0x2A20`/2, 1 Byte. Warteschlange, Sperrminute und Kontrolle am Bus wie beim JSON-Weg; Abbruch des WEM = „abgelehnt“ |
-| Freies CAN-Schreiben (Experten) | aus | Eingabefeld und `cmd/can_schreiben`: `KN IDX SUB WERT [LÄNGE]` oder `KN IDX SUB = B1 B2 …` (hex, bis 64 Byte, ab 5 Byte in Teilstücken mit 50 ms Pause). **Nur Knoten 01, nur 2000–5FFF** – nie der Kessel, nie Kommunikationsobjekte (0x1000–0x1FFF) |
-| Lange Lesebefehle auch am Kessel | **an** | Teilstücke/Block beim Lesen auch an Knoten 2 (dort teilt sich das Board den Kanal mit dem WEM) |
+| Schalten per CAN statt JSON (Heizkreis, Warmwasser) | **<!--ab-werk:can_schalten-->an<!--/ab-werk-->** (seit v42; v35–v41 aus) | App-Knöpfe, `cmd/heizkreis`, `cmd/warmwasser` schreiben per SDO-Download an den WEM: `0x2933`/2 bzw. `0x2A20`/2, 1 Byte. Warteschlange, Sperrminute und Kontrolle am Bus wie beim JSON-Weg; Abbruch des WEM = „abgelehnt“ |
+| Freies CAN-Schreiben (Experten) | <!--ab-werk:can_frei-->aus<!--/ab-werk--> | Eingabefeld und `cmd/can_schreiben`: `KN IDX SUB WERT [LÄNGE]` oder `KN IDX SUB = B1 B2 …` (hex, bis 64 Byte, ab 5 Byte in Teilstücken mit 50 ms Pause). **Nur Knoten 01, nur 2000–5FFF** – nie der Kessel, nie Kommunikationsobjekte (0x1000–0x1FFF) |
+| Lange Lesebefehle auch am Kessel | **<!--ab-werk:lang_am_kessel-->an<!--/ab-werk-->** | Teilstücke/Block beim Lesen auch an Knoten 2 (dort teilt sich das Board den Kanal mit dem WEM) |
 
 **An der WTC-GW 15-B (WEM 428.226) am 26.10.2026 bestätigt:**
 
@@ -646,6 +646,37 @@ zehn Plätze aus [Abschnitt 8](#8-wann-sich-der-wem-aufhängt).
 | **Heizung: IP-Adresse** | Adresse des WEM für die JSON-Befehle |
 | **Waechter: Neustart nach Minuten ohne Bus (0 = aus)** | startet das Board neu, wenn so lange kein Frame kam (Bus-off-Falle) |
 
+**Alle Einstellungen mit ihrem Wert ab Werk.** Die Tabelle wird aus dem Code erzeugt (`werkzeuge/einstellungen_erzeugen.py`: `restore_mode` und `initial_value` in `pakete/*.yaml`, Liste der Einstellungsseite in `app_server.cpp`); die CI schlägt fehl, wenn sie nicht zum Code passt. Dasselbe gilt für jede Angabe „ab Werk“ an anderer Stelle der Doku.
+
+<!-- EINSTELLUNGEN:BEGIN -->
+| Einstellung (Name auf dem Board) | Ab Werk | Bereich | Paket | Gruppe der Einstellungsseite | Ändern braucht |
+|---|---|---|---|---|---|
+| Schalten per CAN statt JSON (Heizkreis, Warmwasser) | **an** | – | `wem-schalten` | Schalten | Admin-Anmeldung |
+| Abstand zwischen Befehlen per CAN (s) | 10 | 5–300 | `wem-schalten` | Schalten | Admin-Anmeldung |
+| Abstand zwischen Befehlen per JSON (s) | 60 | 60–600 | `wem-schalten` | Schalten | Admin-Anmeldung |
+| Mindestabstand JSON-Abruf (s) | 300 | 120–3600 | `json-lesen` | Schalten | Admin-Anmeldung |
+| Eigene CAN-Anfragen | **aus** | – | `kessel` | Lesen | Admin-Anmeldung und Experten-Passwort |
+| Lange Lesebefehle auch am Kessel | **an** | – | `kessel` | Lesen | Admin-Anmeldung und Experten-Passwort |
+| SD-Dateien abrufen | **an** | – | `wem-schalten` | Lesen | Admin-Anmeldung und Experten-Passwort |
+| R1 Warmwasser am Display oder Portal umgeschaltet | **an** | – | `verdacht` | Regeln | Admin-Anmeldung |
+| R2 Warmwasserbetrieb trotz Aus | **an** | – | `verdacht` | Regeln | Admin-Anmeldung |
+| R3 Heizung ein oder Standby | **an** | – | `verdacht` | Regeln | Admin-Anmeldung |
+| R4 Heizanforderung passt nicht | **aus** | – | `verdacht` | Regeln | Admin-Anmeldung |
+| R5 uebrige Statusbits geaendert | **aus** | – | `verdacht` | Regeln | Admin-Anmeldung |
+| Eigene Regeln (Hauptschalter) | **aus** | – | `verdacht` | Regeln | Admin-Anmeldung |
+| Freies CAN-Schreiben (Experten) | **aus** | – | `wem-schalten` | Experten | Admin-Anmeldung und Experten-Passwort |
+| CAN-Rohmitschnitt nach MQTT | **aus** | – | `mqtt` | Experten | Admin-Anmeldung und Experten-Passwort |
+| Waechter: Neustart nach Minuten ohne Bus (0 = aus) | 5 | 0–120 | `kessel` | Experten | Admin-Anmeldung und Experten-Passwort |
+| R1 Mindestabstand (min) | 1 | 1–1440 | `verdacht` | – | Experten-Oberfläche |
+| R2 Mindestabstand (min) | 10 | 1–1440 | `verdacht` | – | Experten-Oberfläche |
+| R3 Mindestabstand (min) | 1 | 1–1440 | `verdacht` | – | Experten-Oberfläche |
+| R4 Mindestabstand (min) | 30 | 1–1440 | `verdacht` | – | Experten-Oberfläche |
+| R5 Mindestabstand (min) | 5 | 1–1440 | `verdacht` | – | Experten-Oberfläche |
+| Regeln: hoechstens pro Stunde (alle zusammen) | 6 | 1–60 | `verdacht` | – | Experten-Oberfläche |
+<!-- EINSTELLUNGEN:END -->
+
+„Ändern braucht“ gilt mit dem Paket `app`: Die Einstellungsseite verlangt die Admin-Anmeldung, in den Gruppen „Lesen“ und „Experten“ zusätzlich das Experten-Passwort. Was dort keine Gruppe hat, steht nicht auf der Einstellungsseite, sondern in der Experten-Oberfläche (`/experten`); die Werte der Regeln lassen sich auch per Datei und MQTT setzen ([REGELN.md](REGELN.md)). „(wahlweise)“ heißt: Das Paket ist in `weishaupt-wem-can.yaml` nicht eingebunden.
+
 ## 6a. Regeln: Betriebsarten bei Verdacht lesen
 
 Paket `verdacht.yaml` liest die Betriebsarten **nur dann**, wenn das Mithören eine Änderung
@@ -654,11 +685,11 @@ Mindestabstand je Regel und Obergrenze pro Stunde. **Ausführlich: [REGELN.md](R
 
 | Regel | Auslöser am Bus | liest | Vorgabe |
 |---|---|---|---|
-| R1 | WEM fragt den Kessel `2101/0A`, `2102/0D`, `2102/01` (SDO Block-Upload `0xA4`) | Warmwasser | an |
-| R2 | Kesselstatus 15 bzw. `0x252B` = `0F` bei bekanntem Warmwasser „Aus“ | Warmwasser | an |
-| R3 | Standby-Bit `0x1000` in `0x1C1` ändert sich | Heizkreis | an |
-| R4 | Heizanforderung passt nicht zur bekannten Heizkreis-Betriebsart | Heizkreis | aus |
-| R5 | übrige Statusbits in `0x1C1` ändern sich | Heizkreis | aus |
+| R1 | WEM fragt den Kessel `2101/0A`, `2102/0D`, `2102/01` (SDO Block-Upload `0xA4`) | Warmwasser | <!--ab-werk:vd_r1-->an<!--/ab-werk--> |
+| R2 | Kesselstatus 15 bzw. `0x252B` = `0F` bei bekanntem Warmwasser „Aus“ | Warmwasser | <!--ab-werk:vd_r2-->an<!--/ab-werk--> |
+| R3 | Standby-Bit `0x1000` in `0x1C1` ändert sich | Heizkreis | <!--ab-werk:vd_r3-->an<!--/ab-werk--> |
+| R4 | Heizanforderung passt nicht zur bekannten Heizkreis-Betriebsart | Heizkreis | <!--ab-werk:vd_r4-->aus<!--/ab-werk--> |
+| R5 | übrige Statusbits in `0x1C1` ändern sich | Heizkreis | <!--ab-werk:vd_r5-->aus<!--/ab-werk--> |
 
 Ausgeschaltete Regeln laufen im **Schattenmodus** weiter (melden „wäre ausgelöst“, lesen nicht).
 Eigene Regeln der Form „CAN-ID + Maske + Muster“ sind experimentell und haben einen eigenen

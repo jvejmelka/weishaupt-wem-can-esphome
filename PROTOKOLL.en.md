@@ -12,9 +12,9 @@ from third-party sources or is merely plausible, this is noted.
 > | Way | What | Default |
 > |---|---|---|
 > | **CAN listening** | PDOs and the answers to requests the WEM sends to the boiler. The board sends nothing. | always on |
-> | **CAN reading** (SDO, command byte `0x40`) | own read requests to the WEM (node 1) and the boiler (node 2): on a schedule, on occasion (operating modes, WEM only), for verification after switching, by hand | schedule off (switch “Eigene CAN-Anfragen”), everything else on |
-> | **CAN writing to the WEM** (SDO, node 1) | switching heating circuit (`0x2933`/2) and hot water (`0x2A20`/2) – directly on the bus, without JSON | **on** since v42 (v35–v41: could be enabled) |
-> | **Free CAN writing** (experts) | single objects by hand, on the WEM (node 1) only, `0x2000`–`0x5FFF` only | off |
+> | **CAN reading** (SDO, command byte `0x40`) | own read requests to the WEM (node 1) and the boiler (node 2): on a schedule, on occasion (operating modes, WEM only), for verification after switching, by hand | schedule <!--ab-werk:can_anfragen-->off<!--/ab-werk--> (switch “Eigene CAN-Anfragen”), everything else on |
+> | **CAN writing to the WEM** (SDO, node 1) | switching heating circuit (`0x2933`/2) and hot water (`0x2A20`/2) – directly on the bus, without JSON | **<!--ab-werk:can_schalten-->on<!--/ab-werk-->** since v42 (v35–v41: could be enabled) |
+> | **Free CAN writing** (experts) | single objects by hand, on the WEM (node 1) only, `0x2000`–`0x5FFF` only | <!--ab-werk:can_frei-->off<!--/ab-werk--> |
 > | **JSON writing** (HTTP to the WEM) | fallback for switching when “Schalten per CAN statt JSON” is off. Up to v34 this was the only way. | unused |
 > | **JSON reading** (HTTP to the WEM) | by hand only: “Werte per JSON abrufen” (one request, from v42), files on the SD card. Never on a schedule – the WEM does not tolerate polling. | on button press only |
 > | **CAN tunnel** (experiment, branch `can-tunnel`) | forwards unfiltered whatever the device at the other end sends – including the write requests of a room unit ([section 10b](#10b-can-tunnel-over-wlan-experiment-branch-can-tunnel)) | not included |
@@ -206,7 +206,7 @@ The board obtains values in two ways:
 |---|---|---|
 | What | PDOs, plus the SDO responses to requests that **the WEM itself** sends to the boiler | own SDO read requests `40 …` |
 | Load | none – the board sends nothing | one request plus one response per value |
-| Can be disabled | no, always running | yes, switch **“Eigene CAN-Anfragen”** (“own CAN requests”; default: off) |
+| Can be disabled | no, always running | yes, switch **“Eigene CAN-Anfragen”** (“own CAN requests”; default: <!--ab-werk:can_anfragen-->off<!--/ab-werk-->) |
 
 The WEM polls the boiler constantly anyway – on the measured installation about three SDO requests
 per second. That is why a large share of the boiler values reaches the board without it asking
@@ -268,7 +268,7 @@ Exception from v42: **manual refresh** (package `json-lesen`, button "Aktualisie
 Observed on 28 Oct 2026:
 - The WEM answers **at most 7 objects per request**; the eighth always gets CM 05 – whichever object is there.
 - Six requests within 7 minutes (each at least 60 s apart) – after that only empty answers; after a 10-minute pause
-  all values again. The minimum interval is therefore 5 minutes by default (at least 2); nothing is ever polled automatically.
+  all values again. The minimum interval is therefore <!--ab-werk:json_abstand-->300<!--/ab-werk--> seconds by default (at least 120); nothing is ever polled automatically.
 
 ### What remains if the WEM fails
 
@@ -568,9 +568,9 @@ interface stays untouched. JSON is the fallback (switch off). Three switches in 
 
 | Switch | default | effect |
 |---|---|---|
-| Schalten per CAN statt JSON (Heizkreis, Warmwasser) | **on** (since v42; v35–v41 off) | app buttons, `cmd/heizkreis`, `cmd/warmwasser` write via SDO download to the WEM: `0x2933`/2 or `0x2A20`/2, 1 byte. Queue, lock minute and bus verification as on the JSON path; WEM abort = “rejected” |
-| Freies CAN-Schreiben (Experten) | off | input field and `cmd/can_schreiben`: `NODE IDX SUB VALUE [LENGTH]` or `NODE IDX SUB = B1 B2 …` (hex, up to 64 bytes, from 5 bytes segmented with a 50 ms pause). **Node 01 only, 2000–5FFF only** – never the boiler, never communication objects (0x1000–0x1FFF) |
-| Lange Lesebefehle auch am Kessel | **on** | segmented/block reads also on node 2 (there the board shares the channel with the WEM) |
+| Schalten per CAN statt JSON (Heizkreis, Warmwasser) | **<!--ab-werk:can_schalten-->on<!--/ab-werk-->** (since v42; v35–v41 off) | app buttons, `cmd/heizkreis`, `cmd/warmwasser` write via SDO download to the WEM: `0x2933`/2 or `0x2A20`/2, 1 byte. Queue, lock minute and bus verification as on the JSON path; WEM abort = “rejected” |
+| Freies CAN-Schreiben (Experten) | <!--ab-werk:can_frei-->off<!--/ab-werk--> | input field and `cmd/can_schreiben`: `NODE IDX SUB VALUE [LENGTH]` or `NODE IDX SUB = B1 B2 …` (hex, up to 64 bytes, from 5 bytes segmented with a 50 ms pause). **Node 01 only, 2000–5FFF only** – never the boiler, never communication objects (0x1000–0x1FFF) |
+| Lange Lesebefehle auch am Kessel | **<!--ab-werk:lang_am_kessel-->on<!--/ab-werk-->** | segmented/block reads also on node 2 (there the board shares the channel with the WEM) |
 
 **Confirmed on the WTC-GW 15-B (WEM 428.226) on 2026-10-26:**
 
@@ -666,6 +666,37 @@ ten slots from [section 8](#8-when-the-wem-locks-up).
 | **Heizung: IP-Adresse** (heating: IP address) | address of the WEM for the JSON commands |
 | **Waechter: Neustart nach Minuten ohne Bus (0 = aus)** (watchdog: reboot after minutes without bus, 0 = off) | reboots the board if no frame has arrived for that long (bus-off trap) |
 
+**All settings with their default value.** The table is generated from the code (`werkzeuge/einstellungen_erzeugen.py`: `restore_mode` and `initial_value` in `pakete/*.yaml`, the list of the settings page in `app_server.cpp`); CI fails if it does not match the code. The same holds for every “default” stated elsewhere in the documentation.
+
+<!-- EINSTELLUNGEN:BEGIN -->
+| Setting (name on the board) | Default | Range | Package | Group on the settings page | Changing it needs |
+|---|---|---|---|---|---|
+| Schalten per CAN statt JSON (Heizkreis, Warmwasser) | **on** | – | `wem-schalten` | Schalten | admin login |
+| Abstand zwischen Befehlen per CAN (s) | 10 | 5–300 | `wem-schalten` | Schalten | admin login |
+| Abstand zwischen Befehlen per JSON (s) | 60 | 60–600 | `wem-schalten` | Schalten | admin login |
+| Mindestabstand JSON-Abruf (s) | 300 | 120–3600 | `json-lesen` | Schalten | admin login |
+| Eigene CAN-Anfragen | **off** | – | `kessel` | Lesen | admin login and expert password |
+| Lange Lesebefehle auch am Kessel | **on** | – | `kessel` | Lesen | admin login and expert password |
+| SD-Dateien abrufen | **on** | – | `wem-schalten` | Lesen | admin login and expert password |
+| R1 Warmwasser am Display oder Portal umgeschaltet | **on** | – | `verdacht` | Regeln | admin login |
+| R2 Warmwasserbetrieb trotz Aus | **on** | – | `verdacht` | Regeln | admin login |
+| R3 Heizung ein oder Standby | **on** | – | `verdacht` | Regeln | admin login |
+| R4 Heizanforderung passt nicht | **off** | – | `verdacht` | Regeln | admin login |
+| R5 uebrige Statusbits geaendert | **off** | – | `verdacht` | Regeln | admin login |
+| Eigene Regeln (Hauptschalter) | **off** | – | `verdacht` | Regeln | admin login |
+| Freies CAN-Schreiben (Experten) | **off** | – | `wem-schalten` | Experten | admin login and expert password |
+| CAN-Rohmitschnitt nach MQTT | **off** | – | `mqtt` | Experten | admin login and expert password |
+| Waechter: Neustart nach Minuten ohne Bus (0 = aus) | 5 | 0–120 | `kessel` | Experten | admin login and expert password |
+| R1 Mindestabstand (min) | 1 | 1–1440 | `verdacht` | – | expert interface |
+| R2 Mindestabstand (min) | 10 | 1–1440 | `verdacht` | – | expert interface |
+| R3 Mindestabstand (min) | 1 | 1–1440 | `verdacht` | – | expert interface |
+| R4 Mindestabstand (min) | 30 | 1–1440 | `verdacht` | – | expert interface |
+| R5 Mindestabstand (min) | 5 | 1–1440 | `verdacht` | – | expert interface |
+| Regeln: hoechstens pro Stunde (alle zusammen) | 6 | 1–60 | `verdacht` | – | expert interface |
+<!-- EINSTELLUNGEN:END -->
+
+“Changing it needs” applies with the package `app`: the settings page requires the admin login, and in the groups “Lesen” (reading) and “Experten” (experts) the expert password as well. Settings without a group are not on the settings page but in the expert interface (`/experten`); the values of the rules can also be set by file and MQTT ([REGELN.md](REGELN.md), German). “(optional)” means: the package is not included in `weishaupt-wem-can.yaml`.
+
 ## 6a. Rules: reading operating modes on suspicion
 
 Package `verdacht.yaml` reads the operating modes **only** when passive listening suggests a
@@ -674,11 +705,11 @@ minimum interval per rule and a cap per hour. **In detail: [REGELN.md](REGELN.md
 
 | Rule | Trigger on the bus | reads | Default |
 |---|---|---|---|
-| R1 | WEM requests `2101/0A`, `2102/0D`, `2102/01` from the boiler (SDO block upload `0xA4`) | DHW | on |
-| R2 | Boiler status 15 or `0x252B` = `0F` while DHW is known to be “off” | DHW | on |
-| R3 | Standby bit `0x1000` in `0x1C1` changes | heating circuit | on |
-| R4 | Heat demand does not match the known heating circuit operating mode | heating circuit | off |
-| R5 | other status bits in `0x1C1` change | heating circuit | off |
+| R1 | WEM requests `2101/0A`, `2102/0D`, `2102/01` from the boiler (SDO block upload `0xA4`) | DHW | <!--ab-werk:vd_r1-->on<!--/ab-werk--> |
+| R2 | Boiler status 15 or `0x252B` = `0F` while DHW is known to be “off” | DHW | <!--ab-werk:vd_r2-->on<!--/ab-werk--> |
+| R3 | Standby bit `0x1000` in `0x1C1` changes | heating circuit | <!--ab-werk:vd_r3-->on<!--/ab-werk--> |
+| R4 | Heat demand does not match the known heating circuit operating mode | heating circuit | <!--ab-werk:vd_r4-->off<!--/ab-werk--> |
+| R5 | other status bits in `0x1C1` change | heating circuit | <!--ab-werk:vd_r5-->off<!--/ab-werk--> |
 
 Disabled rules keep running in **shadow mode** (they report “would have triggered” but do not read).
 Custom rules of the form “CAN ID + mask + pattern” are experimental and have their own

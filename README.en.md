@@ -129,7 +129,7 @@ Comment out unneeded lines under `packages:`.
 | `homeassistant-api.yaml` | native ESPHome API (encrypted) | no |
 | `wem-schalten.yaml` | heating circuit switching, queue, log | no |
 | `warmwasser-schalten.yaml` | DHW on/off (requires `wem-schalten` and `warmwasser`) | no |
-| `verdacht.yaml` | **Rules:** read the operating modes only when passive listening suggests a change; fixed rules R1–R5 individually switchable (default: R1–R3 on, R4/R5 off; disabled ones keep running in shadow mode), plus custom rules (experimental, own master switch, default off); configurable via web, file and MQTT (requires `warmwasser`). Details: [REGELN.md](REGELN.md) (German) | no |
+| `verdacht.yaml` | **Rules:** read the operating modes only when passive listening suggests a change; fixed rules R1–R5 individually switchable (default: R1–R3 <!--ab-werk:vd_r1-->on<!--/ab-werk-->, R4/R5 <!--ab-werk:vd_r4-->off<!--/ab-werk-->; disabled ones keep running in shadow mode), plus custom rules (experimental, own master switch, default <!--ab-werk:vd_eigene_haupt-->off<!--/ab-werk-->); configurable via web, file and MQTT (requires `warmwasser`). Details: [REGELN.md](REGELN.md) (German) | no |
 | `zusatz.yaml` | **Extra displays for the phone app:** list of up to 6 third-party MQTT topics (e.g. room temperatures, "heat pump running"), configurable via web and file. The board does **not** read these values itself, it only manages the list (requires `mqtt`). Details: [PROTOKOLL.en.md, section 6b](PROTOKOLL.en.md#6b-additional-displays-for-the-phone-app) | no |
 | `app.yaml` | **Phone app served by the board itself** (from v38): `http://<board>/app`, own login (`app_benutzer`/`app_passwort` in `secrets.yaml`), no server needed (needs `wem-schalten`, `warmwasser-schalten`) | no |
 | `feste-ip.yaml` | static IP instead of DHCP | no |
@@ -167,7 +167,7 @@ the previous Wi-Fi is kept. The last fallback is the emergency hotspot with capt
 | `<gerät>/cmd/heizkreis` | `1`–`8`, name (`Zeitprogramm 1`) or `ZP1`; from v27 also JSON `{"id":17,"wert":"ZP2"}` | heating circuit operating mode (queued); every phase on `befehl/status` |
 | `<gerät>/cmd/warmwasser` | `Ein` / `Aus`; from v27 also JSON `{"id":18,"wert":"Aus"}` | DHW (queued); every phase on `befehl/status` |
 | `<gerät>/cmd/lesen` | `01 2933 02` (node index sub, hex), with `B` at the end by block | read one object; long objects automatically segmented |
-| `<gerät>/cmd/sd_datei` | `systable.csv` | fetch a file from the WEM's SD card (from v36; switch “SD-Dateien abrufen”, on by default; lock minute); content to `<gerät>/sd/<file>`, from 4 KB in pieces `/1`, `/2` …; `systable.csv` is evaluated (text sensor “Systemtabelle”) |
+| `<gerät>/cmd/sd_datei` | `systable.csv` | fetch a file from the WEM's SD card (from v36; switch “SD-Dateien abrufen”, default <!--ab-werk:sd_erlaubt-->on<!--/ab-werk-->; lock minute); content to `<gerät>/sd/<file>`, from 4 KB in pieces `/1`, `/2` …; `systable.csv` is evaluated (text sensor “Systemtabelle”) |
 | `<gerät>/cmd/can_schreiben` | `01 2933 02 01` (node index sub value [length 1/2/4], hex) or `01 2xxx 00 = 11 22 33 …` | **locked by default** (switch “Freies CAN-Schreiben”); node 01 only, objects 2000–5FFF only |
 | `<gerät>/cmd/scan` | `01 2A00 2AFF 3` | read a range, responses in `<gerät>/canraw` |
 | `<gerät>/cmd/stop` | anything | abort scan |
@@ -500,10 +500,11 @@ made-up example frames based on [PROTOKOLL.en.md](PROTOKOLL.en.md), together wit
 ```
 tests/run.sh                                     # Regellogik, Klassen, Datei-Parser, Registertabelle
 python3 werkzeuge/register_erzeugen.py --pruefen # erzeugte Dateien passen zu register.yaml
+python3 werkzeuge/einstellungen_erzeugen.py --pruefen # Angaben „ab Werk“ in der Doku passen zu den Paketen
 python3 tests/links.py                           # relative Links und Anker in allen .md-Dateien
 ```
 
-(Comments: rule logic, classes, file parsers, register table · generated files match `register.yaml` · relative links and anchors in all .md files.)
+(Comments: rule logic, classes, file parsers, register table · generated files match `register.yaml` · defaults stated in the documentation match the packages · relative links and anchors in all .md files.)
 
 **Register table:** all CAN objects are defined only in [`register.yaml`](register.yaml); from it,
 [`werkzeuge/register_erzeugen.py`](werkzeuge/register_erzeugen.py) generates the C++ constants
@@ -512,6 +513,10 @@ python3 tests/links.py                           # relative Links und Anker in a
 yet been verified on our own installation are kept separately in [`register-uebernommen.yaml`](register-uebernommen.yaml) –
 with the source for each object and without firmware constants
 ([PROTOKOLL, section 7a](PROTOKOLL.en.md#7a-objects-taken-from-other-projects-unverified)).
+
+**Defaults:** whether a switch ships on or off and which initial value a number has is defined only in the
+packages (`restore_mode`, `initial_value`). [`werkzeuge/einstellungen_erzeugen.py`](werkzeuge/einstellungen_erzeugen.py)
+writes the [table of all settings](PROTOKOLL.en.md#einstellungen-settings) and every default stated in the documentation from it.
 
 On every push, all three run in [GitHub Actions](https://github.com/jvejmelka/weishaupt-wem-can-esphome/actions/workflows/ci.yml), and in addition the
 firmware is compiled with ESPHome 2026.9.0 and a dummy `secrets.yaml` (from `secrets.yaml.example`)
@@ -530,7 +535,7 @@ On every upload (push) and every proposed change (pull request), four checks run
 | Check | What it ensures |
 |---|---|
 | Tests of the rule logic and the component | rules and switching logic react to the example telegrams as expected |
-| Register table and generated files | firmware constants and documentation tables match `register.yaml`; no read request goes to the wrong node |
+| Register table and generated files | firmware constants and documentation tables match `register.yaml`; no read request goes to the wrong node; defaults stated in the documentation match the packages |
 | Links in the .md files | all references in the documentation lead somewhere |
 | Compile firmware | the firmware builds with ESPHome (with placeholder credentials; no real secrets needed) |
 

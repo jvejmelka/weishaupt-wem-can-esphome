@@ -120,7 +120,7 @@ Nicht benötigte Zeilen unter `packages:` auskommentieren.
 | `homeassistant-api.yaml` | native ESPHome-API (verschlüsselt) | nein |
 | `wem-schalten.yaml` | Heizkreis schalten, Warteschlange, Protokoll | nein |
 | `warmwasser-schalten.yaml` | Warmwasser Ein/Aus (braucht `wem-schalten` und `warmwasser`) | nein |
-| `verdacht.yaml` | **Regeln:** Betriebsarten nur lesen, wenn das Mithören eine Änderung vermuten lässt; feste Regeln R1–R5 einzeln schaltbar (Vorgabe: R1–R3 an, R4/R5 aus; ausgeschaltete laufen im Schattenmodus weiter), dazu eigene Regeln (experimentell, eigener Hauptschalter, Vorgabe aus); einstellbar per Web, Datei und MQTT (braucht `warmwasser`). Details: [REGELN.md](REGELN.md) | nein |
+| `verdacht.yaml` | **Regeln:** Betriebsarten nur lesen, wenn das Mithören eine Änderung vermuten lässt; feste Regeln R1–R5 einzeln schaltbar (Vorgabe: R1–R3 <!--ab-werk:vd_r1-->an<!--/ab-werk-->, R4/R5 <!--ab-werk:vd_r4-->aus<!--/ab-werk-->; ausgeschaltete laufen im Schattenmodus weiter), dazu eigene Regeln (experimentell, eigener Hauptschalter, Vorgabe <!--ab-werk:vd_eigene_haupt-->aus<!--/ab-werk-->); einstellbar per Web, Datei und MQTT (braucht `warmwasser`). Details: [REGELN.md](REGELN.md) | nein |
 | `zusatz.yaml` | **Zusatzanzeigen für die Handy-App:** Liste von bis zu 6 fremden MQTT-Topics (z. B. Raumtemperaturen, „Wärmepumpe läuft“), einstellbar per Web und Datei. Das Board liest diese Werte **nicht** selbst, es verwaltet nur die Liste (braucht `mqtt`). Details: [PROTOKOLL.md, Abschnitt 6b](PROTOKOLL.md#6b-zusatzanzeigen-für-die-handy-app) | nein |
 | `app.yaml` | **Handy-App direkt auf dem Board** (ab v38): `http://<board>/app`, eigener Login (`app_benutzer`/`app_passwort` in `secrets.yaml`), kein Server nötig (braucht `wem-schalten`, `warmwasser-schalten`) | nein |
 | `feste-ip.yaml` | feste IP statt DHCP | nein |
@@ -156,7 +156,7 @@ bleibt das bisherige WLAN. Letzter Rückweg ist der Notfall-Hotspot mit Captive 
 | `<gerät>/cmd/heizkreis` | `1`–`8`, Name (`Zeitprogramm 1`) oder `ZP1`; ab v27 auch JSON `{"id":17,"wert":"ZP2"}` | Heizkreis-Betriebsart (Warteschlange); jede Phase auf `befehl/status` |
 | `<gerät>/cmd/warmwasser` | `Ein` / `Aus`; ab v27 auch JSON `{"id":18,"wert":"Aus"}` | Warmwasser (Warteschlange); jede Phase auf `befehl/status` |
 | `<gerät>/cmd/lesen` | `01 2933 02` (Knoten Index Sub, hex), mit `B` am Ende per Block | ein Objekt lesen; lange Objekte automatisch in Teilstücken |
-| `<gerät>/cmd/sd_datei` | `systable.csv` | Datei von der SD-Karte des WEM holen (ab v36; Schalter „SD-Dateien abrufen“, ab Werk an; Sperrminute); Inhalt an `<gerät>/sd/<datei>`, ab 4 KB in Stücken `/1`, `/2` …; `systable.csv` wird ausgewertet (Text-Sensor „Systemtabelle“) |
+| `<gerät>/cmd/sd_datei` | `systable.csv` | Datei von der SD-Karte des WEM holen (ab v36; Schalter „SD-Dateien abrufen“, ab Werk <!--ab-werk:sd_erlaubt-->an<!--/ab-werk-->; Sperrminute); Inhalt an `<gerät>/sd/<datei>`, ab 4 KB in Stücken `/1`, `/2` …; `systable.csv` wird ausgewertet (Text-Sensor „Systemtabelle“) |
 | `<gerät>/cmd/can_schreiben` | `01 2933 02 01` (Knoten Index Sub Wert [Länge 1/2/4], hex) oder `01 2xxx 00 = 11 22 33 …` | **ab Werk gesperrt** (Schalter „Freies CAN-Schreiben“); nur Knoten 01, nur Objekte 2000–5FFF |
 | `<gerät>/cmd/scan` | `01 2A00 2AFF 3` | Bereich lesen, Antworten in `<gerät>/canraw` |
 | `<gerät>/cmd/stop` | beliebig | Scan abbrechen |
@@ -483,6 +483,7 @@ ausgedachten Beispiel-Frames nach [PROTOKOLL.md](PROTOKOLL.md), zusammen mit den
 ```
 tests/run.sh                                     # Regellogik, Klassen, Datei-Parser, Registertabelle
 python3 werkzeuge/register_erzeugen.py --pruefen # erzeugte Dateien passen zu register.yaml
+python3 werkzeuge/einstellungen_erzeugen.py --pruefen # Angaben „ab Werk“ in der Doku passen zu den Paketen
 python3 tests/links.py                           # relative Links und Anker in allen .md-Dateien
 ```
 
@@ -492,6 +493,10 @@ erzeugt [`werkzeuge/register_erzeugen.py`](werkzeuge/register_erzeugen.py) die C
 [INSTALL.md, Abschnitt 14](INSTALL.md#14-register-ändern). Objekte aus anderen Projekten, die an der eigenen Anlage
 noch nicht geprüft sind, stehen getrennt in [`register-uebernommen.yaml`](register-uebernommen.yaml) – mit Quelle je
 Objekt, ohne Firmware-Konstanten ([PROTOKOLL, Abschnitt 7a](PROTOKOLL.md#7a-übernommene-objekte-aus-anderen-projekten-ungeprüft)).
+
+**Einstellungen ab Werk:** welcher Schalter an oder aus ausgeliefert wird und welchen Startwert eine Zahl hat, steht
+nur in den Paketen (`restore_mode`, `initial_value`). [`werkzeuge/einstellungen_erzeugen.py`](werkzeuge/einstellungen_erzeugen.py)
+schreibt daraus die [Tabelle aller Einstellungen](PROTOKOLL.md#einstellungen) und jede Angabe „ab Werk“ in der Doku.
 
 Bei jedem Push laufen alle drei in [GitHub Actions](https://github.com/jvejmelka/weishaupt-wem-can-esphome/actions/workflows/ci.yml), dazu wird die
 Firmware mit ESPHome 2026.9.0 und einer Dummy-`secrets.yaml` (aus `secrets.yaml.example`)
@@ -510,7 +515,7 @@ Bei jedem Hochladen (Push) und bei jeder vorgeschlagenen Änderung (Pull Request
 | Prüfung | was sie sicherstellt |
 |---|---|
 | Tests der Regellogik und des Bauteils | Regeln und Schaltlogik reagieren auf die Beispiel-Telegramme wie erwartet |
-| Registertabelle und erzeugte Dateien | Firmware-Konstanten und Doku-Tabellen passen zu `register.yaml`, keine Leseanfrage geht an den falschen Knoten |
+| Registertabelle und erzeugte Dateien | Firmware-Konstanten und Doku-Tabellen passen zu `register.yaml`, keine Leseanfrage geht an den falschen Knoten; Angaben „ab Werk“ in der Doku passen zu den Paketen |
 | Links in den .md-Dateien | alle Verweise in der Dokumentation führen irgendwohin |
 | Firmware kompilieren | die Firmware baut mit ESPHome (mit Platzhalter-Zugangsdaten, echte Geheimnisse braucht es nicht) |
 
