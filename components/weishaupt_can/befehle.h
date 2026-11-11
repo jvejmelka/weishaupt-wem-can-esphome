@@ -6,6 +6,8 @@
 //   <geraet>/befehl/status   (retained) jede Phase jedes Schaltbefehls:
 //        angenommen -> vorgemerkt -> gesendet -> pruefe_bus -> bestaetigt
 //                                                            \-> gescheitert (grund)
+//        vorgemerkt -> bestaetigt (stand schon so: vorab gelesen, nichts geschrieben - ab v42)
+//        vorgemerkt -> gescheitert (obergrenze: zu viele Schreibvorgaenge je Stunde - ab v42)
 //        vorgemerkt -> ersetzt (neuerer Wunsch fuer dasselbe Ziel) | gescheitert (geleert)
 //        abgelehnt (ungueltig, nie in der Warteschlange)
 // Neu erzeugt wird hier NICHTS auf dem Bus und nichts am WEM - nur Buchfuehrung und Text.
@@ -141,9 +143,9 @@ struct Befehl {
   int ziel = 0, wert = 0;
   std::string quelle;
   std::string phase;          // angenommen vorgemerkt gesendet pruefe_bus bestaetigt gescheitert ersetzt abgelehnt
-  std::string grund;          // ungueltig cm05 nicht_uebernommen keine_rueckmeldung geleert ersetzt
+  std::string grund;          // ungueltig cm05 nicht_uebernommen keine_rueckmeldung geleert ersetzt obergrenze
   std::string text;           // Klartext zum Grund
-  std::string wem;            // Antwort des WEM ab pruefe_bus: bestaetigt | unklar | nicht_erreichbar
+  std::string wem;            // Antwort des WEM ab pruefe_bus: bestaetigt | unklar | nicht_erreichbar | nicht_gesendet (ab v42: stand schon so)
   int ist = -1;               // am Bus zurueckgelesener Wert
   int warten_s = -1;          // bei vorgemerkt: Sekunden bis zum Ende des Mindestabstands (0 = sofort)
   std::string ersetzt_durch;  // bei ersetzt: Kennung des neueren Befehls
@@ -222,15 +224,40 @@ struct Schaltung {
   }
 
   // Wunsch holen und als laufend markieren. Nur rufen, wenn gesendet werden darf.
-  bool naechster(Befehl &b) {
+  // melde = false (ab v42): "gesendet" kommt erst mit gesendet() - dazwischen liest das Board den Wert
+  // vorab am Bus und schreibt nur, wenn er abweicht (schon_so) und die Obergrenze es erlaubt (obergrenze).
+  bool naechster(Befehl &b, bool melde = true) {
     if (laeuft) return false;
     int z = erster();
     if (!z) return false;
     lauf = wunsch[z]; hat_wunsch[z] = false; laeuft = true;
     lauf.warten_s = -1;
-    melden(lauf, "gesendet");
+    if (melde) melden(lauf, "gesendet");
     b = lauf;
     return true;
+  }
+
+  // der Schreibbefehl geht jetzt wirklich an den WEM
+  void gesendet() {
+    if (!laeuft || lauf.phase == "gesendet" || lauf.phase == "pruefe_bus") return;
+    melden(lauf, "gesendet");
+  }
+
+  // Vorab-Lesung am Bus: der WEM steht schon auf dem gewuenschten Wert - nichts schreiben (schont das EEPROM)
+  void schon_so(int ist) {
+    if (!laeuft) return;
+    lauf.ist = ist; lauf.grund = ""; lauf.wem = "nicht_gesendet";   // festes Feld fuer die App (kein Freitext)
+    lauf.text = "stand schon so - nicht geschrieben";
+    melden(lauf, "bestaetigt");
+    laeuft = false;
+  }
+
+  // Obergrenze der Schreibvorgaenge je Stunde erreicht - der Befehl wird nicht gesendet
+  void obergrenze(const std::string &text) {
+    if (!laeuft) return;
+    lauf.grund = "obergrenze"; lauf.text = text;
+    melden(lauf, "gescheitert");
+    laeuft = false;
   }
 
   // Antwort des WEM. CM=05 beendet den Befehl, sonst entscheidet der Bus (pruefe_bus).

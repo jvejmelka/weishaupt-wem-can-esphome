@@ -24,6 +24,9 @@ canbus:
               if ((x[0] & 0xF0) != 0x40 || !reg::ist(reg::WW_BETRIEBSART, (x[2] << 8) | x[1], x[3])) return;
               uint8_t b = x[4];
               if (b == 1 || b == 2) id(ww_setzen).publish_state(b == 1 ? "Ein" : "Aus");
+              if (id(wcan)->schalten.vorab && id(wcan)->schalten.ziel == 2) {   // Antwort auf die Vorab-Lesung (wem-schalten.yaml)
+                id(wcan)->schalten.vorab_ist = b; id(wcan)->schalten.vorab = false; return;
+              }
               if (id(wcan)->schalten.ziel != 2 || !id(wcan)->schalten.pruefen) return;
               auto &s = bf::schaltung();
               s.uhr = id(wcan)->unix_zeit();

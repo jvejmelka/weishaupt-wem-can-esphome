@@ -32,6 +32,12 @@ added one). **This table is the one place for it**; README, INSTALL and the othe
 > WEM. Details: [Listening and reading](#2-passive-listening-and-on-demand-reading),
 > [Writing via CAN](#writing-via-can-from-v35-default-since-v42). The measured installation has been
 > switching via CAN since 26 Oct 2026.
+>
+> **Write as rarely as possible (from v42):** before switching, the firmware reads the value on the WEM; if it is
+> already set, nothing is written. Every write is counted, and the board refuses more than <!--ab-werk:schreib_max-->30<!--/ab-werk--> per hour –
+> [Write protection](#write-protection-write-as-little-as-possible-from-v42).
+> Ways this firmware does not use (WEM portal, Modbus TCP, older WCM units) are listed in
+> [section 10d](#10d-other-ways-to-the-installation-and-related-projects).
 
 ## Contents
 
@@ -52,6 +58,7 @@ added one). **This table is the one place for it**; README, INSTALL and the othe
 - [10a. WEM-RG2 room unit on the bus](VERSUCHE.en.md#10a-wem-rg2-room-unit-on-the-bus-capture-november-2026) → VERSUCHE.en.md
 - [10b. CAN tunnel over WLAN](VERSUCHE.en.md#10b-can-tunnel-over-wlan-experiment-branch-can-tunnel) → VERSUCHE.en.md
 - [10c. Fault messages on the bus and error codes](#10c-fault-messages-on-the-bus-and-error-codes)
+- [10d. Other ways to the installation and related projects](#10d-other-ways-to-the-installation-and-related-projects)
 - [11. Sources](#11-sources)
 
 ## 1. Overview
@@ -655,8 +662,38 @@ Tried on the bench with an RG2 (node 4): [VERSUCHE.en.md, restarting the RG2 via
 
 So the WEM accepts a value written via CAN like one written via JSON (control, display, app). Open:
 portal, behaviour after a restart, other installations. Every changed value probably ends up in the
-WEM's EEPROM – never write periodically. Other reports that the devices reject SDO writes probably
+WEM's EEPROM – never write periodically ([Write protection](#write-protection-write-as-little-as-possible-from-v42)). Other reports that the devices reject SDO writes probably
 concerned other objects or the boiler.
+
+### Write protection: write as little as possible (from v42)
+
+For the system units of its heat pumps Weishaupt gives a number: every change of a parameter is stored in the
+EEPROM, which tolerates **100,000 write accesses over its lifetime**; parameters should therefore be written as
+rarely as possible (Modbus TCP data point list for heat pumps, print no. 83807301, edition 1/2025-11 – found via
+[gojux/weishaupt_unofficial](https://github.com/gojux/weishaupt_unofficial)). There is no such statement for the
+WEM system unit of a gas boiler. It belongs to the same device family, so this project assumes the same limit
+until something else is documented. Whether the WEM also writes to the EEPROM when the written value equals the
+old one is not known.
+
+For scale: 100,000 write accesses in 20 years are just under 14 per day. Switching by hand or through a few rules
+stays far below that. An automation that writes every minute would get there after a good two months.
+
+The firmware therefore protects the WEM in three ways:
+
+| Protection | What |
+|---|---|
+| **Pre-read** | Before switching heating circuit or DHW the firmware reads the target object on the WEM (one SDO read request, response within 1 s). If the value is already set, it does not write: the command ends as `bestaetigt` with `wem` = `nicht_gesendet`, in plain text “stand schon so - nicht geschrieben” (was already set – not written). With a silent bus or no response it writes as before. Applies to both ways, via CAN and via JSON. |
+| **Write counter** | Displays “Schreibvorgaenge letzte Stunde” (writes in the last hour) and “Schreibvorgaenge gesamt” (writes in total). Every write of the board to the WEM is counted: switching via CAN and via JSON, free CAN writing, the write field via JSON and the DHW push of the Olimex variant. “Gesamt” survives a reboot and counts from the update to v42. |
+| **Hourly limit** | Number “Schreibvorgaenge je Stunde hoechstens” (writes per hour at most), default <!--ab-werk:schreib_max-->30<!--/ab-werk-->, adjustable 1–120 (group Experten). Once it is reached the board does not send: the switching command ends as `gescheitert` with `grund` = `obergrenze`, and the text says in how many minutes a write is free again. The command is not kept – whoever still wants it issues it again. |
+
+The hourly limit catches a loop, that is a rule or automation that switches again and again. It is no promise
+about lifetime: <!--ab-werk:schreib_max-->30<!--/ab-werk--> writes per hour for good would be far too many. Not counted are the write requests the
+CAN tunnel forwards from a room unit – those are not commands of the board.
+
+Comparing before writing and limiting per hour was shown by other Weishaupt projects:
+[gojux/weishaupt_unofficial](https://github.com/gojux/weishaupt_unofficial) never writes a value that is already
+set, and [aghulas/ha-weishaupt](https://github.com/aghulas/ha-weishaupt) keeps a minimum interval and allows at
+most 30 writes per hour.
 
 ### Sequence in the firmware
 
@@ -667,19 +704,25 @@ concerned other objects or the boiler.
 2. Once per second the firmware checks the queue. Between two commands there is a **minimum
    interval** from the last send: via CAN <!--ab-werk:abstand_can-->10<!--/ab-werk--> s by default, via JSON <!--ab-werk:abstand_json-->60<!--/ab-werk--> s (both adjustable,
    limits in the table under [Einstellungen](FIRMWARE.en.md#einstellungen-settings)).
-3. **Via CAN (default):** one SDO download to the WEM (`0x601`, `0x2933`/2 or `0x2A20`/2, 1 byte).
+3. **Pre-read (from v42):** when a command is due, the firmware first reads the target object on the WEM (one
+   read request, response within 1 s). If the value is already set, the operation ends – “stand schon so, nicht
+   geschrieben” (was already set, not written) – and nothing is written. Otherwise the firmware counts the write;
+   if the hourly limit is reached, the operation ends with “Obergrenze … erreicht - nicht gesendet” (limit
+   reached – not sent) ([Write protection](#write-protection-write-as-little-as-possible-from-v42)). With a silent bus or
+   no response the comparison is skipped and the firmware writes. The minimum interval already runs from the pre-read.
+4. **Via CAN (default):** one SDO download to the WEM (`0x601`, `0x2933`/2 or `0x2A20`/2, 1 byte).
    After 1 s the firmware evaluates the response: acknowledgement `60` = confirmed; abort `80` =
    “rejected”, the operation ends; no response = the bus is checked anyway.
    **Via JSON (switch off):** `CM 03` to the WEM, the response is displayed; with `CM 05` the
    operation ends (“rejected”).
-4. Otherwise the firmware reads the target object on the bus (node 1, `0x2933`/2 or `0x2A20`/2) – via
+5. Otherwise the firmware reads the target object on the bus (node 1, `0x2933`/2 or `0x2A20`/2) – via
    CAN **3 s** after sending, via JSON **3 s** after the response. This single verification read is
    sent even with own requests switched off.
-5. **The bus decides, not the WEM response:** if the value read matches the request,
+6. **The bus decides, not the WEM response:** if the value read matches the request,
    the result is “OK”, otherwise “NICHT übernommen” (not applied). If no response arrives within 10 s:
    “keine Rückmeldung vom Bus – Ergebnis unbekannt” (no feedback from the bus – result unknown). The bus is also
    checked after an empty or unclear WEM response – it has been observed that the switch took place despite an empty response.
-6. The result appears in **“Ergebnis letzter Schaltbefehl”** (result of last switching command) and in the
+7. The result appears in **“Ergebnis letzter Schaltbefehl”** (result of last switching command) and in the
    **“Schaltprotokoll”** (switching log) (plain text, deprecated), and from v27 onwards in structured form on
    **`<gerät>/befehl/status`** (every phase, with ID) and in **`<gerät>/status/json`** → `schalten` – structure in
    [TOPICS.en.md](TOPICS.en.md).
@@ -1150,6 +1193,38 @@ our own English text remains. Both files are in `.gitignore` and do **not** belo
 Thanks to [cg089](https://github.com/cg089/weishaupt-wem-can-esphome/tree/olimex-esp32-evb) for the first mapping of the
 communication warnings and to [kraiz](https://github.com/kraiz/hassio-weishaupt) for the layout of the error block.
 
+## 10d. Other ways to the installation and related projects
+
+This project works on the CAN bus of a WEM system unit on a gas boiler. There are other ways to a Weishaupt
+installation, depending on device and year of manufacture. The table lists them with the projects that take them.
+It is based on a survey of the public GitHub projects on 2026-11-11; the statements come from the documentation of
+those projects and have not been measured here. No code was taken from them, they are only linked.
+
+| Way | For which devices | What works | Limits | Projects |
+|---|---|---|---|---|
+| **CAN bus at the WEM** | gas boilers with a WEM system unit (measured: WTC-GW 15-B) | listening, reading, switching operating modes – without portal and without JSON | needs a CAN board on the bus | this project (WeAct CAN485; [Olimex ESP32-EVB](OLIMEX-ESP32-EVB.en.md) as the variant by cg089), [MenkeC/Weishaupt-C3supermini](https://github.com/MenkeC/Weishaupt-C3supermini), [geronet1/wem-python](https://github.com/geronet1/wem-python) |
+| **Local JSON interface of the WEM** (`CanApiJson`, parameter 10.8.1) | the same devices | reading and writing in the home network, without extra hardware | fragile: no dense polling, not several clients at once, ten slots for error responses ([section 8](#8-when-the-wem-locks-up)) | [kraiz/hassio-weishaupt](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne/Weishaupt_CanApiJson](https://github.com/BorgNumberOne/Weishaupt_CanApiJson), [JS-DE-Tech/hacs-weishaupt-lan](https://github.com/JS-DE-Tech/hacs-weishaupt-lan) |
+| **WEM portal, interface of the phone app** (cloud) | everything registered at the WEM portal | reading; writing: room setpoint, operating mode, DHW push, party and holiday, time programs | needs internet and a portal account; poll every 3 min at the earliest (5 recommended); with too many logins the portal answers HTTP 403 | [erikkastelec/hass-WEM-Portal](https://github.com/erikkastelec/hass-WEM-Portal), [sehnot/weishaupt-api](https://github.com/sehnot/weishaupt-api) (describes the interface), [Disane87/weishaupt-wem-mcp-server](https://github.com/Disane87/weishaupt-wem-mcp-server) |
+| **WEM portal, web page** (cloud, installer view scraped) | as above | more values than through the app interface; writing through the forms of the page (“Custom Befehl”, custom command) | poll every 15 min at the earliest; breaks when the page changes | [erikkastelec/hass-WEM-Portal](https://github.com/erikkastelec/hass-WEM-Portal), [TA2k/ioBroker.weishaupt-wem](https://github.com/TA2k/ioBroker.weishaupt-wem) |
+| **Modbus TCP** | heat pumps with their own system unit; on other WEM installations through the WEM-Modbus gateway (a separate device – gateway and portal are mutually exclusive) | reading and writing according to Weishaupt's data point list | every write ends up in the EEPROM (100,000 write accesses, [Write protection](#write-protection-write-as-little-as-possible-from-v42)) | [OStrama/weishaupt_modbus](https://github.com/OStrama/weishaupt_modbus), [gojux/weishaupt_unofficial](https://github.com/gojux/weishaupt_unofficial), [neiser/weishaupt-modbus-exporter](https://github.com/neiser/weishaupt-modbus-exporter) |
+| **WebIF “WEM Lokal”** (web page of the system unit in the home network) | heat pumps | reading | HTML pages, one session only | [tiktak29/Weishaupt_WEM-Lokal_MQTT](https://github.com/tiktak29/Weishaupt_WEM-Lokal_MQTT), [MadOne/weishaupt_webif_api](https://github.com/MadOne/weishaupt_webif_api) |
+| **WCM-COM and eBUS** | older boilers with WCM control (the generation before the WEM) | reading, partly writing | different protocol, different numbers | [sebastianrak/ha-weishaupt-wcm-com](https://github.com/sebastianrak/ha-weishaupt-wcm-com), [schmiegelt/HA-Weishaupt-WCM-COM](https://github.com/schmiegelt/HA-Weishaupt-WCM-COM), [J0EK3R/ebusd-configuration-weishaupt](https://github.com/J0EK3R/ebusd-configuration-weishaupt), [B-o-r-i-s-M/Weishaupt-WTC-OB-ebusd-Home-Assistant](https://github.com/B-o-r-i-s-M/Weishaupt-WTC-OB-ebusd-Home-Assistant), [aghulas/ha-weishaupt](https://github.com/aghulas/ha-weishaupt) |
+
+**No Modbus TCP and no web server on the measured WEM.** The system unit of the WTC-GW 15-B has neither a menu
+“Modbus TCP” nor one for a web server in its operation (checked on the device, 2026-11-11). These two ways belong
+to the system units of the heat pumps.
+
+**“Custom Befehl” (custom command) of the portal projects.** Whoever writes through the portal web page takes the
+address of the write form from the portal page – that is how the instructions of TA2k/ioBroker.weishaupt-wem
+describe it. These addresses belong to the portal; the object numbers of the installation from
+[`register.yaml`](register.yaml) and sections 3–5 are something else and cannot be used there. The overviews here
+still help: they say what a value means, which values it takes and by which factor it is scaled. Whoever can
+switch on the JSON interface (parameter 10.8.1) or connects a CAN board reads and switches the same values on
+site, without the portal.
+
+**What none of these projects does:** feed a room temperature into the installation or emulate a room unit.
+Nothing about the wireless room unit WEM-RF was found in any of the projects.
+
 ## 11. Sources
 
 - [MenkeC/Weishaupt-C3supermini](https://github.com/MenkeC/Weishaupt-C3supermini) – 50 kbit/s,
@@ -1167,6 +1242,11 @@ communication warnings and to [kraiz](https://github.com/kraiz/hassio-weishaupt)
   structure of the VG field.
 - [Manual WEM-Modbus TCP (PDF)](https://www.loebbeshop.de/media/67944/file/static/pdf/weishaupt/manual-wem-modbustcp.pdf) –
   data point list with update classes; gateway and portal are mutually exclusive.
+- Weishaupt, Modbus TCP data point list for heat pumps (print no. 83807301, edition 1/2025-11, German) –
+  parameters end up in the EEPROM, 100,000 write accesses over its lifetime; found via
+  [gojux/weishaupt_unofficial](https://github.com/gojux/weishaupt_unofficial). Applies to the system units of
+  the heat pumps ([Write protection](#write-protection-write-as-little-as-possible-from-v42)).
+- Projects that take other ways to the installation: [section 10d](#10d-other-ways-to-the-installation-and-related-projects).
 - [Installation and operating instructions WTC-GW 15–32-B (PDF, German)](https://www.intec-heizung.de/media/pdf/9f/c7/72/Weishaupt-Thermo-Condens-WTC-GW_15-32-B-Montage-u-Betriebsanleitung.pdf) –
   parameter 10.8.1 (JSON interface), terminal H/L/−/+.
 - [WEM portal FAQ (PDF, German)](https://www.wemportal.com/Web/Documents/FAQ/FAQ.de.pdf?lang=de)

@@ -143,10 +143,12 @@ script:
       - lambda: |-
           kc::schreiben_gesendet = false;
           auto &sc = id(wcan)->schalten;
-          if (id(wem_senden).is_running() || id(can_senden).is_running() || id(can_frei_senden).is_running() || id(sd_holen).is_running() || sc.sperrminute(millis())) {
+          if (id(vorab_lesen).is_running() || id(wem_senden).is_running() || id(can_senden).is_running() || id(can_frei_senden).is_running() || id(sd_holen).is_running() || sc.sperrminute(millis())) {
             id(schalt_status).publish_state(was + ": bitte warten - Abstand zum letzten Befehl"); return;
           }
           if (id(wcan)->bus.tot(millis())) { id(schalt_status).publish_state(was + ": Bus tot - nicht gesendet"); return; }
+          std::string og;
+          if (!sc.schreib_buchen(millis(), (int) id(schreib_max).state, og)) { id(schalt_status).publish_state(was + ": " + og); return; }
           wc::CanSchreibbefehl c; c.kn = 1; c.idx = idx; c.sub = sub; c.daten = {(uint8_t) wert};
           sc.beginnen(millis(), (uint32_t) id(abstand_can).state * 1000); id(wcan)->anlass.eigener_befehl_ms = sc.letzter_befehl;
           uint32_t u = id(wcan)->unix_zeit();

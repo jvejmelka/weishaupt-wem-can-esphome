@@ -32,6 +32,12 @@ hierher. Die Angaben „an“/„aus“ in der Spalte „Ab Werk“ werden aus d
 > am WEM. Einzelheiten: [Mithören und Lesen](#2-mithören-und-lesen-auf-anforderung),
 > [Schreiben per CAN](#schreiben-per-can-ab-v35-seit-v42-vorgabe). Die gemessene Anlage schaltet seit
 > dem 26.10.2026 per CAN.
+>
+> **So selten wie möglich schreiben (ab v42):** Vor dem Schalten liest die Firmware den Wert am WEM; steht er
+> schon so, schreibt sie nicht. Jeder Schreibvorgang wird gezählt, mehr als <!--ab-werk:schreib_max-->30<!--/ab-werk--> je Stunde lehnt das Board ab –
+> [Schreibschutz](#schreibschutz-so-wenig-wie-möglich-schreiben-ab-v42).
+> Wege, die diese Firmware nicht benutzt (WEM-Portal, Modbus TCP, ältere WCM-Geräte), stehen in
+> [Abschnitt 10d](#10d-andere-wege-zur-anlage-und-verwandte-projekte).
 
 ## Inhalt
 
@@ -52,6 +58,7 @@ hierher. Die Angaben „an“/„aus“ in der Spalte „Ab Werk“ werden aus d
 - [10a. Raumgerät WEM-RG2 am Bus](VERSUCHE.md#10a-raumgerät-wem-rg2-am-bus-mitschnitt-november-2026) → VERSUCHE.md
 - [10b. CAN-Tunnel über WLAN](VERSUCHE.md#10b-can-tunnel-über-wlan-versuch-zweig-can-tunnel) → VERSUCHE.md
 - [10c. Störmeldungen am Bus und Fehlercodes](#10c-störmeldungen-am-bus-und-fehlercodes)
+- [10d. Andere Wege zur Anlage und verwandte Projekte](#10d-andere-wege-zur-anlage-und-verwandte-projekte)
 - [11. Quellen](#11-quellen)
 
 ## 1. Überblick
@@ -635,8 +642,38 @@ Erprobt am Tisch an einem RG2 (Knoten 4): [VERSUCHE.md, Neustart des RG2 per CAN
 
 Der WEM übernimmt den per CAN geschriebenen Wert also wie einen per JSON geschriebenen (Regelung,
 Display, App). Offen: Portal, Verhalten nach einem Neustart, andere Anlagen. Jeder geänderte Wert
-landet vermutlich im EEPROM des WEM – nie im Takt schreiben. Andere Berichte, nach denen die
+landet vermutlich im EEPROM des WEM – nie im Takt schreiben ([Schreibschutz](#schreibschutz-so-wenig-wie-möglich-schreiben-ab-v42)). Andere Berichte, nach denen die
 Geräte SDO-Schreiben ablehnen, betrafen vermutlich andere Objekte oder den Kessel.
+
+### Schreibschutz: so wenig wie möglich schreiben (ab v42)
+
+Für die Systemgeräte der Weishaupt-Wärmepumpen nennt Weishaupt eine Zahl: Jede Änderung eines Parameters wird im
+EEPROM gespeichert, und das verträgt **100.000 Schreibzugriffe über die Lebensdauer**; Parameter sollen deshalb so
+selten wie möglich geschrieben werden (Datenpunktliste Modbus TCP für Wärmepumpen, Druck-Nr. 83807301, Ausgabe
+1/2025-11 – gefunden über [gojux/weishaupt_unofficial](https://github.com/gojux/weishaupt_unofficial)). Für das
+WEM-Systemgerät einer Gastherme liegt keine solche Angabe vor. Es gehört zur selben Gerätefamilie; dieses Projekt
+rechnet deshalb mit derselben Grenze, solange nichts anderes belegt ist. Ob der WEM auch dann ins EEPROM schreibt,
+wenn der geschriebene Wert dem alten gleicht, ist nicht bekannt.
+
+Zur Einordnung: 100.000 Schreibzugriffe in 20 Jahren sind knapp 14 am Tag. Wer von Hand oder über ein paar Regeln
+schaltet, bleibt weit darunter. Eine Automation, die jede Minute schreibt, wäre nach gut zwei Monaten so weit.
+
+Die Firmware schützt den WEM deshalb auf drei Arten:
+
+| Schutz | Was |
+|---|---|
+| **Vorab-Lesung** | Vor dem Schalten von Heizkreis oder Warmwasser liest die Firmware das Zielobjekt am WEM (eine SDO-Leseanfrage, Antwort binnen 1 s). Steht der Wert schon so, schreibt sie nicht: Der Befehl endet als `bestaetigt` mit `wem` = `nicht_gesendet`, im Klartext „stand schon so - nicht geschrieben“. Bei stillem Bus oder ohne Antwort schreibt sie wie bisher. Gilt für beide Wege, per CAN und über JSON. |
+| **Schreibzähler** | Anzeigen „Schreibvorgaenge letzte Stunde“ und „Schreibvorgaenge gesamt“. Gezählt wird jedes Schreiben des Boards am WEM: Schalten per CAN und über JSON, freies CAN-Schreiben, das Schreibfeld über JSON und der Warmwasser-Push der Olimex-Variante. „Gesamt“ übersteht den Neustart und zählt ab dem Update auf v42. |
+| **Obergrenze je Stunde** | Zahl „Schreibvorgaenge je Stunde hoechstens“, ab Werk <!--ab-werk:schreib_max-->30<!--/ab-werk-->, einstellbar 1–120 (Gruppe Experten). Ist sie erreicht, sendet das Board nicht: Der Schaltbefehl endet als `gescheitert` mit `grund` = `obergrenze`, und der Text nennt, in wie vielen Minuten wieder ein Schreibvorgang frei ist. Der Befehl wird nicht aufgehoben – wer ihn noch will, gibt ihn neu. |
+
+Die Obergrenze fängt eine Schleife ab, also eine Regel oder Automation, die immer wieder schaltet. Sie ist keine
+Zusage über die Lebensdauer: <!--ab-werk:schreib_max-->30<!--/ab-werk--> Schreibvorgänge je Stunde auf Dauer wären viel zu viele. Nicht gezählt werden die
+Schreibaufträge, die der CAN-Tunnel von einem Raumgerät weiterreicht – das sind keine Befehle des Boards.
+
+Vor dem Schreiben zu vergleichen und je Stunde zu begrenzen, haben andere Weishaupt-Projekte vorgemacht:
+[gojux/weishaupt_unofficial](https://github.com/gojux/weishaupt_unofficial) schreibt keinen Wert, der schon gesetzt
+ist, und [aghulas/ha-weishaupt](https://github.com/aghulas/ha-weishaupt) hält einen Mindestabstand ein und lässt
+höchstens 30 Schreibvorgänge je Stunde zu.
 
 ### Ablauf in der Firmware
 
@@ -647,19 +684,25 @@ Geräte SDO-Schreiben ablehnen, betrafen vermutlich andere Objekte oder den Kess
 2. Einmal pro Sekunde prüft die Firmware die Warteschlange. Zwischen zwei Befehlen liegt ein
    **Mindestabstand** ab dem letzten Senden: per CAN ab Werk <!--ab-werk:abstand_can-->10<!--/ab-werk--> s, über JSON <!--ab-werk:abstand_json-->60<!--/ab-werk--> s (beide
    einstellbar, Grenzen in der Tabelle unter [Einstellungen](FIRMWARE.md#einstellungen)).
-3. **Per CAN (Vorgabe):** ein SDO-Download an den WEM (`0x601`, `0x2933`/2 bzw. `0x2A20`/2, 1 Byte).
+3. **Vorab-Lesung (ab v42):** Ist ein Befehl an der Reihe, liest die Firmware zuerst das Zielobjekt am WEM (eine
+   Leseanfrage, Antwort binnen 1 s). Steht der Wert schon so, ist der Vorgang beendet – „stand schon so, nicht
+   geschrieben“ –, und es wird nichts geschrieben. Sonst zählt die Firmware den Schreibvorgang; ist die
+   Obergrenze je Stunde erreicht, endet der Vorgang mit „Obergrenze … erreicht - nicht gesendet“
+   ([Schreibschutz](#schreibschutz-so-wenig-wie-möglich-schreiben-ab-v42)). Bei stillem Bus oder ohne Antwort
+   entfällt der Vergleich, und es wird geschrieben. Der Mindestabstand läuft schon ab der Vorab-Lesung.
+4. **Per CAN (Vorgabe):** ein SDO-Download an den WEM (`0x601`, `0x2933`/2 bzw. `0x2A20`/2, 1 Byte).
    Nach 1 s wertet die Firmware die Antwort aus: Quittung `60` = bestätigt; Abbruch `80` =
    „abgelehnt“, der Vorgang ist beendet; keine Antwort = es wird trotzdem am Bus geprüft.
    **Über JSON (Schalter aus):** `CM 03` an den WEM, die Antwort wird angezeigt; bei `CM 05` ist der
    Vorgang beendet („abgelehnt“).
-4. Sonst liest die Firmware das Zielobjekt am Bus (Knoten 1, `0x2933`/2 bzw. `0x2A20`/2) – per CAN
+5. Sonst liest die Firmware das Zielobjekt am Bus (Knoten 1, `0x2933`/2 bzw. `0x2A20`/2) – per CAN
    **3 s** nach dem Senden, über JSON **3 s** nach der Antwort. Diese eine Kontroll-Lesung geht auch
    bei ausgeschalteten eigenen Anfragen raus.
-5. **Der Bus entscheidet, nicht die WEM-Antwort:** Stimmt der gelesene Wert mit dem Wunsch überein,
+6. **Der Bus entscheidet, nicht die WEM-Antwort:** Stimmt der gelesene Wert mit dem Wunsch überein,
    heißt es „OK“, sonst „NICHT übernommen“. Kommt binnen 10 s keine Antwort, „keine Rückmeldung
    vom Bus – Ergebnis unbekannt“. Auch nach einer leeren oder unklaren WEM-Antwort wird am Bus
    geprüft – es wurde schon beobachtet, dass trotz leerer Antwort geschaltet war.
-6. Ergebnis steht in **„Ergebnis letzter Schaltbefehl“** und im **Schaltprotokoll** (Klartext,
+7. Ergebnis steht in **„Ergebnis letzter Schaltbefehl“** und im **Schaltprotokoll** (Klartext,
    veraltet) sowie ab v27 strukturiert auf **`<gerät>/befehl/status`** (jede Phase, mit Kennung)
    und in **`<gerät>/status/json`** → `schalten` – Aufbau in [TOPICS.md](TOPICS.md).
 
@@ -1117,6 +1160,37 @@ W 1800, W 1902); für sie bleibt der eigene englische Text. Beide Dateien stehen
 Dank an [cg089](https://github.com/cg089/weishaupt-wem-can-esphome/tree/olimex-esp32-evb) für die erste Zuordnung der
 Kommunikationswarnungen und an [kraiz](https://github.com/kraiz/hassio-weishaupt) für den Aufbau des Fehlerblocks.
 
+## 10d. Andere Wege zur Anlage und verwandte Projekte
+
+Dieses Projekt arbeitet am CAN-Bus eines WEM-Systemgeräts an einer Gastherme. Zu einer Weishaupt-Anlage führen
+auch andere Wege, je nach Gerät und Baujahr. Die Tabelle nennt sie mit den Projekten, die sie gehen. Grundlage ist
+eine Sichtung der öffentlichen GitHub-Projekte am 11.11.2026; die Angaben stammen aus der Doku dieser Projekte und
+sind hier nicht nachgemessen. Von dort ist kein Code übernommen, es wird nur verlinkt.
+
+| Weg | Für welche Geräte | Was geht | Grenzen | Projekte |
+|---|---|---|---|---|
+| **CAN-Bus am WEM** | Gasthermen mit WEM-Systemgerät (gemessen: WTC-GW 15-B) | mithören, lesen, Betriebsarten schalten – ohne Portal und ohne JSON | braucht ein CAN-Board am Bus | dieses Projekt (WeAct CAN485; [Olimex ESP32-EVB](OLIMEX-ESP32-EVB.md) als Variante von cg089), [MenkeC/Weishaupt-C3supermini](https://github.com/MenkeC/Weishaupt-C3supermini), [geronet1/wem-python](https://github.com/geronet1/wem-python) |
+| **Lokale JSON-Schnittstelle des WEM** (`CanApiJson`, Parameter 10.8.1) | dieselben Geräte | lesen und schreiben im Heimnetz, ohne zusätzliche Hardware | empfindlich: kein dichtes Abfragen, nicht mehrere Clients zugleich, zehn Plätze für Fehlantworten ([Abschnitt 8](#8-wann-sich-der-wem-aufhängt)) | [kraiz/hassio-weishaupt](https://github.com/kraiz/hassio-weishaupt), [BorgNumberOne/Weishaupt_CanApiJson](https://github.com/BorgNumberOne/Weishaupt_CanApiJson), [JS-DE-Tech/hacs-weishaupt-lan](https://github.com/JS-DE-Tech/hacs-weishaupt-lan) |
+| **WEM-Portal, Schnittstelle der Handy-App** (Cloud) | alles, was am WEM-Portal angemeldet ist | lesen; schreiben: Raum-Solltemperatur, Betriebsart, Warmwasser-Push, Party und Urlaub, Zeitprogramme | braucht Internet und Portal-Konto; abfragen frühestens alle 3 min (empfohlen 5); bei zu vielen Anmeldungen antwortet das Portal mit HTTP 403 | [erikkastelec/hass-WEM-Portal](https://github.com/erikkastelec/hass-WEM-Portal), [sehnot/weishaupt-api](https://github.com/sehnot/weishaupt-api) (beschreibt die Schnittstelle), [Disane87/weishaupt-wem-mcp-server](https://github.com/Disane87/weishaupt-wem-mcp-server) |
+| **WEM-Portal, Webseite** (Cloud, Fachmann-Ansicht ausgelesen) | wie oben | mehr Werte als über die App-Schnittstelle; schreiben über die Formulare der Seite („Custom Befehl“) | abfragen frühestens alle 15 min; bricht, wenn sich die Seite ändert | [erikkastelec/hass-WEM-Portal](https://github.com/erikkastelec/hass-WEM-Portal), [TA2k/ioBroker.weishaupt-wem](https://github.com/TA2k/ioBroker.weishaupt-wem) |
+| **Modbus TCP** | Wärmepumpen mit eigenem Systemgerät; an anderen WEM-Anlagen über das Gateway WEM-Modbus (eigenes Gerät – Gateway und Portal schließen sich aus) | lesen und schreiben nach der Datenpunktliste von Weishaupt | jedes Schreiben landet im EEPROM (100.000 Schreibzugriffe, [Schreibschutz](#schreibschutz-so-wenig-wie-möglich-schreiben-ab-v42)) | [OStrama/weishaupt_modbus](https://github.com/OStrama/weishaupt_modbus), [gojux/weishaupt_unofficial](https://github.com/gojux/weishaupt_unofficial), [neiser/weishaupt-modbus-exporter](https://github.com/neiser/weishaupt-modbus-exporter) |
+| **WebIF „WEM Lokal“** (Webseite des Systemgeräts im Heimnetz) | Wärmepumpen | lesen | HTML-Seiten, nur eine Sitzung | [tiktak29/Weishaupt_WEM-Lokal_MQTT](https://github.com/tiktak29/Weishaupt_WEM-Lokal_MQTT), [MadOne/weishaupt_webif_api](https://github.com/MadOne/weishaupt_webif_api) |
+| **WCM-COM und eBUS** | ältere Thermen mit WCM-Regelung (die Generation vor dem WEM) | lesen, zum Teil schreiben | anderes Protokoll, andere Nummern | [sebastianrak/ha-weishaupt-wcm-com](https://github.com/sebastianrak/ha-weishaupt-wcm-com), [schmiegelt/HA-Weishaupt-WCM-COM](https://github.com/schmiegelt/HA-Weishaupt-WCM-COM), [J0EK3R/ebusd-configuration-weishaupt](https://github.com/J0EK3R/ebusd-configuration-weishaupt), [B-o-r-i-s-M/Weishaupt-WTC-OB-ebusd-Home-Assistant](https://github.com/B-o-r-i-s-M/Weishaupt-WTC-OB-ebusd-Home-Assistant), [aghulas/ha-weishaupt](https://github.com/aghulas/ha-weishaupt) |
+
+**Kein Modbus TCP und kein Webserver am gemessenen WEM.** Das Systemgerät der WTC-GW 15-B hat in seiner Bedienung
+weder ein Menü „Modbus TCP“ noch eines für einen Webserver (am Gerät nachgesehen, 11.11.2026). Diese beiden Wege
+gehören zu den Systemgeräten der Wärmepumpen.
+
+**„Custom Befehl“ der Portal-Projekte.** Wer über die Portal-Webseite schreibt, holt sich die Adresse des
+Schreibformulars aus der Portal-Seite – so beschreibt es die Anleitung von TA2k/ioBroker.weishaupt-wem. Diese
+Adressen gehören dem Portal; die Objektnummern der Anlage aus [`register.yaml`](register.yaml) und den Abschnitten 3–5 sind etwas anderes und
+lassen sich dort nicht einsetzen. Die Übersichten hier helfen trotzdem: Sie sagen, was ein Wert bedeutet, welche
+Werte er annimmt und mit welchem Faktor er gerechnet wird. Wer die JSON-Schnittstelle einschalten kann
+(Parameter 10.8.1) oder ein CAN-Board anschließt, liest und schaltet dieselben Werte vor Ort, ohne Portal.
+
+**Was keines dieser Projekte tut:** eine Raumtemperatur in die Anlage einspeisen oder ein Raumgerät nachbilden.
+Zum Funk-Raumgerät WEM-RF fand sich in keinem der Projekte etwas.
+
 ## 11. Quellen
 
 - [MenkeC/Weishaupt-C3supermini](https://github.com/MenkeC/Weishaupt-C3supermini) – 50 kbit/s,
@@ -1135,6 +1209,11 @@ Kommunikationswarnungen und an [kraiz](https://github.com/kraiz/hassio-weishaupt
   Aufbau des VG-Felds.
 - [Handbuch WEM-Modbus TCP (PDF)](https://www.loebbeshop.de/media/67944/file/static/pdf/weishaupt/manual-wem-modbustcp.pdf) –
   Datenpunktliste mit Aktualisierungsklassen; Gateway und Portal schließen sich aus.
+- Weishaupt, Datenpunktliste Modbus TCP für Wärmepumpen (Druck-Nr. 83807301, Ausgabe 1/2025-11) – Parameter
+  landen im EEPROM, 100.000 Schreibzugriffe über die Lebensdauer; gefunden über
+  [gojux/weishaupt_unofficial](https://github.com/gojux/weishaupt_unofficial). Gilt für die Systemgeräte der
+  Wärmepumpen ([Schreibschutz](#schreibschutz-so-wenig-wie-möglich-schreiben-ab-v42)).
+- Projekte, die andere Wege zur Anlage gehen: [Abschnitt 10d](#10d-andere-wege-zur-anlage-und-verwandte-projekte).
 - [Montage- und Betriebsanleitung WTC-GW 15–32-B (PDF)](https://www.intec-heizung.de/media/pdf/9f/c7/72/Weishaupt-Thermo-Condens-WTC-GW_15-32-B-Montage-u-Betriebsanleitung.pdf) –
   Parameter 10.8.1 (JSON-Schnittstelle), Klemme H/L/−/+.
 - [WEM-Portal-FAQ (PDF)](https://www.wemportal.com/Web/Documents/FAQ/FAQ.de.pdf?lang=de)

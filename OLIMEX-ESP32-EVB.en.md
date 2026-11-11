@@ -60,7 +60,8 @@ node werkzeuge/kraiz-per-can/kraiz_erzeugen.js hassio-weishaupt/custom_component
 ### DHW push („Warmwasser-Push“)
 A button writes `1` to `0x2A49/2` of the WEM (JSON `MI 03 / 0x2549/2` as in kraiz). Minimum interval and verification on the bus
 from the package `wem-schalten` apply here as well; the switch „Freies CAN-Schreiben“ ("free CAN writing") does not apply to this button
-(fixed target, fixed value). Tried on one installation only.
+(fixed target, fixed value). Tried on one installation only. From v42 every push counts as a write towards the
+hourly limit ([PROTOKOLL.en.md, Write protection](PROTOKOLL.en.md#write-protection-write-as-little-as-possible-from-v42)).
 
 ### Error block and plain-text error message
 The 8-byte error block of the WEM (`0x273F`) is read every 2 minutes: status, error number, module and a plain text.

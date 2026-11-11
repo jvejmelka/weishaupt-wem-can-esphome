@@ -105,6 +105,7 @@ class WeishauptCan : public Component {
   void set_anlaufpause(uint32_t ms) { this->bus.anlaufpause_ms = ms; }
   void set_statusbits_anlass(bool b) { this->anlass.statusbits_anlass = b; }
   void speicher_brenner(uint32_t h) { this->speicher_.emplace_back(new Speicher<int>(&this->brenner.starts, h)); }
+  void speicher_schreibzaehler(uint32_t h) { this->speicher_.emplace_back(new Speicher<uint32_t>(&this->schalten.schreib_gesamt, h)); }
   void speicher_verdacht(uint32_t h_speicher, uint32_t h_hash, uint32_t h_version, uint32_t h_stby, uint32_t h_rest) {
     this->speicher_.emplace_back(new Speicher<std::array<char, 2400>>(&this->vd.speicher, h_speicher));
     this->speicher_.emplace_back(new Speicher<uint32_t>(&this->vd.datei_hash, h_hash));

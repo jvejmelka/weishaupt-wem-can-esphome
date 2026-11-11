@@ -641,6 +641,49 @@ TEST(befehl_phasen_fehlschlaege) {
   PRUEFE(s.ereignisse.front().id == "b2" && s.ereignisse.back().id == "b3");
 }
 
+// ab v42: vor dem Schreiben wird gelesen - "gesendet" erst, wenn wirklich geschrieben wird
+TEST(befehl_vorab_lesung_stand_schon_so) {
+  bf::Schaltung s;
+  s.uhr = 1790000000;
+  bf::Anfrage a; a.id = "21"; a.id_zahl = true; a.wert = 2; a.quelle = "App";
+  s.annehmen(bf::ZIEL_WW, a, 0);
+  s.ereignisse.clear();
+  bf::Befehl b;
+  PRUEFE(s.naechster(b, false) && s.laeuft && s.ereignisse.empty() && s.lauf.phase == "vorgemerkt");
+  s.schon_so(2);                                              // WEM steht schon auf Aus
+  PRUEFE(!s.laeuft && (phasen(s) == std::vector<std::string>{"21:bestaetigt"}));   // kein "gesendet"
+  const bf::Befehl &l = s.letzte[bf::ZIEL_WW];
+  PRUEFE(l.phase == "bestaetigt" && l.ist == 2 && l.grund.empty() && l.wem == "nicht_gesendet" && enthaelt(l.text, "nicht geschrieben"));
+  std::string j = bf::befehl_json(l);
+  PRUEFE(enthaelt(j, "\"phase\":\"bestaetigt\"") && enthaelt(j, "\"ende\":true") && enthaelt(j, "stand schon so"));
+  s.schon_so(2); s.obergrenze("x"); s.gesendet();             // ohne laufenden Befehl: nichts
+  PRUEFE(s.ereignisse.empty());                               // phasen() hat die Liste geleert
+}
+
+TEST(befehl_vorab_lesung_weicht_ab_und_obergrenze) {
+  bf::Schaltung s;
+  bf::Anfrage a; a.id = "22"; a.id_zahl = true; a.wert = 3;
+  s.annehmen(bf::ZIEL_HK, a, 0);
+  s.ereignisse.clear();
+  bf::Befehl b;
+  s.naechster(b, false);
+  s.gesendet(); s.gesendet();                                 // nur einmal melden
+  s.wem_antwort(bf::Wem::BESTAETIGT, "");
+  s.gesendet();                                               // waehrend pruefe_bus: nichts
+  PRUEFE(s.bus_wert(bf::ZIEL_HK, 3));
+  PRUEFE((phasen(s) == std::vector<std::string>{"22:gesendet", "22:pruefe_bus", "22:bestaetigt"}));
+  PRUEFE(s.letzte[bf::ZIEL_HK].text.find("nicht geschrieben") == std::string::npos);
+  // Obergrenze erreicht: gescheitert, ohne "gesendet"
+  a.id = "23";
+  s.annehmen(bf::ZIEL_HK, a, 0);
+  s.ereignisse.clear();
+  s.naechster(b, false);
+  s.obergrenze("Obergrenze 30 Schreibvorgaenge je Stunde erreicht");
+  PRUEFE(!s.laeuft && (phasen(s) == std::vector<std::string>{"23:gescheitert"}));
+  PRUEFE(s.letzte[bf::ZIEL_HK].grund == "obergrenze" && enthaelt(s.letzte[bf::ZIEL_HK].text, "Obergrenze 30"));
+  PRUEFE(enthaelt(bf::befehl_json(s.letzte[bf::ZIEL_HK]), "\"grund\":\"obergrenze\""));
+}
+
 TEST(befehl_neuester_wunsch_gewinnt_und_reihenfolge) {
   bf::Schaltung s;
   bf::Anfrage ww; ww.id = "w1"; ww.wert = 1;

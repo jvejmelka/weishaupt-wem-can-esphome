@@ -579,6 +579,39 @@ TEST(kern_wem_aufruf_wie_v28) {
   }
 }
 
+// ab v42: Schreibvorgaenge zaehlen, Obergrenze je Stunde
+TEST(kern_schreibzaehler_und_obergrenze) {
+  wc::Schalten sc;
+  std::string t;
+  const uint32_t t0 = 4294960000UL;                    // ueber den millis()-Ueberlauf hinweg
+  PRUEFE(sc.schreib_stunde(t0) == 0 && sc.schreib_gesamt == 0 && sc.schreib_frei_in_s(t0, 3) == 0);
+  PRUEFE(sc.schreib_buchen(t0, 3, t) && sc.schreib_buchen(t0 + 10000u, 3, t) && sc.schreib_buchen(t0 + 20000u, 3, t));
+  PRUEFE(sc.schreib_stunde(t0 + 20000u) == 3 && sc.schreib_gesamt == 3 && t.empty());
+  // der vierte in derselben Stunde: nicht gesendet, nicht gezaehlt, Text nennt Grenze und Wartezeit
+  PRUEFE(!sc.schreib_buchen(t0 + 30000u, 3, t) && sc.schreib_gesamt == 3 && sc.schreib_n == 3);
+  PRUEFE(enthaelt(t, "Obergrenze 3 ") && enthaelt(t, "nicht gesendet") && enthaelt(t, "in 60 min"));
+  PRUEFE(sc.schreib_frei_in_s(t0 + 30000u, 3) == 3571);          // der aelteste faellt nach 3600 s heraus
+  PRUEFE(!sc.schreib_buchen(t0 + 3599999u, 3, t));
+  // nach genau einer Stunde ist der aelteste weg - einer wieder frei
+  PRUEFE(sc.schreib_frei_in_s(t0 + 3600000u, 3) == 0 && sc.schreib_stunde(t0 + 3600000u) == 2);
+  t.clear();
+  PRUEFE(sc.schreib_buchen(t0 + 3600000u, 3, t) && sc.schreib_gesamt == 4 && t.empty());
+  PRUEFE(!sc.schreib_buchen(t0 + 3600001u, 3, t));
+  // hoehere Grenze gilt sofort; niedrigere ebenfalls (zaehlt die letzten 60 min)
+  PRUEFE(sc.schreib_buchen(t0 + 3600002u, 4, t) && !sc.schreib_buchen(t0 + 3600003u, 2, t) && enthaelt(t, "Obergrenze 2 "));
+  PRUEFE(sc.schreib_stunde(t0 + 3u * 3600000u) == 0 && sc.schreib_gesamt == 5);
+  // Grenze 0 oder kleiner zaehlt als 1, groesser als der Speicher als dessen Groesse - nie Ueberlauf
+  wc::Schalten s2;
+  PRUEFE(s2.schreib_buchen(1000, 0, t) && !s2.schreib_buchen(2000, -5, t));
+  wc::Schalten s3;
+  int n = 0;
+  for (int i = 0; i < 200; i++) if (s3.schreib_buchen(1000u + (uint32_t) i, 1000, t)) n++;
+  PRUEFE(n == wc::Schalten::SCHREIB_MERKEN && s3.schreib_n == wc::Schalten::SCHREIB_MERKEN && s3.schreib_gesamt == (uint32_t) n);
+  for (int i = 0; i < 200; i++) s3.schreib_zaehlen(5000u + (uint32_t) i);          // direkt zaehlen: aelteste fallen heraus
+  PRUEFE(s3.schreib_n == wc::Schalten::SCHREIB_MERKEN && s3.schreib_ms[0] == 5000u + 80u && s3.schreib_gesamt == (uint32_t) n + 200u);
+  PRUEFE(sizeof(wc::Schalten().schreib_gesamt) == sizeof(uint32_t));   // so gespeichert (Speicher<uint32_t>)
+}
+
 TEST(kern_schalten_sperre_und_warteschlange) {
   wc::Schalten s;
   PRUEFE(!s.sperrminute(5) && s.warten_s(5, false) == 0 && s.warten_s(5, true) == 60);
