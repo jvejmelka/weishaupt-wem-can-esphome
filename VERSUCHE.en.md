@@ -248,9 +248,11 @@ expert level → commissioning → assignments) and then removed again. On the b
   units). Read via CAN here. **Confirmed via JSON by PiLLoX** on a WTC-GB 25-B with built-in WEM-SG and RG2:
   response `020200258B02000200B0` = 17.6 °C, exactly what the RG2 displayed
   ([comment of 10 Nov 2026](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/issues/4#issuecomment-6781466298)).
-- **Room humidity in the WEM: no object found yet.** On the bus it is only in the RG2's PDO `0x184` (bytes 2–3). The
-  system device does know it, though: on PiLLoX's WTC-GB 25-B the display shows the RG2's room humidity
-  ([comment of 11 Nov 2026](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/issues/4#issuecomment-6781823795)).
+- **Room humidity in the WEM: `02 00 25B6 02`** (0.1 %). Confirmed by PiLLoX on a WTC-GB 25-B with built-in WEM-SG
+  and an assigned RG2: response `02020025B602000201F5` = 50.1 %, RG2 display 50 %
+  ([comment of 11 Nov 2026](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/issues/4#issuecomment-6793283297)) – one
+  observation. Not read on our system (no room unit assigned); on CAN this would be node 1 `0x29B6`/2. On the bus
+  the humidity is also in the RG2's PDO `0x184` (bytes 2–3).
 - The assignment had no effect on the heating: flow setpoint and heat demand carried on unchanged. The control variant
   stayed weather-compensated; the display did not ask about it.
 

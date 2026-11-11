@@ -589,12 +589,22 @@ manual, converted, read singly on the bus):
 | `01 00 26B1 02` | node 1 `0x27B1`/2 | outdoor temperature | 8.1 °C (PDO 8.0) |
 | `01 00 263F 00` | node 1 `0x273F`/0 | **fault block**, 8 bytes (fault/warning bits, fault number, module) | `00 00 00 00 00 00 00 00` – nothing pending |
 | `02 00 2559 02` | node 1 `0x2959`/2 | current flow setpoint heating circuit | 35.3 °C |
-| `03 00 2569 02` | node 1 `0x2A69`/2 | "DHW status" (gateway: 0 warning / 1 fault pending) | 1 – does not match the empty fault block, **meaning unclear** |
+| `03 00 2569 02` | node 1 `0x2A69`/2 | "DHW status" | 1 = "time programme – normal" according to kraiz's value list (see below) |
 
 Added on 10 Nov 2026: `02 00 258B 02` = node 1 `0x298B`/2, the **measured room temperature of the assigned room
 unit** (0.1 °C, signed; `0x8000` without an assignment) – read via CAN here, confirmed via JSON by PiLLoX on a
 WTC-GB 25-B ([comment](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/issues/4#issuecomment-6781466298)), see
 [VERSUCHE.en.md](VERSUCHE.en.md#assignment-as-room-sensor-and-measured-room-temperature-in-the-wem).
+
+On `03 00 2569 02` ("DHW status"): the gateway's Modbus manual lists the corresponding register 130 as
+"warning/fault pending"; our value 1 with an empty fault block did not fit that. The integrations by
+[kraiz](https://github.com/kraiz/hassio-weishaupt) and [JS-DE-Tech](https://github.com/JS-DE-Tech/hacs-weishaupt-lan)
+read the object with the value list of the DHW status: 0 standby inactive, 1 time programme normal, 2 time programme
+setback, 3 DHW charge active, 4 service, 5–7 alternative energy, 8 frost protection, 9 standby via the system
+programme selector, 10/12/13 standby/normal/setback via input H2 (11 is missing). Our package `kraiz-per-can` uses
+the same list. PiLLoX confirmed two values on a WTC-GB 25-B: 3 during a displayed DHW charge, 0 in standby
+([comment of 11 Nov 2026](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/issues/4#issuecomment-6793283297)). Our value 1 fits
+"time programme – normal". The remaining values are not confirmed on the built-in system device.
 
 Guess at the origin of the offsets: the JSON object number is **module-relative** (`0x2533` is the
 operating mode in the heating circuit, the VPT return temperature in the boiler); in a node's CAN
