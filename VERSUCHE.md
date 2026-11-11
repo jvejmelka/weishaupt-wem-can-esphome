@@ -254,9 +254,11 @@ Inbetriebnahme → Zuordnungen) und wurde danach wieder abgemeldet. Am Bus:
   Raumgeräte). Bei uns per CAN gelesen. **Über JSON bestätigt von PiLLoX** an einer WTC-GB 25-B mit eingebautem
   WEM-SG und RG2: Antwort `020200258B02000200B0` = 17,6 °C, genau die Anzeige am RG2
   ([Kommentar vom 10.11.2026](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/issues/4#issuecomment-6781466298)).
-- **Raumfeuchte im WEM: noch kein Objekt gefunden.** Am Bus steht sie nur im PDO `0x184` des RG2 (Byte 2–3). Das
-  Systemgerät kennt sie aber: Bei PiLLoX zeigt die Anzeige der WTC-GB 25-B die Raumfeuchte des RG2
-  ([Kommentar vom 11.11.2026](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/issues/4#issuecomment-6781823795)).
+- **Raumfeuchte im WEM: `02 00 25B6 02`** (0,1 %). Bestätigt von PiLLoX an einer WTC-GB 25-B mit eingebautem WEM-SG
+  und zugeordnetem RG2: Antwort `02020025B602000201F5` = 50,1 %, Anzeige am RG2 50 %
+  ([Kommentar vom 11.11.2026](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/issues/4#issuecomment-6793283297)) – eine
+  Beobachtung. Bei uns nicht gelesen (kein Raumgerät zugeordnet); am CAN entspräche das Knoten 1 `0x29B6`/2. Am Bus
+  steht die Feuchte außerdem im PDO `0x184` des RG2 (Byte 2–3).
 - Auf die Heizung wirkte die Zuordnung nicht: Vorlaufsoll und Heizanforderung liefen unverändert weiter. Die
   Regelvariante blieb witterungsgeführt; eine Abfrage dazu kam am Display nicht.
 

@@ -570,12 +570,22 @@ Gateway-Anleitung umgerechnet, am Bus einzeln gelesen):
 | `01 00 26B1 02` | Knoten 1 `0x27B1`/2 | Außentemperatur | 8,1 °C (PDO 8,0) |
 | `01 00 263F 00` | Knoten 1 `0x273F`/0 | **Fehlerblock**, 8 Byte (Fehler/Warnung-Bits, Fehlernummer, Modul) | `00 00 00 00 00 00 00 00` – nichts anstehend |
 | `02 00 2559 02` | Knoten 1 `0x2959`/2 | Vorlaufsoll Heizkreis aktuell | 35,3 °C |
-| `03 00 2569 02` | Knoten 1 `0x2A69`/2 | „Status Warmwasser“ (Gateway: 0 Warnung / 1 Fehler anstehend) | 1 – passt nicht zum leeren Fehlerblock, **Bedeutung unklar** |
+| `03 00 2569 02` | Knoten 1 `0x2A69`/2 | „Status Warmwasser“ | 1 = „Zeitprogramm – Normal“ nach der Werteliste von kraiz (s. unten) |
 
 Am 10.11.2026 kam dazu: `02 00 258B 02` = Knoten 1 `0x298B`/2, die **gemessene Raumtemperatur des zugeordneten
 Raumgeräts** (0,1 °C, mit Vorzeichen; ohne Zuordnung `0x8000`) – bei uns per CAN gelesen, über JSON bestätigt von PiLLoX an einer
 WTC-GB 25-B ([Kommentar](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/issues/4#issuecomment-6781466298)), s.
 [VERSUCHE.md](VERSUCHE.md#zuordnung-als-raumfühler-und-gemessene-raumtemperatur-im-wem).
+
+Zu `03 00 2569 02` („Status Warmwasser“): Die Modbus-Anleitung des Gateways führt das zugehörige Register 130 als
+„Warnung/Fehler anstehend“; dazu passte unser Wert 1 bei leerem Fehlerblock nicht. Die Integrationen von
+[kraiz](https://github.com/kraiz/hassio-weishaupt) und [JS-DE-Tech](https://github.com/JS-DE-Tech/hacs-weishaupt-lan)
+deuten das Objekt mit der Werteliste des Warmwasser-Status: 0 Standby inaktiv, 1 Zeitprogramm Normal, 2 Zeitprogramm
+Absenk, 3 Warmwasserladung aktiv, 4 Service, 5–7 Alternativenergie, 8 Frostschutz, 9 Standby durch
+Systemprogrammschalter, 10/12/13 Standby/Normal/Absenk durch Eingang H2 (11 fehlt). Dieselbe Liste nutzt unser Paket
+`kraiz-per-can`. PiLLoX hat an einer WTC-GB 25-B zwei Werte bestätigt: 3 während einer angezeigten Warmwasserladung,
+0 im Standby ([Kommentar vom 11.11.2026](https://github.com/BorgNumberOne/Weishaupt_CanApiJson/issues/4#issuecomment-6793283297)). Unser Wert 1 passt zu
+„Zeitprogramm – Normal“. Die übrigen Werte sind am eingebauten Systemgerät nicht belegt.
 
 Vermutung zur Herkunft der Versätze: Die JSON-Objektnummer ist **modulrelativ** (`0x2533` ist im
 Heizkreis die Betriebsart, im Kessel der Rücklauf VPT); im CAN-Objektverzeichnis eines Knotens liegt
