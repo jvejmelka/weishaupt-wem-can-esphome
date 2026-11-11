@@ -18,6 +18,8 @@ that listens passively on the CAN bus of a Weishaupt condensing boiler with a **
   in order of arrival – visible in the field
   „Warteschlange“ ("queue"), with a button to clear it.
 - **Switching log** of the last ten commands with source and result on the bus.
+- **Write protection for the WEM** (from v42): before switching, the firmware reads the value and does not write
+  if it is already set; it counts every write and refuses more than <!--ab-werk:schreib_max-->30<!--/ab-werk--> per hour.
 - **The WEM's JSON interface is never called on the board's own initiative** – only when someone operates it
   (switching via JSON, write field, manual fetch). Every additional JSON request is a risk for the fragile
   interface.
@@ -38,12 +40,17 @@ that listens passively on the CAN bus of a Weishaupt condensing boiler with a **
    only on a WTC-GW 15-B, at your own risk on other installations. Which ways exist (listening, reading,
    writing via CAN, JSON as the fallback) and which are on by default is described in **one** place:
    [PROTOKOLL.en.md – Ways to the heating system](PROTOKOLL.en.md#ways-to-the-heating-system).
-3. **The WEM is fragile.** Frequent JSON requests, requests for non-existent objects or
+3. **Write as rarely as possible.** Every changed value probably ends up in the WEM's EEPROM. For the system
+   units of its heat pumps Weishaupt states 100,000 write accesses over the lifetime; for the WEM of a gas boiler
+   no number is known. So never switch periodically – no automation that adjusts a value every minute. The
+   firmware does not write if the value is already set, counts every write and refuses more than
+   <!--ab-werk:schreib_max-->30<!--/ab-werk--> per hour: [PROTOKOLL.en.md – Write protection](PROTOKOLL.en.md#write-protection-write-as-little-as-possible-from-v42).
+4. **The WEM is fragile.** Frequent JSON requests, requests for non-existent objects or
    several clients at the same time can knock out its JSON interface until the next power cycle.
    Hence: via JSON <!--ab-werk:abstand_json-->60<!--/ab-werk--> s between two commands by default (it cannot be set shorter),
    no polling via JSON.
    Details: [PROTOKOLL.en.md – When the WEM hangs](PROTOKOLL.en.md#8-when-the-wem-locks-up).
-4. The 120 Ω termination on the board stays **off**; the board sits in the middle of the bus.
+5. The 120 Ω termination on the board stays **off**; the board sits in the middle of the bus.
 
 ## Wiring
 
@@ -99,7 +106,7 @@ component (`id(wcan)->…`). The classes in [`kern.h`](components/weishaupt_can/
 | `wc::Anlass` | when the operating modes are re-read (startup, status bits, switch command, „Status lesen“ ("read status"), rules) |
 | `wc::Lesebefehl`, `wc::Scan` | manual read command and object scan (read requests only) |
 | `wc::Brenner` | edge detection, burner starts (persisted) |
-| `wc::Schalten`, `wc::Protokoll` | minimum interval between commands, pending WEM call, write command, switching log |
+| `wc::Schalten`, `wc::Protokoll` | minimum interval between commands, pending WEM call, write command, write counter with hourly limit, switching log |
 | `wc::Verdacht` | runtime state of rules R1–R5 and of the custom rules (partly persisted) |
 | `wc::Zusatz` | extra displays: storage format and file checksum (persisted) |
 
@@ -515,6 +522,11 @@ cheaper, but **without** galvanic isolation.
     DHW charging and operating modes in Apple Home via the JSON interface; source as a ZIP in the comment
     (instructions in French, no licence stated). Polls every 30 s by default – the notes from the
     kraiz issues above apply there as well.
+- Other ways to a Weishaupt installation (WEM portal, Modbus TCP and WebIF of the heat pumps, older WCM units) and
+  the projects for them: [PROTOKOLL.en.md, section 10d](PROTOKOLL.en.md#10d-other-ways-to-the-installation-and-related-projects).
+  The pointer to the EEPROM write limit
+  ([gojux/weishaupt_unofficial](https://github.com/gojux/weishaupt_unofficial)) and the hourly limit
+  ([aghulas/ha-weishaupt](https://github.com/aghulas/ha-weishaupt)) come from there – thank you.
 - ESPHome documentation: [CAN bus / esp32_can](https://esphome.io/components/canbus/esp32/),
   [Packages](https://esphome.io/components/packages/),
   [Wi-Fi incl. `wifi.configure`](https://esphome.io/components/wifi/),

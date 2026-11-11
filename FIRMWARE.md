@@ -54,6 +54,9 @@ Per MQTT: `<gerät>/cmd/status` mit beliebigem Inhalt. Höchstens ein Wunsch all
 | **Ergebnis letzter Schaltbefehl** | Fortschritt und Ergebnis als Klartext, s. [PROTOKOLL.md, Abschnitt 5](PROTOKOLL.md#ablauf-in-der-firmware) (veraltet – strukturiert: `befehl/status`, [TOPICS.md](TOPICS.md)) |
 | **Warteschlange leeren** | verwirft alle vorgemerkten Befehle (wird protokolliert) |
 | **Schaltprotokoll** | die letzten zehn Befehle mit Uhrzeit, Quelle und Ergebnis; per MQTT retained unter `<gerät>/schaltprotokoll`. Nach einem Neustart leer |
+| **Schreibvorgaenge letzte Stunde** | wie oft das Board in den letzten 60 Minuten am WEM geschrieben hat (ab v42): Schalten, freies CAN-Schreiben, Schreibfeld, Warmwasser-Push |
+| **Schreibvorgaenge gesamt** | derselbe Zähler ohne Zeitfenster; übersteht den Neustart, zählt ab dem Update auf v42 |
+| **Schreibvorgaenge je Stunde hoechstens** | Obergrenze, ab Werk <!--ab-werk:schreib_max-->30<!--/ab-werk--> (1–120, Experten). Ist sie erreicht, sendet das Board nicht – [PROTOKOLL.md, Schreibschutz](PROTOKOLL.md#schreibschutz-so-wenig-wie-möglich-schreiben-ab-v42) |
 
 ### Schreibbefehl über WEM (Experten)
 
@@ -63,7 +66,8 @@ Per MQTT: `<gerät>/cmd/status` mit beliebigem Inhalt. Höchstens ein Wunsch all
 | **Schreiben** | baut `CM 03` und sendet über JSON. **Nur MI 01, 02, 03** – der Kessel ist gesperrt. Es gilt der Abstand für Befehle über JSON (ab Werk <!--ab-werk:abstand_json-->60<!--/ab-werk--> s) |
 | **Schreibbefehl Antwort** | `OK, WEM bestaetigt (VG …)`, `abgelehnt (CM=05): Objekt unbekannt oder nicht schreibbar - VG …`, `unklare Antwort, HTTP …` oder `WEM nicht erreichbar` |
 
-Das Schreibfeld prüft **nicht** am Bus nach und kennt keine Warteschlange. Vor dem Schreiben das
+Das Schreibfeld prüft **nicht** am Bus nach und kennt keine Warteschlange; es liest auch nicht
+vorab, und jeder Schreibvorgang zählt für die Obergrenze je Stunde (ab v42). Vor dem Schreiben das
 Objekt über den Lesebefehl am Bus ansehen und die Abbildung aus
 [PROTOKOLL.md, Abschnitt 5](PROTOKOLL.md#abbildung-json-objekt--can-objekt) anwenden. Jede `CM 05`-Antwort kostet einen der
 zehn Plätze aus [PROTOKOLL.md, Abschnitt 8](PROTOKOLL.md#8-wann-sich-der-wem-aufhängt).
@@ -106,6 +110,7 @@ zehn Plätze aus [PROTOKOLL.md, Abschnitt 8](PROTOKOLL.md#8-wann-sich-der-wem-au
 | R5 uebrige Statusbits geaendert | **aus** | – | `verdacht` | Regeln | Admin-Anmeldung |
 | Eigene Regeln (Hauptschalter) | **aus** | – | `verdacht` | Regeln | Admin-Anmeldung |
 | Freies CAN-Schreiben (Experten) | **aus** | – | `wem-schalten` | Experten | Admin-Anmeldung und Experten-Passwort |
+| Schreibvorgaenge je Stunde hoechstens | 30 | 1–120 | `wem-schalten` | Experten | Admin-Anmeldung und Experten-Passwort |
 | CAN-Rohmitschnitt nach MQTT | **aus** | – | `mqtt` | Experten | Admin-Anmeldung und Experten-Passwort |
 | Waechter: Neustart nach Minuten ohne Bus (0 = aus) | 5 | 0–120 | `kessel` | Experten | Admin-Anmeldung und Experten-Passwort |
 | R1 Mindestabstand (min) | 1 | 1–1440 | `verdacht` | – | Experten-Oberfläche |

@@ -455,6 +455,54 @@ struct Schalten {
   // gilt fuer den Befehl, der zuletzt gesendet wurde (beginnen() setzt ihn)
   uint32_t sperre_ms = SPERRMINUTE_MS;
   void beginnen(uint32_t j, uint32_t abstand_ms) { letzter_befehl = j | 1; sperre_ms = abstand_ms; }
+
+  // Vorab-Lesung vor dem Schalten (ab v42): erst lesen, nur bei Abweichung schreiben
+  bool vorab = false;            // Leseanfrage ist raus, Antwort steht aus
+  int vorab_ist = -1;            // gelesener Wert, -1 = keine Antwort
+  bool weiter = false;           // nach der Vorab-Lesung: Schreibbefehl senden
+
+  // Schreibvorgaenge am WEM zaehlen (ab v42). Jeder geaenderte Wert landet vermutlich im EEPROM des WEM
+  // (Weishaupt nennt fuer die Waermepumpen-Systemgeraete 100.000 Schreibzugriffe ueber die Lebensdauer).
+  // Gezaehlt wird jeder Schreibbefehl, den das Board an den Bus oder an die JSON-Schnittstelle gibt.
+  // Die Obergrenze je Stunde ist ein Schutz gegen Schleifen (eigene Automatik, die im Takt schaltet).
+  static const int SCHREIB_MERKEN = 120;   // groesste einstellbare Obergrenze
+  uint32_t schreib_ms[SCHREIB_MERKEN] = {0};   // Zeitpunkte der letzten Stunde, aelteste zuerst
+  int schreib_n = 0;
+  uint32_t schreib_gesamt = 0;   // seit der Inbetriebnahme des Boards, gespeichert
+  // Anzahl in den letzten 60 min; raeumt dabei aeltere Eintraege weg (regelmaessig rufen: millis() laeuft ueber)
+  int schreib_stunde(uint32_t j) {
+    int weg = 0;
+    while (weg < schreib_n && j - schreib_ms[weg] >= 3600000UL) weg++;
+    if (weg) { for (int i = weg; i < schreib_n; i++) schreib_ms[i - weg] = schreib_ms[i]; schreib_n -= weg; }
+    return schreib_n;
+  }
+  void schreib_zaehlen(uint32_t j) {
+    schreib_stunde(j);
+    if (schreib_n == SCHREIB_MERKEN) { for (int i = 1; i < schreib_n; i++) schreib_ms[i - 1] = schreib_ms[i]; schreib_n--; }
+    schreib_ms[schreib_n++] = j;
+    schreib_gesamt++;
+  }
+  // Sekunden, bis bei erreichter Obergrenze wieder ein Schreibvorgang frei wird (0 = sofort)
+  int schreib_frei_in_s(uint32_t j, int hoechstens) {
+    int n = schreib_stunde(j);
+    if (hoechstens < 1) hoechstens = 1;
+    if (n < hoechstens) return 0;
+    return (int) ((3600000UL - (j - schreib_ms[n - hoechstens])) / 1000) + 1;
+  }
+  static std::string obergrenze_text(int hoechstens, int in_s) {
+    return "Obergrenze " + std::to_string(hoechstens) + " Schreibvorgaenge je Stunde erreicht - nicht gesendet, wieder frei in " +
+           std::to_string((in_s + 59) / 60) + " min";
+  }
+  // Vor JEDEM Schreibbefehl rufen: true = darf gesendet werden (und ist gezaehlt),
+  // false = Obergrenze erreicht, text sagt warum - dann nicht senden.
+  bool schreib_buchen(uint32_t j, int hoechstens, std::string &text) {
+    if (hoechstens < 1) hoechstens = 1;
+    if (hoechstens > SCHREIB_MERKEN) hoechstens = SCHREIB_MERKEN;
+    int in_s = schreib_frei_in_s(j, hoechstens);
+    if (in_s > 0) { text = obergrenze_text(hoechstens, in_s); return false; }
+    schreib_zaehlen(j);
+    return true;
+  }
   uint32_t sperre_s() const { return sperre_ms / 1000; }
   bool sperrminute(uint32_t j) const { return letzter_befehl != 0 && j - letzter_befehl < sperre_ms; }
   // Sekunden, bis ein neuer Wunsch gesendet werden darf

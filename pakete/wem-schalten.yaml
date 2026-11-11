@@ -23,11 +23,21 @@
 #   - eine CM=05-Antwort wird im Ergebnis gemeldet
 #   - die JSON-Schnittstelle wird nie von selbst aufgerufen, nur auf Bedienung
 #
+# Schreibschutz (ab v42): jeder geaenderte Wert landet vermutlich im EEPROM des WEM (fuer die Systemgeraete
+# der Waermepumpen nennt Weishaupt 100.000 Schreibzugriffe ueber die Lebensdauer). Deshalb:
+#   - Vorab-Lesung (Skript vorab_lesen): vor dem Schalten den Wert am WEM lesen; steht er schon so, nicht schreiben
+#   - Schreibzaehler: "Schreibvorgaenge letzte Stunde" und "Schreibvorgaenge gesamt" (gesamt gespeichert)
+#   - Obergrenze: "Schreibvorgaenge je Stunde hoechstens" (Vorgabe 30) - darueber wird nicht gesendet
+#   Gezaehlt wird jedes Schreiben des Boards am WEM: Schalten (CAN und JSON), freies CAN-Schreiben,
+#   Schreibfeld, Warmwasser-Push (kraiz-per-can). PROTOKOLL.md, "Schreibschutz".
+#
 # Schalten per MQTT (braucht Paket mqtt):
 #   ${geraet}/cmd/heizkreis   Klartext "1".."8", Name ("Zeitprogramm 1", "Standby") oder Kurzform "ZP1"
 #                             oder JSON {"id":17,"wert":"ZP2","quelle":"App"} (id und quelle optional)
 #   ${geraet}/befehl/status   (retained) JSON je Phase eines Befehls - siehe TOPICS.md:
 #                             angenommen -> vorgemerkt -> gesendet -> pruefe_bus -> bestaetigt | gescheitert
+#                             ab v42 auch: vorgemerkt -> bestaetigt (stand schon so, nichts geschrieben)
+#                                          vorgemerkt -> gescheitert (obergrenze je Stunde erreicht)
 #   ${geraet}/schaltprotokoll (retained) die letzten 10 Befehle, einer je Zeile (VERALTET, Klartext)
 # Die Buchfuehrung (Warteschlange, Phasen, JSON) steht in befehle.h (getestet in tests/).
 
@@ -99,7 +109,7 @@ script:
             s.ablehnen(ziel, a, f);
             id(schalt_status).publish_state(a.quelle + ": " + zn + " abgelehnt - " + f);
           } else {
-            int warten = id(wcan)->schalten.warten_s(millis(), id(wem_senden).is_running() || id(can_senden).is_running() ||
+            int warten = id(wcan)->schalten.warten_s(millis(), id(vorab_lesen).is_running() || id(wem_senden).is_running() || id(can_senden).is_running() ||
                                                               id(can_frei_senden).is_running() || id(sd_holen).is_running());
             // ein frueher eingegangener Wunsch fuer das andere Ziel wird zuerst gesendet (Reihenfolge des Eingangs)
             if (warten == 0 && s.hat_wunsch[ziel == 1 ? 2 : 1]) warten = (int) id(wcan)->schalten.sperre_s();
@@ -158,19 +168,23 @@ script:
             else sc.frei_ab = "";
           }
           bf::status().setze(bf::status().weg_can, (bool) id(can_schalten).state);   // fuer status/json und App
+          // Schreibzaehler anzeigen (nur bei Aenderung); raeumt dabei Eintraege aelter als 1 h weg
+          { int n = sc.schreib_stunde(millis());
+            if (id(schreib_stunde_s).state != (float) n) id(schreib_stunde_s).publish_state(n);
+            if (id(schreib_gesamt_s).state != (float) sc.schreib_gesamt) id(schreib_gesamt_s).publish_state(sc.schreib_gesamt); }
           auto &s = bf::schaltung();
           s.uhr = id(wcan)->unix_zeit();
-          std::string w = wc::warteschlange_text(s, (id(wem_senden).is_running() || id(can_senden).is_running() || id(can_frei_senden).is_running() || id(sd_holen).is_running()) || sc.sperrminute(millis()), sc.frei_ab);
+          std::string w = wc::warteschlange_text(s, (id(vorab_lesen).is_running() || id(wem_senden).is_running() || id(can_senden).is_running() || id(can_frei_senden).is_running() || id(sd_holen).is_running()) || sc.sperrminute(millis()), sc.frei_ab);
           if (id(warteschlange).state != w) id(warteschlange).publish_state(w);
           sc.senden = false;
-          if ((id(wem_senden).is_running() || id(can_senden).is_running() || id(can_frei_senden).is_running() || id(sd_holen).is_running())) return;
+          if ((id(vorab_lesen).is_running() || id(wem_senden).is_running() || id(can_senden).is_running() || id(can_frei_senden).is_running() || id(sd_holen).is_running())) return;
           if (sc.sperrminute(millis())) return;
           if (s.laeuft) {                          // Sicherung: WEM-Aufruf fertig, Befehl aber noch offen
             if (sc.ziel == 0) s.keine_rueckmeldung();
             return;
           }
           bf::Befehl bb;
-          if (!s.naechster(bb)) return;
+          if (!s.naechster(bb, false)) return;   // "gesendet" meldet erst vorab_lesen, wenn wirklich geschrieben wird
           char b[24];
           // VG: CM 03, MI MX OX OS VS, Wert - z.B. 0302002533020001 + Wert (register.yaml)
           if (bb.ziel == 1) reg::json_vg_schreiben(b, sizeof(b), reg::HK_BETRIEBSART_JSON, bb.wert);   // MI02 HZK0 Betriebsart
@@ -181,16 +195,68 @@ script:
           id(wcan)->anlass.eigener_befehl_ms = sc.letzter_befehl;
           bf::status().setze(bf::status().frei_ab, s.uhr ? s.uhr + sc.sperre_s() : 0u);
           sc.senden = true;
-      - script.execute: befehl_melden
       - if:
           condition:
-            lambda: 'return id(wcan)->schalten.senden && id(can_schalten).state;'
+            lambda: 'return id(wcan)->schalten.senden;'
+          then:
+            - script.execute: vorab_lesen
+
+  # Vor dem Schreiben lesen (ab v42): die Betriebsart wird einmal per SDO am WEM gelesen. Steht sie schon auf dem
+  # gewuenschten Wert, wird NICHT geschrieben (Befehl "bestaetigt", Text "stand schon so") - jeder geaenderte Wert
+  # landet vermutlich im EEPROM des WEM. Sonst, oder ohne Antwort binnen 1 s (Bus tot, kein CAN-Kabel), wird wie
+  # bisher geschrieben - sofern die Obergrenze "Schreibvorgaenge je Stunde" es erlaubt (sonst "gescheitert", Grund
+  # obergrenze). Die Antwort faengt on_frame 0x581 (unten und in warmwasser-schalten.yaml).
+  - id: vorab_lesen
+    mode: single
+    then:
+      - lambda: |-
+          auto &sc = id(wcan)->schalten;
+          sc.vorab = false; sc.vorab_ist = -1; sc.weiter = false;
+          if (sc.ziel != 1 && sc.ziel != 2) return;
+          if (id(wcan)->bus.tot(millis())) return;            // ohne Bus keine Vorab-Lesung
+          const reg::Sdo &o = sc.ziel == 1 ? reg::HK_BETRIEBSART : reg::WW_BETRIEBSART;
+          sc.vorab = true;
+          std::vector<uint8_t> d = reg::lese(o);
+          id(wcan)->senden(reg::anfrage_id(o), d);
+      - wait_until:
+          condition:
+            lambda: 'return !id(wcan)->schalten.vorab;'
+          timeout: 1s
+      - lambda: |-
+          auto &sc = id(wcan)->schalten;
+          sc.vorab = false;
+          int ziel = sc.ziel;
+          if (ziel != 1 && ziel != 2) return;
+          auto &s = bf::schaltung();
+          s.uhr = id(wcan)->unix_zeit();
+          std::string zn = ziel == 1 ? "Heizkreis" : "Warmwasser";
+          std::string q = s.lauf.quelle;
+          std::string soll = bf::wert_text(ziel, s.lauf.wert);
+          std::string t;
+          if (sc.vorab_ist == s.lauf.wert) {
+            s.schon_so(sc.vorab_ist);
+            id(schalt_status).publish_state(id(wcan)->zeit("%H:%M:%S ") + "OK: " + zn + " stand schon auf " + soll + " - nicht geschrieben");
+            id(protokoll_eintrag)->execute(zn + " -> " + soll + " (" + q + "): stand schon so, nicht geschrieben");
+            sc.ziel = 0;
+          } else if (!sc.schreib_buchen(millis(), (int) id(schreib_max).state, t)) {
+            s.obergrenze(t);
+            id(schalt_status).publish_state(id(wcan)->zeit("%H:%M:%S ") + zn + " -> " + soll + ": " + t);
+            id(protokoll_eintrag)->execute(zn + " -> " + soll + " (" + q + "): " + t);
+            sc.ziel = 0;
+          } else {
+            s.gesendet();
+            sc.weiter = true;
+          }
+          id(befehl_melden)->execute();
+      - if:
+          condition:
+            lambda: 'return id(wcan)->schalten.weiter && id(can_schalten).state;'
           then:
             - script.execute: can_senden
           else:
             - if:
                 condition:
-                  lambda: 'return id(wcan)->schalten.senden;'
+                  lambda: 'return id(wcan)->schalten.weiter;'
                 then:
                   - script.execute:
                       id: wem_senden
@@ -253,7 +319,7 @@ script:
           auto &sc = id(wcan)->schalten;
           sc.can_frei_gesendet = false; sc.can_frei_wartet = false;
           if (!id(can_frei).state) { id(can_antwort).publish_state("gesperrt - Schalter \"Freies CAN-Schreiben\" ist aus"); return; }
-          if (id(wem_senden).is_running() || id(can_senden).is_running() || sc.sperrminute(millis())) {
+          if (id(vorab_lesen).is_running() || id(wem_senden).is_running() || id(can_senden).is_running() || sc.sperrminute(millis())) {
             id(can_antwort).publish_state("bitte warten - Abstand zum letzten Befehl"); return;
           }
           if (id(wcan)->bus.tot(millis())) { id(can_antwort).publish_state("Bus tot - nicht gesendet"); return; }
@@ -281,6 +347,8 @@ script:
                 if (!id(wcan)->sdo_ruhig(c.kn, millis())) {
                   id(can_antwort).publish_state(str_sprintf("Knoten %02X: SDO-Kanal 3 s lang belegt - nicht gesendet", c.kn)); return;
                 }
+                std::string og;
+                if (!sc.schreib_buchen(millis(), (int) id(schreib_max).state, og)) { id(can_antwort).publish_state(og); return; }
                 sc.beginnen(millis(), (uint32_t) id(abstand_can).state * 1000); id(wcan)->anlass.eigener_befehl_ms = sc.letzter_befehl;
                 uint32_t u = id(wcan)->unix_zeit();
                 if (u != 0) bf::status().setze(bf::status().frei_ab, u + sc.sperre_s());
@@ -324,7 +392,7 @@ script:
           auto &sc = id(wcan)->schalten;
           if (!id(sd_erlaubt).state) { id(sd_antwort).publish_state("gesperrt - Schalter \"SD-Dateien abrufen\" ist aus"); return; }
           if (!wc::sd_name_ok(name)) { id(sd_antwort).publish_state("ungueltiger Dateiname (nur Buchstaben, Ziffern, _ . -)"); return; }
-          if (id(wem_senden).is_running() || id(can_senden).is_running() || id(can_frei_senden).is_running() || sc.sperrminute(millis())) {
+          if (id(vorab_lesen).is_running() || id(wem_senden).is_running() || id(can_senden).is_running() || id(can_frei_senden).is_running() || sc.sperrminute(millis())) {
             id(sd_antwort).publish_state("bitte warten - Abstand zum letzten WEM-Zugriff"); return;
           }
           sc.beginnen(millis(), (uint32_t) id(abstand_json).state * 1000);   // HTTP an den WEM wie JSON
@@ -489,6 +557,9 @@ canbus:
               if ((x[0] & 0xF0) != 0x40 || !reg::ist(reg::HK_BETRIEBSART, (x[2] << 8) | x[1], x[3])) return;
               uint8_t b = x[4];
               if (b >= 1 && b <= 8) id(hk_setzen).publish_state(wc::hk_name(b, "?"));
+              if (id(wcan)->schalten.vorab && id(wcan)->schalten.ziel == 1) {   // Antwort auf die Vorab-Lesung
+                id(wcan)->schalten.vorab_ist = b; id(wcan)->schalten.vorab = false; return;
+              }
               if (id(wcan)->schalten.ziel != 1 || !id(wcan)->schalten.pruefen) return;
               auto &s = bf::schaltung();
               s.uhr = id(wcan)->unix_zeit();
@@ -525,13 +596,15 @@ button:
       - lambda: |-
           auto &sc = id(wcan)->schalten;
           sc.senden = false;
-          if ((id(wem_senden).is_running() || id(can_senden).is_running() || id(can_frei_senden).is_running() || id(sd_holen).is_running()) || sc.sperrminute(millis())) {
+          if ((id(vorab_lesen).is_running() || id(wem_senden).is_running() || id(can_senden).is_running() || id(can_frei_senden).is_running() || id(sd_holen).is_running()) || sc.sperrminute(millis())) {
             id(schreib_antwort).publish_state("bitte warten - Abstand zum letzten Befehl"); return;
           }
           // Format: MI MX OX OS WERT (hex), z.B. "03 00 2520 02 02" = Warmwasser Aus.
           // Nur Systemgeraet (MI 01 SYSTEM0, 02 HZK0, 03 WW0) - nie der Kessel (wc::schreib_vg)
           std::string vg, fehler;
           if (!wc::schreib_vg(id(schreib_eingabe).state, vg, fehler)) { id(schreib_antwort).publish_state(fehler); return; }
+          std::string og;
+          if (!sc.schreib_buchen(millis(), (int) id(schreib_max).state, og)) { id(schreib_antwort).publish_state(og); return; }
           sc.vg = vg; sc.ziel = 3;
           sc.beginnen(millis(), (uint32_t) id(abstand_json).state * 1000); id(wcan)->anlass.eigener_befehl_ms = sc.letzter_befehl; sc.senden = true;
           uint32_t u = id(wcan)->unix_zeit();
@@ -699,6 +772,38 @@ number:
     mode: box
     entity_category: config
     web_server: { sorting_group_id: g_schalten, sorting_weight: 9 }
+
+  # Obergrenze der Schreibvorgaenge je Stunde (ab v42): Schutz gegen Schleifen (eine Automatik, die im Takt schaltet).
+  # Gilt fuer alles, was das Board an den WEM schreibt: Schalten per CAN oder JSON, Schreibfeld, freies CAN-Schreiben,
+  # Warmwasser-Push. Ist sie erreicht, wird nicht gesendet (Befehl "gescheitert", Grund obergrenze).
+  - platform: template
+    id: schreib_max
+    name: "Schreibvorgaenge je Stunde hoechstens"
+    min_value: 1
+    max_value: 120
+    step: 1
+    initial_value: 30
+    restore_value: true
+    optimistic: true
+    mode: box
+    entity_category: config
+    web_server: { sorting_group_id: g_schalten, sorting_weight: 10 }
+
+# Schreibzaehler (ab v42): jeder Schreibbefehl des Boards an den WEM. "gesamt" bleibt ueber Neustarts erhalten.
+sensor:
+  - platform: template
+    name: "Schreibvorgaenge letzte Stunde"
+    id: schreib_stunde_s
+    accuracy_decimals: 0
+    update_interval: never
+    web_server: { sorting_group_id: g_schalten, sorting_weight: 7 }
+  - platform: template
+    name: "Schreibvorgaenge gesamt"
+    id: schreib_gesamt_s
+    accuracy_decimals: 0
+    state_class: total_increasing
+    update_interval: never
+    web_server: { sorting_group_id: g_schalten, sorting_weight: 8 }
 
 switch:
   - platform: template

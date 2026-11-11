@@ -18,6 +18,8 @@ das am CAN-Bus einer Weishaupt-Brennwertheizung mit **WEM-Systemgerät** (z. B. 
   und in der Reihenfolge des Eingangs gesendet – sichtbar im Feld
   „Warteschlange“, mit Knopf zum Leeren.
 - **Schaltprotokoll** der letzten zehn Befehle mit Quelle und Ergebnis am Bus.
+- **Schreibschutz für den WEM** (ab v42): Vor dem Schalten liest die Firmware den Wert und schreibt nicht, wenn
+  er schon stimmt; sie zählt jeden Schreibvorgang und lehnt mehr als <!--ab-werk:schreib_max-->30<!--/ab-werk--> je Stunde ab.
 - **Die JSON-Schnittstelle des WEM wird nie von selbst aufgerufen** – nur auf Bedienung (Schalten über
   JSON, Schreibfeld, Abruf von Hand). Jede zusätzliche JSON-Anfrage ist ein Risiko für die empfindliche
   Schnittstelle.
@@ -38,12 +40,17 @@ das am CAN-Bus einer Weishaupt-Brennwertheizung mit **WEM-Systemgerät** (z. B. 
    einer WTC-GW 15-B, an anderen Anlagen auf eigene Gefahr. Welche Wege es gibt (Mithören, Lesen, Schreiben
    per CAN, JSON als Rückweg) und was davon ab Werk an ist, steht an **einer** Stelle:
    [PROTOKOLL.md – Wege zur Heizung](PROTOKOLL.md#wege-zur-heizung).
-3. **Der WEM ist empfindlich.** Häufige JSON-Anfragen, Anfragen an nicht vorhandene Objekte oder
+3. **So selten wie möglich schreiben.** Jeder geänderte Wert landet vermutlich im EEPROM des WEM. Für die
+   Systemgeräte seiner Wärmepumpen nennt Weishaupt 100.000 Schreibzugriffe über die Lebensdauer; für das WEM
+   einer Gastherme ist keine Zahl bekannt. Deshalb nie im Takt schalten – keine Automation, die jede Minute einen
+   Wert nachführt. Die Firmware schreibt nicht, wenn der Wert schon stimmt, zählt jeden Schreibvorgang und lehnt
+   mehr als <!--ab-werk:schreib_max-->30<!--/ab-werk--> je Stunde ab: [PROTOKOLL.md – Schreibschutz](PROTOKOLL.md#schreibschutz-so-wenig-wie-möglich-schreiben-ab-v42).
+4. **Der WEM ist empfindlich.** Häufige JSON-Anfragen, Anfragen an nicht vorhandene Objekte oder
    mehrere Clients gleichzeitig können seine JSON-Schnittstelle bis zum nächsten Stromlos-Machen
    lahmlegen. Deshalb: über JSON ab Werk <!--ab-werk:abstand_json-->60<!--/ab-werk--> s zwischen zwei Befehlen (kürzer lässt es sich nicht
    einstellen), kein Polling über JSON.
    Einzelheiten: [PROTOKOLL.md – Wann sich der WEM aufhängt](PROTOKOLL.md#8-wann-sich-der-wem-aufhängt).
-4. Der 120-Ω-Abschluss auf dem Board bleibt **aus**, das Board hängt mitten am Bus.
+5. Der 120-Ω-Abschluss auf dem Board bleibt **aus**, das Board hängt mitten am Bus.
 
 ## Anschluss
 
@@ -90,7 +97,7 @@ Bauteils (`id(wcan)->…`). Die Klassen in [`kern.h`](components/weishaupt_can/k
 | `wc::Anlass` | wann die Betriebsarten nachgelesen werden (Start, Statusbits, Schaltbefehl, „Status lesen“, Regeln) |
 | `wc::Lesebefehl`, `wc::Scan` | Lesebefehl von Hand und Objektscan (nur Leseanfragen) |
 | `wc::Brenner` | Flankenerkennung, Brennerstarts (gespeichert) |
-| `wc::Schalten`, `wc::Protokoll` | Mindestabstand zwischen Befehlen, laufender WEM-Aufruf, Schreibbefehl, Schaltprotokoll |
+| `wc::Schalten`, `wc::Protokoll` | Mindestabstand zwischen Befehlen, laufender WEM-Aufruf, Schreibbefehl, Schreibzähler mit Obergrenze je Stunde, Schaltprotokoll |
 | `wc::Verdacht` | Laufzeitzustand der Regeln R1–R5 und der eigenen Regeln (teils gespeichert) |
 | `wc::Zusatz` | Zusatzanzeigen: Speicherform und Datei-Prüfsumme (gespeichert) |
 
@@ -498,6 +505,11 @@ billiger, aber **ohne** galvanische Trennung.
     Warmwasser-Ladung und Betriebsarten in Apple Home über die JSON-Schnittstelle; Quelltext als ZIP im Kommentar
     (Anleitung französisch, ohne Lizenzangabe). Fragt in der Vorgabe alle 30 s ab – die Hinweise aus den
     kraiz-Issues oben gelten auch dort.
+- Andere Wege zu einer Weishaupt-Anlage (WEM-Portal, Modbus TCP und WebIF der Wärmepumpen, ältere WCM-Geräte) und
+  die Projekte dazu: [PROTOKOLL.md, Abschnitt 10d](PROTOKOLL.md#10d-andere-wege-zur-anlage-und-verwandte-projekte).
+  Von dort kommen der Hinweis auf die Schreibgrenze des EEPROMs
+  ([gojux/weishaupt_unofficial](https://github.com/gojux/weishaupt_unofficial)) und die Obergrenze je Stunde
+  ([aghulas/ha-weishaupt](https://github.com/aghulas/ha-weishaupt)) – danke.
 - ESPHome-Dokumentation: [CAN-Bus / esp32_can](https://esphome.io/components/canbus/esp32/),
   [Pakete](https://esphome.io/components/packages/),
   [WLAN inkl. `wifi.configure`](https://esphome.io/components/wifi/),

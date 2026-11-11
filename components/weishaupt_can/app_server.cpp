@@ -92,6 +92,7 @@ static const char *const EINSTELLUNGEN[][3] = {
     {"Regeln", "R5 uebrige Statusbits geaendert", ""},
     {"Regeln", "Eigene Regeln (Hauptschalter)", ""},
     {"Experten", "Freies CAN-Schreiben (Experten)", ""},
+    {"Experten", "Schreibvorgaenge je Stunde hoechstens", "30"},
     {"Experten", "CAN-Rohmitschnitt nach MQTT", ""},
     {"Experten", "Waechter: Neustart nach Minuten ohne Bus (0 = aus)", "5"},
 };

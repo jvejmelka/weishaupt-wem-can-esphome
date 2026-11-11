@@ -55,6 +55,9 @@ Via MQTT: `<gerät>/cmd/status` with any payload. At most one request every 10 s
 | **Ergebnis letzter Schaltbefehl** (result of last switching command) | progress and result as plain text, see [PROTOKOLL.en.md, section 5](PROTOKOLL.en.md#sequence-in-the-firmware) (deprecated – structured: `befehl/status`, [TOPICS.en.md](TOPICS.en.md)) |
 | **Warteschlange leeren** (clear queue) | discards all pending commands (is logged) |
 | **Schaltprotokoll** (switching log) | the last ten commands with time, source and result; via MQTT retained under `<gerät>/schaltprotokoll`. Empty after a reboot |
+| **Schreibvorgaenge letzte Stunde** (writes in the last hour) | how often the board has written to the WEM in the last 60 minutes (from v42): switching, free CAN writing, write field, DHW push |
+| **Schreibvorgaenge gesamt** (writes in total) | the same counter without a time window; survives a reboot, counts from the update to v42 |
+| **Schreibvorgaenge je Stunde hoechstens** (writes per hour at most) | hourly limit, default <!--ab-werk:schreib_max-->30<!--/ab-werk--> (1–120, experts). Once it is reached the board does not send – [PROTOKOLL.en.md, Write protection](PROTOKOLL.en.md#write-protection-write-as-little-as-possible-from-v42) |
 
 ### Schreibbefehl über WEM (write command via WEM; experts)
 
@@ -64,7 +67,8 @@ Via MQTT: `<gerät>/cmd/status` with any payload. At most one request every 10 s
 | **Schreiben** (write) | builds `CM 03` and sends it via JSON. **Only MI 01, 02, 03** – the boiler is locked. The interval for commands via JSON applies (<!--ab-werk:abstand_json-->60<!--/ab-werk--> s by default) |
 | **Schreibbefehl Antwort** (write command response) | `OK, WEM bestaetigt (VG …)` (WEM confirmed), `abgelehnt (CM=05): Objekt unbekannt oder nicht schreibbar - VG …` (rejected: object unknown or not writable), `unklare Antwort, HTTP …` (unclear response) or `WEM nicht erreichbar` (WEM unreachable) |
 
-The write field does **not** verify on the bus and has no queue. Before writing, look at the
+The write field does **not** verify on the bus and has no queue; it does not pre-read either,
+and every write counts towards the hourly limit (from v42). Before writing, look at the
 object on the bus using the read command and apply the mapping from
 [PROTOKOLL.en.md, section 5](PROTOKOLL.en.md#mapping-json-object--can-object). Every `CM 05` response costs one of the
 ten slots from [PROTOKOLL.en.md, section 8](PROTOKOLL.en.md#8-when-the-wem-locks-up).
@@ -107,6 +111,7 @@ ten slots from [PROTOKOLL.en.md, section 8](PROTOKOLL.en.md#8-when-the-wem-locks
 | R5 uebrige Statusbits geaendert | **off** | – | `verdacht` | Regeln | admin login |
 | Eigene Regeln (Hauptschalter) | **off** | – | `verdacht` | Regeln | admin login |
 | Freies CAN-Schreiben (Experten) | **off** | – | `wem-schalten` | Experten | admin login and expert password |
+| Schreibvorgaenge je Stunde hoechstens | 30 | 1–120 | `wem-schalten` | Experten | admin login and expert password |
 | CAN-Rohmitschnitt nach MQTT | **off** | – | `mqtt` | Experten | admin login and expert password |
 | Waechter: Neustart nach Minuten ohne Bus (0 = aus) | 5 | 0–120 | `kessel` | Experten | admin login and expert password |
 | R1 Mindestabstand (min) | 1 | 1–1440 | `verdacht` | – | expert interface |

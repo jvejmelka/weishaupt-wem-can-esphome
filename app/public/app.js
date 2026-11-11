@@ -94,6 +94,8 @@ function startProgress() {
 // Jeder Knopfdruck schickt einen Befehl mit Kennung (id). Das Board meldet jede Phase:
 //   angenommen -> vorgemerkt -> gesendet -> pruefe_bus -> bestaetigt | gescheitert (grund)
 //   dazu: ersetzt (neuerer Wunsch), abgelehnt (ungueltig, nie gesendet)
+//   ab v42: vorgemerkt -> bestaetigt mit wem "nicht_gesendet" (stand schon so, nichts geschrieben),
+//           vorgemerkt -> gescheitert mit grund "obergrenze" (zu viele Schreibvorgaenge je Stunde)
 // Die App liest nur diese festen Felder (status/json "schalten" und befehl/status), keinen Freitext.
 let eigene = {};              // ziel -> { id, wert, t } eigener, noch nicht vom Board gemeldeter Befehl
 let beobachtung = null;       // { id, ziel, seit, phase } fuer die Meldungszeile
@@ -119,9 +121,12 @@ const wertVon = (ziel, b) => !b ? null : ziel === 'hk' ? (b.wert ?? null) : (b.w
 const LAEUFT = new Set(['gesendet', 'pruefe_bus']);
 const OFFEN = new Set(['angenommen', 'vorgemerkt']);
 const ENDE_FEHLER = new Set(['gescheitert', 'abgelehnt']);
+// ab v42: der WEM stand schon auf dem gewuenschten Wert - das Board hat gelesen und nichts geschrieben
+function schonSo(b) { return !!b && b.phase === 'bestaetigt' && b.wem === 'nicht_gesendet'; }
 function kurzGrund(b) {
   const g = { cm05: 'abgelehnt (WEM)', nicht_uebernommen: 'nicht übernommen', keine_rueckmeldung: 'keine Rückmeldung',
-              geleert: 'verworfen', ungueltig: 'ungültig', ersetzt: 'ersetzt' }[b.grund];
+              geleert: 'verworfen', ungueltig: 'ungültig', ersetzt: 'ersetzt',
+              obergrenze: 'Obergrenze je Stunde erreicht' }[b.grund];
   return g || b.grund || b.phase;
 }
 
@@ -245,7 +250,7 @@ function fortschrittStand(ziel, data) {
   if (b.phase === 'bestaetigt') return { schritt: 3, ok: true };
   const steht = b.grund === 'nicht_uebernommen' && b.ist_text ? ` (steht auf ${b.ist_text})` : '';
   return { schritt: 3, ok: false, kurz: kurzGrund(b) + steht,
-           fehlerBei: b.grund === 'cm05' ? 1 : (b.grund === 'geleert' || b.grund === 'ungueltig') ? 0 : 3 };
+           fehlerBei: b.grund === 'cm05' ? 1 : (b.grund === 'geleert' || b.grund === 'ungueltig' || b.grund === 'obergrenze') ? 0 : 3 };
 }
 function zeigeFortschritt(el, f, data) {
   el.innerHTML = '';
@@ -278,7 +283,7 @@ function meldeBeobachtung(data) {
     vorgemerkt: `${name} ${wert} vorgemerkt` + (b.warten_s ? ` – wird in ${b.warten_s} s gesendet` : ''),
     gesendet: `${name} ${wert}: an WEM gesendet`,
     pruefe_bus: `${name} ${wert}: prüfe am Bus …`,
-    bestaetigt: `${name} steht auf ${b.ist_text || wert} ✓`,
+    bestaetigt: `${name} steht auf ${b.ist_text || wert} ✓` + (schonSo(b) ? ' (stand schon so – nichts geschrieben)' : ''),
     gescheitert: `${name} ${wert}: ${kurzGrund(b)}` + (b.ist_text && b.grund === 'nicht_uebernommen' ? ` (steht auf ${b.ist_text})` : ''),
     abgelehnt: `${name}: abgelehnt – ${b.text || kurzGrund(b)}`,
     ersetzt: `${name} ${wert}: durch neueren Befehl ersetzt`

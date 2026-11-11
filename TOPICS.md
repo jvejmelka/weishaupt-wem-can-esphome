@@ -110,6 +110,8 @@ irgendeines Befehls; für den Zustand je Ziel `status/json` → `schalten` lesen
 angenommen -> vorgemerkt -> gesendet -> pruefe_bus -> bestaetigt
                    |            |             \-> gescheitert  (nicht_uebernommen | keine_rueckmeldung)
                    |            \-> gescheitert (cm05: WEM lehnt ab)
+                   \-> bestaetigt  (ab v42: stand schon so - nichts geschrieben, wem = nicht_gesendet)
+                   \-> gescheitert (ab v42: obergrenze - Schreibvorgaenge je Stunde erreicht, nichts geschrieben)
                    \-> ersetzt   (neuerer Wunsch fuer dasselbe Ziel, ersetzt_durch = dessen id)
                    \-> gescheitert (geleert: Knopf "Warteschlange leeren")
 abgelehnt (ungueltig) - nie in der Warteschlange, nie am WEM
@@ -121,8 +123,8 @@ abgelehnt (ungueltig) - nie in der Warteschlange, nie am WEM
 | `vorgemerkt` | in der Warteschlange; `warten_s` = Sekunden bis zum Senden, solange der Mindestabstand zum vorigen Befehl läuft (0 = beim nächsten Sekundentakt) |
 | `gesendet` | Befehl an den WEM unterwegs – per CAN oder über JSON, siehe `schalten.weg` in `status/json` |
 | `pruefe_bus` | Antwort des WEM in `wem`: `bestaetigt` (per CAN Quittung `60`, über JSON `CM 04`), `unklar` (nur JSON: Antwort weder `CM 04` noch `CM 05`) oder `nicht_erreichbar` (per CAN: keine Antwort). **Der Bus entscheidet**, nicht die WEM-Antwort |
-| `bestaetigt` | Kontroll-Lesung am Bus zeigt den gewünschten Wert (`ist`) |
-| `gescheitert` | `grund`: `cm05` (WEM lehnt ab – über JSON mit `CM 05`, per CAN mit SDO-Abbruch `80`; keine Bus-Kontrolle), `nicht_uebernommen` (Bus zeigt anderen Wert, siehe `ist`/`ist_text`), `keine_rueckmeldung` (keine Antwort am Bus binnen 10 s), `geleert` |
+| `bestaetigt` | Kontroll-Lesung am Bus zeigt den gewünschten Wert (`ist`). Ab v42 auch direkt nach `vorgemerkt`, ohne `gesendet` und `pruefe_bus`: Die Vorab-Lesung zeigt, dass der Wert schon so stand – dann ist `wem` = `nicht_gesendet`, und es wurde nichts geschrieben |
+| `gescheitert` | `grund`: `cm05` (WEM lehnt ab – über JSON mit `CM 05`, per CAN mit SDO-Abbruch `80`; keine Bus-Kontrolle), `nicht_uebernommen` (Bus zeigt anderen Wert, siehe `ist`/`ist_text`), `keine_rueckmeldung` (keine Antwort am Bus binnen 10 s), `geleert`, `obergrenze` (ab v42: Obergrenze der Schreibvorgänge je Stunde erreicht, nichts gesendet; `text` nennt die Wartezeit – [Schreibschutz](PROTOKOLL.md#schreibschutz-so-wenig-wie-möglich-schreiben-ab-v42)) |
 | `ersetzt` | ein neuerer Wunsch für dasselbe Ziel hat diesen verdrängt (der neueste gewinnt) |
 | `abgelehnt` | `grund` = `ungueltig`, `text` nennt den Fehler – z. B. unbekannter Wert |
 

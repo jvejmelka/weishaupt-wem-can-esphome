@@ -128,6 +128,7 @@ async def to_code(config):
     cg.add(var.set_anlaufpause(config[CONF_ANLAUFPAUSE].total_milliseconds))
     cg.add(var.set_statusbits_anlass(config[CONF_STATUSBITS_ANLASS]))
     cg.add(var.speicher_brenner(schluessel("brenner_starts")))
+    cg.add(var.speicher_schreibzaehler(schluessel("schreib_gesamt")))
     if config[CONF_VERDACHT]:
         cg.add(
             var.speicher_verdacht(

@@ -110,6 +110,8 @@ of any command; for the state per target read `status/json` → `schalten`):
 angenommen -> vorgemerkt -> gesendet -> pruefe_bus -> bestaetigt
                    |            |             \-> gescheitert  (nicht_uebernommen | keine_rueckmeldung)
                    |            \-> gescheitert (cm05: WEM rejects)
+                   \-> bestaetigt  (from v42: was already set - nothing written, wem = nicht_gesendet)
+                   \-> gescheitert (from v42: obergrenze - hourly write limit reached, nothing written)
                    \-> ersetzt   (newer request for the same target, ersetzt_durch = its id)
                    \-> gescheitert (geleert: button "Warteschlange leeren")
 abgelehnt (ungueltig) - never in the queue, never at the WEM
@@ -121,8 +123,8 @@ abgelehnt (ungueltig) - never in the queue, never at the WEM
 | `vorgemerkt` | in the queue; `warten_s` = seconds until sending, as long as the minimum interval to the previous command is running (0 = at the next one-second tick) |
 | `gesendet` | command on its way to the WEM – via CAN or via JSON, see `schalten.weg` in `status/json` |
 | `pruefe_bus` | response of the WEM in `wem`: `bestaetigt` (via CAN acknowledgement `60`, via JSON `CM 04`), `unklar` (JSON only: response neither `CM 04` nor `CM 05`) or `nicht_erreichbar` (via CAN: no response). **The bus decides**, not the WEM's response |
-| `bestaetigt` | verification read on the bus shows the requested value (`ist`) |
-| `gescheitert` | `grund`: `cm05` (WEM rejects – via JSON with `CM 05`, via CAN with SDO abort `80`; no bus verification), `nicht_uebernommen` (bus shows a different value, see `ist`/`ist_text`), `keine_rueckmeldung` (no response on the bus within 10 s), `geleert` |
+| `bestaetigt` | verification read on the bus shows the requested value (`ist`). From v42 also directly after `vorgemerkt`, without `gesendet` and `pruefe_bus`: the pre-read shows that the value was already set – then `wem` = `nicht_gesendet`, and nothing was written |
+| `gescheitert` | `grund`: `cm05` (WEM rejects – via JSON with `CM 05`, via CAN with SDO abort `80`; no bus verification), `nicht_uebernommen` (bus shows a different value, see `ist`/`ist_text`), `keine_rueckmeldung` (no response on the bus within 10 s), `geleert`, `obergrenze` (from v42: hourly write limit reached, nothing sent; `text` names the waiting time – [Write protection](PROTOKOLL.en.md#write-protection-write-as-little-as-possible-from-v42)) |
 | `ersetzt` | a newer request for the same target has displaced this one (the newest wins) |
 | `abgelehnt` | `grund` = `ungueltig`, `text` names the error – e.g. unknown value |
 
